@@ -106,6 +106,7 @@ struct SlideshowView: View {
                 .ignoresSafeArea()
             )
         }
+        .tint(.white)
     }
 
     @ViewBuilder

@@ -43,9 +43,18 @@ struct ProjectSettingsSheet: View {
                 }
 
                 // MARK: Fonts
-                Section("Fonts") {
-                    Label("Source Han Sans SC Regular", systemImage: "textformat")
-                        .foregroundStyle(.secondary)
+                Section(header: Text("Fonts"), footer: Text("Bundled fonts are always available in Typst by their listed names.")) {
+                    ForEach(FontManager.bundledCJKFontPaths, id: \.self) { path in
+                        let name = FontManager.typstFamilyName(forBundledPath: path) ?? URL(fileURLWithPath: path).lastPathComponent
+                        HStack {
+                            Label(name, systemImage: "textformat")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("built-in")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
 
                     ForEach(document.fontFileNames, id: \.self) { name in
                         Label(name, systemImage: "doc.text")
