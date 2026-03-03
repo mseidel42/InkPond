@@ -123,7 +123,7 @@ final class KeyboardAccessoryView: UIInputView {
         }
         if let systemImage {
             config.image = UIImage(systemName: systemImage)
-            config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+            config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         }
         config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
 

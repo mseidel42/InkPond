@@ -123,6 +123,7 @@ struct DocumentEditorView: View {
         .navigationTitle(document.title)
         .navigationSubtitleCompat(currentFileName)
         .navigationBarTitleDisplayMode(.inline)
+        .background(Color.catppuccinMantle.ignoresSafeArea())
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: shareButtonAction) {

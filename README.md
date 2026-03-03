@@ -3,9 +3,9 @@
 A native iOS/iPadOS editor for [Typst](https://typst.app/) — the modern typesetting system.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/iOS%2017%2B-blue" alt="Platform">
+  <img src="https://img.shields.io/badge/iOS%2026%20%26%20iPadOS%2026-blue" alt="Platform">
   <img src="https://img.shields.io/badge/language-Swift%205-orange" alt="Language">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/license-Apache%202-blue" alt="License">
 </p>
 
 ## Features
@@ -111,27 +111,3 @@ This project stands on the shoulders of giants. Special thanks to:
 - **[Apple Developer Documentation](https://developer.apple.com/documentation/)** — For SwiftUI, SwiftData, and iOS development resources.
 
 - **[Rust FFI Working Group](https://github.com/rust-lang/nomicon)** — For the Rust FFI patterns and best practices that made the Swift-Rust bridge possible.
-
-## License
-
-MIT License
-
-Copyright (c) 2026 Lin Qidi
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.

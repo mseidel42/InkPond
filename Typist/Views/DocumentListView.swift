@@ -16,12 +16,21 @@ struct DocumentListView: View {
     @State private var isExporting = false
     @State private var exportError: String?
     @State private var exportURL: URL?
+    @State private var documentToDelete: TypistDocument?
+    @State private var searchText: String = ""
+
+    private var filteredDocuments: [TypistDocument] {
+        guard !searchText.isEmpty else { return documents }
+        return documents.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
         documentList
             .navigationTitle("Typist")
+            .searchable(text: $searchText, prompt: "Search documents")
             .toolbar { toolbarContent }
             .overlay { exportOverlay }
+            .background(Color.catppuccinMantle.ignoresSafeArea())
             .sheet(item: $exportURL) { ActivityView(activityItems: [$0]) }
             .alert("Export Error", isPresented: Binding(
                 get: { exportError != nil },
@@ -43,16 +52,41 @@ struct DocumentListView: View {
                 }
                 Button("Cancel", role: .cancel) { renamingDocument = nil }
             }
+            .alert("Delete Document", isPresented: Binding(
+                get: { documentToDelete != nil },
+                set: { if !$0 { documentToDelete = nil } }
+            )) {
+                Button("Delete", role: .destructive) {
+                    if let doc = documentToDelete {
+                        if selectedDocument == doc { selectedDocument = nil }
+                        ProjectFileManager.deleteProjectDirectory(for: doc)
+                        modelContext.delete(doc)
+                        documentToDelete = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) { documentToDelete = nil }
+            } message: {
+                if let doc = documentToDelete {
+                    Text("\"\(doc.title)\" will be permanently deleted.")
+                }
+            }
     }
 
     // MARK: - Subviews
 
     private var documentList: some View {
         List(selection: $selectedDocument) {
-            ForEach(documents) { document in
+            ForEach(filteredDocuments) { document in
                 documentRow(document)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button {
+                            documentToDelete = document
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .tint(.red)
+                    }
             }
-            .onDelete(perform: deleteDocuments)
         }
         .scrollContentBackground(.hidden)
         .background(Color.catppuccinMantle)
@@ -70,7 +104,7 @@ struct DocumentListView: View {
             }
             .padding(.vertical, 2)
         }
-        .listRowBackground(Color.catppuccinSurface0)
+        .listRowBackground(Color.catppuccinSurface0.clipShape(ContainerRelativeShape()))
         .contextMenu {
             Button("Rename") {
                 renamingDocument = document
@@ -98,13 +132,7 @@ struct DocumentListView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarTrailing) { EditButton() }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: addDocument) {
-                Label("New Document", systemImage: "plus")
-            }
-        }
-        ToolbarItem(placement: .navigationBarLeading) {
+        ToolbarItem(placement: .bottomBar) {
             Menu {
                 Picker("Theme", selection: Binding(
                     get: { themeManager.themeID },
@@ -118,8 +146,16 @@ struct DocumentListView: View {
                 Image(systemName: "paintpalette")
             }
         }
+        ToolbarSpacer(.flexible, placement: .bottomBar)
+        DefaultToolbarItem(kind: .search, placement: .bottomBar)
+        ToolbarSpacer(.flexible, placement: .bottomBar)
+        ToolbarItem(placement: .bottomBar) {
+            Button(action: addDocument) {
+                Image(systemName: "plus")
+            }
+        }
     }
-
+    
     @ViewBuilder
     private var exportOverlay: some View {
         if isExporting {
