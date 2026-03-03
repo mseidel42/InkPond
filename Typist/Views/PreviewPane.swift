@@ -19,6 +19,7 @@ struct PDFKitView: UIViewRepresentable {
         pdfView.autoScales = true
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
+        pdfView.backgroundColor = .catppuccinMantle
         return pdfView
     }
 
@@ -96,7 +97,7 @@ struct PreviewPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background)
+        .background(Color.catppuccinBase)
     }
 
     private func errorBanner(_ message: String) -> some View {

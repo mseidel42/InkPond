@@ -8,6 +8,9 @@ import SwiftUI
 struct EditorView: UIViewRepresentable {
     @Binding var text: String
     @Binding var insertionRequest: String?
+    @Binding var findRequested: Bool
+    var theme: EditorTheme = .system
+    var onPhotoTapped: () -> Void = {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -17,13 +20,23 @@ struct EditorView: UIViewRepresentable {
         let textView = TypstTextView()
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
+        textView.applyTheme(theme)
         return textView
     }
 
     func updateUIView(_ textView: TypstTextView, context: Context) {
+        textView.applyTheme(theme)
+        textView.onPhotoButtonTapped = onPhotoTapped
+        // Consume pending find request
+        if findRequested {
+            DispatchQueue.main.async {
+                textView.presentFind(showingReplace: true)
+                self.findRequested = false
+            }
+        }
+
         // Consume pending insertion request
         if let insertion = insertionRequest {
-            // Defer to avoid mutating state during view update
             let coordinator = context.coordinator
             DispatchQueue.main.async {
                 coordinator.insertText(insertion)

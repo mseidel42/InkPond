@@ -3,7 +3,7 @@
 A native iOS/iPadOS editor for [Typst](https://typst.app/) — the modern typesetting system.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-iOS%2026.0%2B%20%7C%20iPadOS%2026.0%2B-blue" alt="Platform">
+  <img src="https://img.shields.io/badge/iOS%2017%2B-blue" alt="Platform">
   <img src="https://img.shields.io/badge/language-Swift%205-orange" alt="Language">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
@@ -22,7 +22,7 @@ A native iOS/iPadOS editor for [Typst](https://typst.app/) — the modern typese
 
 ## Requirements
 
-- iOS 26.0+ / iPadOS 26.0+
+- iOS 17.0+ / iPadOS 17.0+
 - Xcode 26.3+
 - Swift 5
 

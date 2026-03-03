@@ -10,6 +10,7 @@ import SwiftData
 
 struct ContentView: View {
     @State private var selectedDocument: TypistDocument?
+    @State private var themeManager = ThemeManager()
 
     var body: some View {
         NavigationSplitView {
@@ -25,6 +26,9 @@ struct ContentView: View {
                 )
             }
         }
+        .tint(.catppuccinBlue)
+        .preferredColorScheme(themeManager.colorScheme)
+        .environment(themeManager)
     }
 }
 
