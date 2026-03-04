@@ -273,12 +273,12 @@ struct DocumentEditorView: View {
         guard let item = items.first else { return }
         Task {
             guard let data = try? await item.loadTransferable(type: Data.self) else {
-                await MainActor.run { imageImportError = "Failed to load image data." }
+                await MainActor.run { imageImportError = L10n.tr("error.image.load_data_failed") }
                 return
             }
             guard let uiImage = UIImage(data: data),
                   let jpegData = uiImage.jpegData(compressionQuality: 0.85) else {
-                await MainActor.run { imageImportError = "Could not process image." }
+                await MainActor.run { imageImportError = L10n.tr("error.image.process_failed") }
                 return
             }
             let fileName = "img-\(UUID().uuidString.prefix(8)).jpg"

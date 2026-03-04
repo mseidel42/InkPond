@@ -51,7 +51,7 @@ struct ContentView: View {
             }
         }
         .background(Color.catppuccinMantle.ignoresSafeArea())
-        .background(SceneTitleSetter(title: selectedDocument?.title ?? "Typist"))
+        .background(SceneTitleSetter(title: selectedDocument?.title ?? L10n.appName))
         .tint(.catppuccinBlue)
         .preferredColorScheme(themeManager.colorScheme)
         .environment(themeManager)

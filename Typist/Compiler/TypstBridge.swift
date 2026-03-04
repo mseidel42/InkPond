@@ -13,7 +13,7 @@ enum TypstBridgeError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .compilerNotLinked:
-            return "Typst compiler library not linked. Run rust-ffi/build-ios.sh."
+            return L10n.tr("error.typst.compiler_not_linked")
         case .compilationFailed(let msg):
             return msg
         }
@@ -68,7 +68,7 @@ struct TypstBridge {
                     } else if let errPtr = result.error_message {
                         return .failure(.compilationFailed(String(cString: errPtr)))
                     } else {
-                        return .failure(.compilationFailed("Unknown compilation error"))
+                        return .failure(.compilationFailed(L10n.tr("error.typst.unknown_compilation")))
                     }
                   }
                 }

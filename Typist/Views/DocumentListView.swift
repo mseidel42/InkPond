@@ -19,12 +19,12 @@ struct DocumentListView: View {
 
         var label: String {
             switch self {
-            case .modifiedNewest: "Recently Modified"
-            case .modifiedOldest: "Oldest Modified"
-            case .titleAZ: "Title (A-Z)"
-            case .titleZA: "Title (Z-A)"
-            case .createdNewest: "Recently Created"
-            case .createdOldest: "Oldest Created"
+            case .modifiedNewest: L10n.tr("sort.modified_newest")
+            case .modifiedOldest: L10n.tr("sort.modified_oldest")
+            case .titleAZ: L10n.tr("sort.title_az")
+            case .titleZA: L10n.tr("sort.title_za")
+            case .createdNewest: L10n.tr("sort.created_newest")
+            case .createdOldest: L10n.tr("sort.created_oldest")
             }
         }
 
@@ -132,7 +132,7 @@ struct DocumentListView: View {
                 Button("Cancel", role: .cancel) { documentToDelete = nil }
             } message: {
                 if let doc = documentToDelete {
-                    Text("\"\(doc.title)\" will be permanently deleted.")
+                    Text(L10n.deleteDocumentMessage(title: doc.title))
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -346,10 +346,11 @@ struct DocumentListView: View {
 
     private func nextAvailableTitle() -> String {
         let titles = Set(documents.map { $0.title })
-        if !titles.contains("Untitled") { return "Untitled" }
+        let base = L10n.untitledBase
+        if !titles.contains(base) { return base }
         var i = 1
-        while titles.contains("Untitled \(i)") { i += 1 }
-        return "Untitled \(i)"
+        while titles.contains(L10n.untitled(number: i)) { i += 1 }
+        return L10n.untitled(number: i)
     }
 
     private func addDocument() {

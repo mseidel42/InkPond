@@ -97,7 +97,7 @@ final class TypstTextView: UITextView {
 
     override var keyCommands: [UIKeyCommand]? {
         let findCommand = UIKeyCommand(input: "f", modifierFlags: .command, action: #selector(showFind))
-        findCommand.discoverabilityTitle = "Find & Replace"
+        findCommand.discoverabilityTitle = L10n.tr("action.find_replace")
         return (super.keyCommands ?? []) + [findCommand]
     }
 

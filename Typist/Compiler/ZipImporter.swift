@@ -13,10 +13,10 @@ enum ZipImporterError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidData: return "The ZIP file is invalid or corrupted."
-        case .decompressionFailed(let code): return "Decompression failed (zlib error \(code))."
-        case .unsupportedCompressionMethod(let m): return "Unsupported compression method \(m)."
-        case .unsafePath(let p): return "ZIP contains an unsafe path: \"\(p)\"."
+        case .invalidData: return L10n.tr("error.zip.invalid_data")
+        case .decompressionFailed(let code): return L10n.format("error.zip.decompression_failed", code)
+        case .unsupportedCompressionMethod(let m): return L10n.format("error.zip.unsupported_method", m)
+        case .unsafePath(let p): return L10n.format("error.zip.unsafe_path", p)
         }
     }
 }

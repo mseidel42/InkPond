@@ -18,15 +18,15 @@ enum TypistFileError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .cannotDeleteEntryFile:
-            return "The entry file cannot be deleted."
+            return L10n.tr("error.file.cannot_delete_entry")
         case .fileAlreadyExists(let name):
-            return "A file named \"\(name)\" already exists."
+            return L10n.format("error.file.already_exists", name)
         case .fileNotFound(let name):
-            return "File \"\(name)\" not found."
+            return L10n.format("error.file.not_found", name)
         case .invalidFileName(let name):
-            return "Invalid file name: \"\(name)\"."
+            return L10n.format("error.file.invalid_name", name)
         case .unsafePath(let path):
-            return "Unsafe path: \"\(path)\"."
+            return L10n.format("error.file.unsafe_path", path)
         }
     }
 }
@@ -68,7 +68,7 @@ enum ProjectFileManager {
         let unsafe = CharacterSet(charactersIn: "/:\\*?\"<>|")
         name = name.components(separatedBy: unsafe).joined(separator: "-")
         name = name.trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        if name.isEmpty { name = "Untitled" }
+        if name.isEmpty { name = L10n.untitledBase }
         return String(name.prefix(200))
     }
 

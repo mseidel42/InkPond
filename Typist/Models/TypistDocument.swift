@@ -19,7 +19,7 @@ final class TypistDocument {
     var imageDirectoryName: String = "images"
     var entryFileName: String = "main.typ"
 
-    init(title: String = "Untitled", content: String = "") {
+    init(title: String = L10n.untitledBase, content: String = "") {
         self.title = title
         self.content = content
         self.createdAt = Date()
