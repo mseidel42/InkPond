@@ -7,6 +7,45 @@ import SwiftUI
 import SwiftData
 
 struct DocumentListView: View {
+    private enum SortOption: String, CaseIterable, Identifiable {
+        case modifiedNewest
+        case modifiedOldest
+        case titleAZ
+        case titleZA
+        case createdNewest
+        case createdOldest
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .modifiedNewest: "Recently Modified"
+            case .modifiedOldest: "Oldest Modified"
+            case .titleAZ: "Title (A-Z)"
+            case .titleZA: "Title (Z-A)"
+            case .createdNewest: "Recently Created"
+            case .createdOldest: "Oldest Created"
+            }
+        }
+
+        func areInIncreasingOrder(_ lhs: TypistDocument, _ rhs: TypistDocument) -> Bool {
+            switch self {
+            case .modifiedNewest:
+                lhs.modifiedAt > rhs.modifiedAt
+            case .modifiedOldest:
+                lhs.modifiedAt < rhs.modifiedAt
+            case .titleAZ:
+                lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            case .titleZA:
+                lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedDescending
+            case .createdNewest:
+                lhs.createdAt > rhs.createdAt
+            case .createdOldest:
+                lhs.createdAt < rhs.createdAt
+            }
+        }
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(ThemeManager.self) private var themeManager
@@ -23,17 +62,23 @@ struct DocumentListView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var monitor = DirectoryMonitor()
     @State private var syncTask: Task<Void, Never>?
+    @State private var sortOption: SortOption = .modifiedNewest
+    @State private var showingSortPopover = false
 
     private var filteredDocuments: [TypistDocument] {
         guard !searchText.isEmpty else { return documents }
         return documents.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
     }
 
+    private var sortedDocuments: [TypistDocument] {
+        filteredDocuments.sorted(by: sortOption.areInIncreasingOrder)
+    }
+
     private var isIPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     var body: some View {
         documentList
-            .searchable(text: $searchText, prompt: "Search documents")
+            .searchable(text: $searchText, prompt: "Search")
             .navigationTitle("Typist")
             .toolbar { if isIPad { iPadToolbar } else { iPhoneToolbar } }
             .toolbarBackground(.visible, for: .navigationBar)
@@ -111,7 +156,7 @@ struct DocumentListView: View {
 
     private var documentList: some View {
         List(selection: $selectedDocument) {
-            ForEach(filteredDocuments) { document in
+            ForEach(sortedDocuments) { document in
                 documentRow(document)
             }
         }
@@ -181,9 +226,12 @@ struct DocumentListView: View {
         ToolbarItem(placement: .primaryAction) {
             Button { showingSettings = true } label: {
                 Image(systemName: "gearshape")
-                    .scaleEffect(0.85)
+                    .scaleEffect(0.8)
             }
             .tint(toolbarButtonTint)
+        }
+        ToolbarItem(placement: .primaryAction) {
+            sortMenu
         }
         ToolbarItem(placement: .primaryAction) {
             Button(action: addDocument) {
@@ -197,17 +245,68 @@ struct DocumentListView: View {
     @ToolbarContentBuilder
     private var iPhoneToolbar: some ToolbarContent {
         ToolbarItem(placement: .bottomBar) {
+            sortMenu
+        }
+        ToolbarSpacer(.flexible, placement: .bottomBar)
+        DefaultToolbarItem(kind: .search, placement: .bottomBar)
+        ToolbarSpacer(.flexible, placement: .bottomBar)
+        ToolbarItem(placement: .bottomBar) {
             Button { showingSettings = true } label: {
                 Image(systemName: "gearshape")
             }
             .tint(colorScheme == .light ? .black : nil)
         }
         ToolbarSpacer(.flexible, placement: .bottomBar)
-        DefaultToolbarItem(kind: .search, placement: .bottomBar)
-        ToolbarSpacer(.flexible, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
             Button(action: addDocument) { Image(systemName: "folder.badge.plus") }
                 .tint(colorScheme == .light ? .black : nil)
+        }
+    }
+
+    private var sortMenu: some View {
+        Button { showingSortPopover = true } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .scaleEffect(0.8)
+        }
+        .buttonStyle(.plain)
+        .tint(toolbarButtonTint)
+        .popover(
+            isPresented: $showingSortPopover,
+            attachmentAnchor: .point(.bottom),
+            arrowEdge: .top
+        ) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(SortOption.allCases) { option in
+                    Button {
+                        sortOption = option
+                        showingSortPopover = false
+                    } label: {
+                        HStack {
+                            Text(option.label)
+                                .font(.subheadline)
+                            Spacer(minLength: 12)
+                            Image(systemName: "checkmark")
+                                .font(.caption.weight(.bold))
+                                .opacity(option == sortOption ? 1 : 0)
+                        }
+                        .foregroundStyle(Color.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .background {
+                        if option == sortOption {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.catppuccinSurface0)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .frame(minWidth: 220)
+            .presentationBackground(Color.catppuccinElevated)
         }
     }
 
