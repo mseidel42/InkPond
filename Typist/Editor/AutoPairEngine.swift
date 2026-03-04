@@ -21,7 +21,7 @@ struct AutoPairEngine {
 
     // MARK: - Insert Text
 
-    /// Returns replacement text and cursor offset from start of replacement, or nil to use default behavior.
+    /// Returns true if the event was handled (default insertion should be skipped).
     static func handleInsert(_ text: String, in textView: UITextView) -> Bool {
         let storage = textView.textStorage
         let selectedRange = textView.selectedRange
@@ -62,6 +62,20 @@ struct AutoPairEngine {
             }
 
             let pair = text + close
+
+            // Capture original content for undo (handles both empty and non-empty selection)
+            let originalContent = (nsString.substring(with: selectedRange))
+            textView.undoManager?.registerUndo(withTarget: textView) { tv in
+                tv.textStorage.replaceCharacters(
+                    in: NSRange(location: selectedRange.location, length: (pair as NSString).length),
+                    with: originalContent
+                )
+                tv.selectedRange = selectedRange
+                (tv as? TypstTextView)?.applyHighlighting()
+                tv.delegate?.textViewDidChange?(tv)
+            }
+            textView.undoManager?.setActionName("Typing")
+
             storage.replaceCharacters(in: selectedRange, with: pair)
             textView.selectedRange = NSRange(location: cursorLocation + 1, length: 0)
             return true
@@ -85,6 +99,20 @@ struct AutoPairEngine {
         let nextChar = nsString.substring(with: NSRange(location: cursor, length: 1))
 
         if let close = openToClose[prevChar], close == nextChar {
+            let deletedPair = prevChar + nextChar
+            let deleteLocation = cursor - 1
+
+            textView.undoManager?.registerUndo(withTarget: textView) { tv in
+                tv.textStorage.replaceCharacters(
+                    in: NSRange(location: deleteLocation, length: 0),
+                    with: deletedPair
+                )
+                tv.selectedRange = NSRange(location: cursor, length: 0)
+                (tv as? TypstTextView)?.applyHighlighting()
+                tv.delegate?.textViewDidChange?(tv)
+            }
+            textView.undoManager?.setActionName("Delete")
+
             storage.replaceCharacters(in: NSRange(location: cursor - 1, length: 2), with: "")
             textView.selectedRange = NSRange(location: cursor - 1, length: 0)
             return true
@@ -110,11 +138,20 @@ struct AutoPairEngine {
         if bracketOpens.contains(charBefore) {
             let indent = leadingWhitespace + "    "
             var insertion = "\n" + indent
-            // If the matching close bracket is right after cursor, put it on a new line
             let expectedClose = charBefore == "{" ? "}" : "]"
             if charAfter == expectedClose {
                 insertion += "\n" + leadingWhitespace
             }
+            let insertedRange = NSRange(location: selectedRange.location, length: (insertion as NSString).length)
+            let originalContent = nsString.substring(with: selectedRange)
+            textView.undoManager?.registerUndo(withTarget: textView) { tv in
+                tv.textStorage.replaceCharacters(in: insertedRange, with: originalContent)
+                tv.selectedRange = selectedRange
+                (tv as? TypstTextView)?.applyHighlighting()
+                tv.delegate?.textViewDidChange?(tv)
+            }
+            textView.undoManager?.setActionName("Typing")
+
             storage.replaceCharacters(in: selectedRange, with: insertion)
             textView.selectedRange = NSRange(location: cursor + 1 + indent.count, length: 0)
             return true
@@ -123,6 +160,16 @@ struct AutoPairEngine {
         // Default: just preserve indentation
         if !leadingWhitespace.isEmpty {
             let insertion = "\n" + leadingWhitespace
+            let insertedRange = NSRange(location: selectedRange.location, length: (insertion as NSString).length)
+            let originalContent = nsString.substring(with: selectedRange)
+            textView.undoManager?.registerUndo(withTarget: textView) { tv in
+                tv.textStorage.replaceCharacters(in: insertedRange, with: originalContent)
+                tv.selectedRange = selectedRange
+                (tv as? TypstTextView)?.applyHighlighting()
+                tv.delegate?.textViewDidChange?(tv)
+            }
+            textView.undoManager?.setActionName("Typing")
+
             storage.replaceCharacters(in: selectedRange, with: insertion)
             textView.selectedRange = NSRange(location: cursor + insertion.count, length: 0)
             return true

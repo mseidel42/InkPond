@@ -5,12 +5,9 @@
 
 import SwiftUI
 import SwiftData
+import PDFKit
 import PhotosUI
 import UniformTypeIdentifiers
-
-extension URL: @retroactive Identifiable {
-    public var id: String { absoluteString }
-}
 
 private extension View {
     @ViewBuilder
@@ -53,9 +50,11 @@ struct DocumentEditorView: View {
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var insertionRequest: String?
     @State private var findRequested = false
-    @State private var isExporting = false
-    @State private var exportError: String?
-    @State private var exportURL: URL?
+    @State private var exporter = ExportController()
+    @State private var imageImportError: String?
+    /// Captures the PDF at the moment the user taps "Slideshow" so the
+    /// fullScreenCover does not need to access compiler.pdfDocument in body.
+    @State private var slideshowDocument: PDFDocument?
 
     private var fontPaths: [String] { FontManager.allFontPaths(for: document) }
     private var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
@@ -133,10 +132,10 @@ struct DocumentEditorView: View {
 
     // MARK: - Toolbar
 
-    /// Context-aware share: .typ on editor tab/iPad, PDF on preview tab.
+    /// Context-aware share: PDF on iPad/preview tab, .typ on editor tab.
     private var shareButtonAction: () -> Void {
-        if sizeClass == .regular || selectedTab == 1 { return exportSharePDF }
-        return exportTypSource
+        if sizeClass == .regular || selectedTab == 1 { return { exporter.exportPDF(for: document) } }
+        return { exporter.exportTypSource(for: document, fileName: currentFileName) }
     }
 
     private var shareButtonLabel: String {
@@ -152,11 +151,18 @@ struct DocumentEditorView: View {
             Button { findRequested = true } label: { Label("Find & Replace", systemImage: "magnifyingglass") }
             Divider()
             Button {
+                exporter.exportZip(for: document)
+            } label: {
+                Label("Export Project as Zip", systemImage: "archivebox")
+            }
+            Divider()
+            Button {
+                slideshowDocument = compiler.pdfDocument
                 showingSlideshow = true
             } label: {
                 Label("Slideshow", systemImage: "play.rectangle")
             }
-            .disabled(compiler.pdfDocument == nil)
+            .disabled(!compiler.compiledOnce)
         } label: {
             Image(systemName: "ellipsis.circle")
         }
@@ -208,7 +214,7 @@ struct DocumentEditorView: View {
         .onDisappear { compiler.cancel() }
         .onChange(of: editorText) { _, newText in saveCurrentFile(content: newText) }
         .overlay {
-            if isExporting {
+            if exporter.isExporting {
                 ZStack {
                     Color.black.opacity(0.2).ignoresSafeArea()
                     ProgressView("Compiling…")
@@ -217,19 +223,27 @@ struct DocumentEditorView: View {
                 }
             }
         }
-        .sheet(item: $exportURL) { url in ActivityView(activityItems: [url]) }
+        .sheet(item: $exporter.exportURL) { url in ActivityView(activityItems: [url]) }
         .fullScreenCover(isPresented: $showingSlideshow) {
-            if let pdf = compiler.pdfDocument {
+            if let pdf = slideshowDocument {
                 SlideshowView(document: pdf)
             }
         }
         .alert("Export Error", isPresented: Binding(
-            get: { exportError != nil },
-            set: { if !$0 { exportError = nil } }
+            get: { exporter.exportError != nil },
+            set: { if !$0 { exporter.exportError = nil } }
         )) {
-            Button("OK") { exportError = nil }
+            Button("OK") { exporter.exportError = nil }
         } message: {
-            Text(exportError ?? "")
+            Text(exporter.exportError ?? "")
+        }
+        .alert("Image Import Error", isPresented: Binding(
+            get: { imageImportError != nil },
+            set: { if !$0 { imageImportError = nil } }
+        )) {
+            Button("OK") { imageImportError = nil }
+        } message: {
+            Text(imageImportError ?? "")
         }
     }
 
@@ -258,45 +272,30 @@ struct DocumentEditorView: View {
         loadFile(named: name)
     }
 
-    // MARK: - Export
-
-    private func exportSharePDF() {
-        guard !isExporting else { return }
-        isExporting = true
-        Task {
-            let result = await ExportManager.compilePDF(for: document)
-            isExporting = false
-            switch result {
-            case .success(let data):
-                do { exportURL = try ExportManager.temporaryPDFURL(data: data, title: document.title) }
-                catch { exportError = error.localizedDescription }
-            case .failure(let error):
-                exportError = error.localizedDescription
-            }
-        }
-    }
-
-    private func exportTypSource() {
-        do { exportURL = try ExportManager.temporaryTypURL(for: document) }
-        catch { exportError = error.localizedDescription }
-    }
-
     // MARK: - Image handling
 
     private func handleImageSelection(_ items: [PhotosPickerItem]) {
         guard let item = items.first else { return }
         Task {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                await MainActor.run { imageImportError = "Failed to load image data." }
+                return
+            }
             guard let uiImage = UIImage(data: data),
-                  let jpegData = uiImage.jpegData(compressionQuality: 0.85) else { return }
+                  let jpegData = uiImage.jpegData(compressionQuality: 0.85) else {
+                await MainActor.run { imageImportError = "Could not process image." }
+                return
+            }
             let fileName = "img-\(UUID().uuidString.prefix(8)).jpg"
-            guard let relativePath = try? ProjectFileManager.saveImage(
-                data: jpegData, fileName: fileName, for: document
-            ) else { return }
-            let reference = String(format: document.imageInsertionTemplate, relativePath)
-            await MainActor.run {
-                insertionRequest = reference
-                selectedPhotoItems = []
+            do {
+                let relativePath = try ProjectFileManager.saveImage(data: jpegData, fileName: fileName, for: document)
+                let reference = String(format: document.imageInsertionTemplate, relativePath)
+                await MainActor.run {
+                    insertionRequest = reference
+                    selectedPhotoItems = []
+                }
+            } catch {
+                await MainActor.run { imageImportError = error.localizedDescription }
             }
         }
     }

@@ -11,11 +11,17 @@ import PDFKit
 
 // MARK: - PDFKit wrapper
 
+/// PDFView subclass that refuses first-responder so it never steals focus
+/// from the text editor (which would dismiss the software keyboard on iPadOS).
+private final class PassivePDFView: PDFView {
+    override var canBecomeFirstResponder: Bool { false }
+}
+
 struct PDFKitView: UIViewRepresentable {
     let document: PDFDocument
 
     func makeUIView(context: Context) -> PDFView {
-        let pdfView = PDFView()
+        let pdfView = PassivePDFView()
         pdfView.autoScales = true
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
@@ -24,13 +30,46 @@ struct PDFKitView: UIViewRepresentable {
     }
 
     func updateUIView(_ pdfView: PDFView, context: Context) {
-        // Preserve scroll position when the document updates.
-        let dest = pdfView.currentDestination
+        // Save page index + point from the OLD document before replacing it.
+        // We must save the integer index because PDFPage refs become invalid
+        // once a new document is loaded.
+        var savedPageIndex: Int?
+        var savedPoint: CGPoint?
+        var savedScale: CGFloat?
+
+        if let oldDoc = pdfView.document,
+           let dest = pdfView.currentDestination,
+           let page = dest.page {
+            savedPageIndex = oldDoc.index(for: page)
+            savedPoint     = dest.point
+            savedScale     = pdfView.scaleFactor
+        }
+
+        // Prevent PDFKit from dismissing the software keyboard while it
+        // tears down / rebuilds page views for the new document.
+        TypstTextView.suppressResignFirstResponder = true
         pdfView.document = document
-        // PDFView may reset its background when a new document is set.
         pdfView.backgroundColor = .catppuccinMantle
-        if let dest {
-            pdfView.go(to: dest)
+
+        if let pageIndex = savedPageIndex,
+           let scale = savedScale,
+           let newPage = document.page(at: pageIndex) {
+            // Restore zoom level, then scroll to the saved position.
+            pdfView.autoScales = false
+            pdfView.scaleFactor = scale
+            let point = savedPoint ?? CGPoint(x: 0, y: CGFloat.greatestFiniteMagnitude)
+            // Defer one run-loop tick so PDFView has laid out the new document,
+            // then release the keyboard lock.
+            DispatchQueue.main.async {
+                pdfView.go(to: PDFDestination(page: newPage, at: point))
+                TypstTextView.suppressResignFirstResponder = false
+            }
+        } else {
+            // First load: let PDFView pick the initial scale automatically.
+            pdfView.autoScales = true
+            DispatchQueue.main.async {
+                TypstTextView.suppressResignFirstResponder = false
+            }
         }
     }
 }

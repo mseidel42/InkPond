@@ -19,6 +19,9 @@ struct ProjectFileBrowserSheet: View {
     @State private var deleteError: String?
     @State private var showingDeleteError = false
 
+    private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "svg", "webp"]
+    private static let fontExtensions: Set<String> = ["otf", "ttf", "woff", "woff2"]
+
     var body: some View {
         NavigationStack {
             List {
@@ -219,8 +222,13 @@ struct ProjectFileBrowserSheet: View {
 
     private func deleteImageFile(_ name: String) {
         let relativePath = "\(document.imageDirectoryName)/\(name)"
-        try? ProjectFileManager.deleteProjectFile(relativePath: relativePath, for: document)
-        refreshFiles()
+        do {
+            try ProjectFileManager.deleteProjectFile(relativePath: relativePath, for: document)
+            refreshFiles()
+        } catch {
+            deleteError = error.localizedDescription
+            showingDeleteError = true
+        }
     }
 
     private func deleteFontFile(_ name: String) {
@@ -234,28 +242,28 @@ struct ProjectFileBrowserSheet: View {
         for url in urls {
             let ext = url.pathExtension.lowercased()
             let subdir: String
-            if ["jpg", "jpeg", "png", "gif", "svg", "webp"].contains(ext) {
+            if Self.imageExtensions.contains(ext) {
                 subdir = document.imageDirectoryName
-            } else if ["otf", "ttf", "woff", "woff2"].contains(ext) {
+            } else if Self.fontExtensions.contains(ext) {
                 subdir = "fonts"
             } else {
-                // Import to project root
                 subdir = ""
             }
 
             if subdir.isEmpty {
-                // Copy directly into project root
+                // Copy directly into project root; overwrite if exists
                 let accessing = url.startAccessingSecurityScopedResource()
                 defer { if accessing { url.stopAccessingSecurityScopedResource() } }
                 let dest = ProjectFileManager.projectDirectory(for: document)
                     .appendingPathComponent(url.lastPathComponent)
+                try? FileManager.default.removeItem(at: dest)
                 try? FileManager.default.copyItem(at: url, to: dest)
             } else {
                 _ = try? ProjectFileManager.importFile(from: url, to: subdir, for: document)
             }
 
             // Register imported font in document
-            if ["otf", "ttf", "woff", "woff2"].contains(ext) {
+            if Self.fontExtensions.contains(ext) {
                 let name = url.lastPathComponent
                 if !document.fontFileNames.contains(name) {
                     document.fontFileNames.append(name)

@@ -14,6 +14,10 @@ final class TypstCompiler {
     private(set) var pdfDocument: PDFDocument?
     private(set) var errorMessage: String?
     private(set) var isCompiling: Bool = false
+    /// Becomes true after the first successful compilation and never reverts.
+    /// Views that only need to know "is a PDF available yet" should observe
+    /// this instead of pdfDocument to avoid re-rendering on every compile.
+    private(set) var compiledOnce: Bool = false
 
     private var compileTask: Task<Void, Never>?
 
@@ -41,6 +45,7 @@ final class TypstCompiler {
                 case .success(let pdfData):
                     self.pdfDocument = PDFDocument(data: pdfData)
                     self.errorMessage = nil
+                    if !self.compiledOnce { self.compiledOnce = true }
                 case .failure(let error):
                     // Keep the last successful PDF visible; only update the error banner.
                     self.errorMessage = error.localizedDescription

@@ -12,6 +12,7 @@ enum TypistFileError: LocalizedError {
     case cannotDeleteEntryFile
     case fileAlreadyExists(String)
     case fileNotFound(String)
+    case invalidFileName(String)
 
     var errorDescription: String? {
         switch self {
@@ -21,6 +22,8 @@ enum TypistFileError: LocalizedError {
             return "A file named \"\(name)\" already exists."
         case .fileNotFound(let name):
             return "File \"\(name)\" not found."
+        case .invalidFileName(let name):
+            return "Invalid file name: \"\(name)\"."
         }
     }
 }
@@ -40,7 +43,9 @@ enum ProjectFileManager {
     // MARK: - Directory layout
 
     private static var projectsRoot: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            fatalError("DocumentDirectory unavailable — this should never happen in a sandboxed app")
+        }
         return docs.appendingPathComponent("Projects", isDirectory: true)
     }
 
@@ -86,6 +91,20 @@ enum ProjectFileManager {
         projectDirectory(for: document).appendingPathComponent(name)
     }
 
+    // MARK: - Path validation
+
+    /// Reject names that contain path separators or parent-directory components.
+    private static func validateFileName(_ name: String) throws {
+        guard !name.isEmpty,
+              !name.contains("/"),
+              !name.contains("\\"),
+              name != "..",
+              !name.hasPrefix("../"),
+              !name.contains("/../") else {
+            throw TypistFileError.invalidFileName(name)
+        }
+    }
+
     // MARK: - .typ file CRUD
 
     static func readTypFile(named name: String, for document: TypistDocument) throws -> String {
@@ -99,6 +118,7 @@ enum ProjectFileManager {
     }
 
     static func createTypFile(named name: String, for document: TypistDocument) throws {
+        try validateFileName(name)
         let url = typFileURL(named: name, for: document)
         guard !FileManager.default.fileExists(atPath: url.path) else {
             throw TypistFileError.fileAlreadyExists(name)
@@ -111,6 +131,7 @@ enum ProjectFileManager {
         guard name != document.entryFileName else {
             throw TypistFileError.cannotDeleteEntryFile
         }
+        try validateFileName(name)
         let url = typFileURL(named: name, for: document)
         try FileManager.default.removeItem(at: url)
         os_log(.info, "ProjectFileManager: deleted %{public}@ from %{public}@", name, document.projectID)

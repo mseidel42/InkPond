@@ -11,6 +11,11 @@ final class TypstTextView: UITextView {
     private var storedTheme: EditorTheme = .system
     private var appearanceRegistration: (any UITraitChangeRegistration)?
 
+    /// When true, `resignFirstResponder()` is refused.
+    /// Set by PDFKitView during document reload to prevent PDFKit from
+    /// dismissing the software keyboard on iPadOS.
+    nonisolated(unsafe) static var suppressResignFirstResponder = false
+
     var onPhotoButtonTapped: (() -> Void)? {
         didSet { (inputAccessoryView as? KeyboardAccessoryView)?.onPhotoButtonTapped = onPhotoButtonTapped }
     }
@@ -98,12 +103,19 @@ final class TypstTextView: UITextView {
         findInteraction?.presentFindNavigator(showingReplace: false)
     }
 
+    // MARK: - First Responder Guard
+
+    @discardableResult
+    override func resignFirstResponder() -> Bool {
+        if Self.suppressResignFirstResponder { return false }
+        return super.resignFirstResponder()
+    }
+
     // MARK: - Auto-pair Integration
 
     override func insertText(_ text: String) {
         if AutoPairEngine.handleInsert(text, in: self) {
-            applyHighlighting()
-            // Notify delegate of change
+            // applyHighlighting() is handled by Coordinator.textViewDidChange below
             delegate?.textViewDidChange?(self)
             return
         }
@@ -112,7 +124,7 @@ final class TypstTextView: UITextView {
 
     override func deleteBackward() {
         if AutoPairEngine.handleDelete(in: self) {
-            applyHighlighting()
+            // applyHighlighting() is handled by Coordinator.textViewDidChange below
             delegate?.textViewDidChange?(self)
             return
         }

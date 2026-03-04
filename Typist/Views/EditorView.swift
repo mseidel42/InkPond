@@ -27,9 +27,10 @@ struct EditorView: UIViewRepresentable {
     func updateUIView(_ textView: TypstTextView, context: Context) {
         textView.applyTheme(theme)
         textView.onPhotoButtonTapped = onPhotoTapped
-        // Consume pending find request
+
+        // Consume pending find request — defer mutation to avoid writing state during view update.
         if findRequested {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 textView.presentFind(showingReplace: true)
                 self.findRequested = false
             }
@@ -38,12 +39,15 @@ struct EditorView: UIViewRepresentable {
         // Consume pending insertion request
         if let insertion = insertionRequest {
             let coordinator = context.coordinator
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 coordinator.insertText(insertion)
                 self.insertionRequest = nil
             }
             return
         }
+        // Never push text back into the view while the user is actively editing.
+        // Doing so can dismiss the software keyboard on iPadOS.
+        guard !textView.isFirstResponder else { return }
         guard textView.text != text else { return }
         textView.text = text
         textView.applyHighlighting()

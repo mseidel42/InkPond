@@ -13,7 +13,7 @@ struct EditorTheme {
     let gutterForeground: UIColor
     let text: UIColor
     let heading: UIColor
-    let function_: UIColor
+    let functionColor: UIColor
     let keyword: UIColor
     let bool: UIColor
     let string: UIColor
@@ -35,7 +35,7 @@ struct EditorTheme {
         gutterForeground:  UIColor(hex: "#585B70"),
         text:              UIColor(hex: "#CDD6F4"),
         heading:           UIColor(hex: "#89B4FA"),
-        function_:         UIColor(hex: "#CBA6F7"),
+        functionColor:     UIColor(hex: "#CBA6F7"),
         keyword:           UIColor(hex: "#F38BA8"),
         bool:              UIColor(hex: "#F9E2AF"),
         string:            UIColor(hex: "#A6E3A1"),
@@ -65,7 +65,7 @@ struct EditorTheme {
         gutterForeground:  UIColor(hex: "#9CA0B0"),
         text:              UIColor(hex: "#4C4F69"),
         heading:           UIColor(hex: "#1E66F5"),
-        function_:         UIColor(hex: "#8839EF"),
+        functionColor:     UIColor(hex: "#8839EF"),
         keyword:           UIColor(hex: "#D20F39"),
         bool:              UIColor(hex: "#DF8E1D"),
         string:            UIColor(hex: "#40A02B"),
@@ -99,7 +99,7 @@ struct EditorTheme {
             gutterForeground:  a("#585B70", "#9CA0B0"),
             text:              a("#CDD6F4", "#4C4F69"),
             heading:           a("#89B4FA", "#1E66F5"),
-            function_:         a("#CBA6F7", "#8839EF"),
+            functionColor:     a("#CBA6F7", "#8839EF"),
             keyword:           a("#F38BA8", "#D20F39"),
             bool:              a("#F9E2AF", "#DF8E1D"),
             string:            a("#A6E3A1", "#40A02B"),

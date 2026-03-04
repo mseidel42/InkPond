@@ -12,6 +12,7 @@ struct ProjectSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var typFiles: [String] = []
     @State private var showingFontPicker = false
+    @State private var bundledFontNames: [(path: String, name: String)] = []
 
     var body: some View {
         NavigationStack {
@@ -44,10 +45,9 @@ struct ProjectSettingsSheet: View {
 
                 // MARK: Fonts
                 Section(header: Text("Fonts"), footer: Text("Bundled fonts are always available in Typst by their listed names.")) {
-                    ForEach(FontManager.bundledCJKFontPaths, id: \.self) { path in
-                        let name = FontManager.typstFamilyName(forBundledPath: path) ?? URL(fileURLWithPath: path).lastPathComponent
+                    ForEach(bundledFontNames, id: \.path) { item in
                         HStack {
-                            Label(name, systemImage: "textformat")
+                            Label(item.name, systemImage: "textformat")
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Text("built-in")
@@ -99,6 +99,12 @@ struct ProjectSettingsSheet: View {
         .onAppear {
             typFiles = ProjectFileManager.listProjectFiles(for: document).typFiles
             if typFiles.isEmpty { typFiles = [document.entryFileName] }
+            // Pre-compute font names off the render cycle (reads font files from disk)
+            bundledFontNames = FontManager.bundledCJKFontPaths.map { path in
+                let name = FontManager.typstFamilyName(forBundledPath: path)
+                    ?? URL(fileURLWithPath: path).lastPathComponent
+                return (path: path, name: name)
+            }
         }
     }
 }

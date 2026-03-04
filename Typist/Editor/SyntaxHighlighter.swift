@@ -52,7 +52,7 @@ final class SyntaxHighlighter {
             // 8. Bare bool/none/auto literals
             (#"\b(?:true|false|none|auto)\b"#,                   [],                   { $0.bool },     false, false),
             // 9. Functions #name (general)
-            (#"#[a-zA-Z_][a-zA-Z0-9_-]*"#,                      [],                   { $0.function_ }, false, false),
+            (#"#[a-zA-Z_][a-zA-Z0-9_-]*"#,                      [],                   { $0.functionColor }, false, false),
             // 10. #bool — overrides function color
             (#"#(?:true|false|none|auto)\b"#,                    [],                   { $0.bool },     false, false),
             // 11. #keyword — bold

@@ -12,6 +12,7 @@ final class TypistDocument {
     var content: String
     var createdAt: Date
     var modifiedAt: Date
+    // Property-level defaults serve as SwiftData schema-migration fallbacks.
     var fontFileNames: [String] = []
     var projectID: String = UUID().uuidString
     var imageInsertMode: String = "image"
@@ -23,8 +24,6 @@ final class TypistDocument {
         self.content = content
         self.createdAt = Date()
         self.modifiedAt = Date()
-        self.fontFileNames = []
-        self.projectID = UUID().uuidString
     }
 
     var imageInsertionTemplate: String {
