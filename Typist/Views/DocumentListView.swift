@@ -5,7 +5,6 @@
 
 import SwiftUI
 import SwiftData
-import UniformTypeIdentifiers
 
 struct DocumentListView: View {
     @Environment(\.modelContext) private var modelContext
@@ -18,10 +17,10 @@ struct DocumentListView: View {
     @State private var newTitle: String = ""
     @State private var exporter = ExportController()
     @State private var documentToDelete: TypistDocument?
-    @State private var showingThemePicker = false
-    @State private var showingZipImporter = false
+    @State private var showingSettings = false
     @State private var zipImportError: String? = nil
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var monitor = DirectoryMonitor()
 
     private var filteredDocuments: [TypistDocument] {
@@ -90,11 +89,8 @@ struct DocumentListView: View {
                     Text("\"\(doc.title)\" will be permanently deleted.")
                 }
             }
-            .fileImporter(isPresented: $showingZipImporter, allowedContentTypes: [.zip]) { result in
-                switch result {
-                case .success(let url): importZip(from: url)
-                case .failure(let error): zipImportError = error.localizedDescription
-                }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView(onImport: { url in importZip(from: url) })
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { syncWithFilesystem() }
@@ -170,89 +166,43 @@ struct DocumentListView: View {
         }
     }
 
+    private var toolbarButtonTint: Color {
+        colorScheme == .light ? .black : .white
+    }
+
     @ToolbarContentBuilder
     private var iPadToolbar: some ToolbarContent {
-        ToolbarItem() {
-            Button {
-                showingThemePicker = true
-            } label: {
-                Image(systemName: "paintpalette")
+        ToolbarItem(placement: .primaryAction) {
+            Button { showingSettings = true } label: {
+                Image(systemName: "gearshape")
                     .scaleEffect(0.85)
             }
-            .tint(themeManager.colorScheme == .light ? .black : .white)
-            .popover(isPresented: $showingThemePicker) { themePickerPopover }
-        }
-        ToolbarItem(placement: .primaryAction) {
-            Button { showingZipImporter = true } label: {
-                Image(systemName: "square.and.arrow.down")
-                    .scaleEffect(0.8)
-            }
-            .tint(themeManager.colorScheme == .light ? .black : .white)
+            .tint(toolbarButtonTint)
         }
         ToolbarItem(placement: .primaryAction) {
             Button(action: addDocument) {
                 Image(systemName: "folder.badge.plus")
                     .scaleEffect(0.8)
             }
-            .tint(themeManager.colorScheme == .light ? .black : .white)
+            .tint(toolbarButtonTint)
         }
     }
 
     @ToolbarContentBuilder
     private var iPhoneToolbar: some ToolbarContent {
         ToolbarItem(placement: .bottomBar) {
-            Button {
-                showingThemePicker = true
-            } label: {
-                Image(systemName: "paintpalette")
+            Button { showingSettings = true } label: {
+                Image(systemName: "gearshape")
             }
-            .tint(themeManager.colorScheme == .light ? .black : nil)
-            .popover(isPresented: $showingThemePicker) { themePickerPopover }
+            .tint(colorScheme == .light ? .black : nil)
         }
         ToolbarSpacer(.flexible, placement: .bottomBar)
         DefaultToolbarItem(kind: .search, placement: .bottomBar)
         ToolbarSpacer(.flexible, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
-            Button { showingZipImporter = true } label: {
-                Image(systemName: "square.and.arrow.down")
-            }
-            .tint(themeManager.colorScheme == .light ? .black : nil)
-        }
-        ToolbarItem(placement: .bottomBar) {
             Button(action: addDocument) { Image(systemName: "folder.badge.plus") }
-                .tint(themeManager.colorScheme == .light ? .black : nil)
+                .tint(colorScheme == .light ? .black : nil)
         }
-    }
-
-    private var themePickerPopover: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach([("system", "Auto"), ("mocha", "Mocha · Dark"), ("latte", "Latte · Light")], id: \.0) { id, label in
-                Button {
-                    guard id != themeManager.themeID else { return }
-                    withTransaction(Transaction(animation: nil)) {
-                        themeManager.themeID = id
-                    }
-                    showingThemePicker = false
-                } label: {
-                    HStack {
-                        Text(label)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if themeManager.themeID == id {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                }
-                .buttonStyle(.plain)
-                if id != "latte" { Divider() }
-            }
-        }
-        .frame(minWidth: 200)
-        .presentationCompactAdaptation(.popover)
     }
 
     // MARK: - Actions

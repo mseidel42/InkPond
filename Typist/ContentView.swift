@@ -7,6 +7,25 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
+
+/// Sets the title of the UIWindowScene that contains this view.
+/// This controls the name shown in the iPadOS app switcher and window labels.
+private struct SceneTitleSetter: UIViewRepresentable {
+    let title: String
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isHidden = true
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            uiView.window?.windowScene?.title = title
+        }
+    }
+}
 
 struct ContentView: View {
     @State private var selectedDocument: TypistDocument?
@@ -32,6 +51,7 @@ struct ContentView: View {
             }
         }
         .background(Color.catppuccinMantle.ignoresSafeArea())
+        .background(SceneTitleSetter(title: selectedDocument?.title ?? "Typist"))
         .tint(.catppuccinBlue)
         .preferredColorScheme(themeManager.colorScheme)
         .environment(themeManager)

@@ -37,6 +37,7 @@ final class TypstTextView: UITextView {
         setupAccessoryView()
         setupFindInteraction()
         setupAppearanceObservation()
+        setupKeyboardAvoidance()
     }
 
     required init?(coder: NSCoder) {
@@ -46,6 +47,7 @@ final class TypstTextView: UITextView {
         setupAccessoryView()
         setupFindInteraction()
         setupAppearanceObservation()
+        setupKeyboardAvoidance()
     }
 
     // MARK: - Configuration
@@ -161,6 +163,46 @@ final class TypstTextView: UITextView {
     func applyHighlighting() {
         highlighter.highlight(textStorage)
         gutterView.setNeedsDisplay()
+    }
+
+    // MARK: - Keyboard Avoidance
+
+    private func setupKeyboardAvoidance() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(keyboardFrameWillChange(_:)),
+            name: UIResponder.keyboardWillChangeFrameNotification,
+            object: nil
+        )
+    }
+
+    @objc private func keyboardFrameWillChange(_ notification: Notification) {
+        guard window != nil,
+              let userInfo = notification.userInfo,
+              let endFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+
+        // How much does the keyboard overlap the bottom of this view (in window coordinates)?
+        let viewBottomY = convert(CGPoint(x: 0, y: bounds.maxY), to: nil).y
+        let overlap = max(0, viewBottomY - endFrame.minY)
+
+        let duration = (userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        let curveRaw = (userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
+
+        UIView.animate(
+            withDuration: duration, delay: 0,
+            options: [.beginFromCurrentState, UIView.AnimationOptions(rawValue: curveRaw << 16)]
+        ) {
+            self.contentInset.bottom = overlap
+            self.verticalScrollIndicatorInsets.bottom = overlap
+        } completion: { _ in
+            if overlap > 0 { self.scrollCursorToVisible() }
+        }
+    }
+
+    private func scrollCursorToVisible() {
+        guard let range = selectedTextRange else { return }
+        let rect = caretRect(for: range.end).insetBy(dx: 0, dy: -8)
+        scrollRectToVisible(rect, animated: true)
     }
 
     // MARK: - Find (programmatic trigger)

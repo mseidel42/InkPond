@@ -30,19 +30,25 @@ struct PDFKitView: UIViewRepresentable {
     }
 
     func updateUIView(_ pdfView: PDFView, context: Context) {
-        // Save page index + point from the OLD document before replacing it.
-        // We must save the integer index because PDFPage refs become invalid
-        // once a new document is loaded.
+        // Save scroll position based on view geometry rather than currentDestination.
+        // currentDestination tracks the last *navigation* target, not the current
+        // scroll offset, so it drifts by one page on every recompile.
         var savedPageIndex: Int?
-        var savedPoint: CGPoint?
+        var savedPageY: CGFloat = .greatestFiniteMagnitude  // PDF y-coord at visible top
         var savedScale: CGFloat?
 
         if let oldDoc = pdfView.document,
-           let dest = pdfView.currentDestination,
-           let page = dest.page {
+           let page = pdfView.currentPage {
+            let box = page.bounds(for: .mediaBox)
+            let pageInView = pdfView.convert(box, from: page)
+            // How much of the page (in view-space) is scrolled above the visible top?
+            if pageInView.height > 0 {
+                let hiddenFraction = max(0, -pageInView.minY) / pageInView.height
+                // Convert back to PDF coordinates (y=0 at bottom, y=height at top).
+                savedPageY = box.maxY - hiddenFraction * box.height
+            }
             savedPageIndex = oldDoc.index(for: page)
-            savedPoint     = dest.point
-            savedScale     = pdfView.scaleFactor
+            savedScale = pdfView.scaleFactor
         }
 
         // Prevent PDFKit from dismissing the software keyboard while it
@@ -54,14 +60,10 @@ struct PDFKitView: UIViewRepresentable {
         if let pageIndex = savedPageIndex,
            let scale = savedScale,
            let newPage = document.page(at: pageIndex) {
-            // Restore zoom level, then scroll to the saved position.
             pdfView.autoScales = false
             pdfView.scaleFactor = scale
-            let point = savedPoint ?? CGPoint(x: 0, y: CGFloat.greatestFiniteMagnitude)
-            // Defer one run-loop tick so PDFView has laid out the new document,
-            // then release the keyboard lock.
             DispatchQueue.main.async {
-                pdfView.go(to: PDFDestination(page: newPage, at: point))
+                pdfView.go(to: PDFDestination(page: newPage, at: CGPoint(x: 0, y: savedPageY)))
                 TypstTextView.suppressResignFirstResponder = false
             }
         } else {

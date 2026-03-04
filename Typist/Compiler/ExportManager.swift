@@ -64,7 +64,7 @@ enum ExportManager {
 
     // MARK: - Minimal ZIP writer (stored + deflated via zlib)
 
-    private static func writeZip(sourceDir: URL, destinationURL: URL) throws {
+    nonisolated private static func writeZip(sourceDir: URL, destinationURL: URL) throws {
         var entries: [(relativePath: String, url: URL)] = []
         let fm = FileManager.default
         if let enumerator = fm.enumerator(at: sourceDir, includingPropertiesForKeys: [.isDirectoryKey],
@@ -76,7 +76,10 @@ enum ExportManager {
                 entries.append((relativePath: relative, url: fileURL))
             }
         }
+        try writeZipEntries(entries, to: destinationURL)
+    }
 
+    nonisolated private static func writeZipEntries(_ entries: [(relativePath: String, url: URL)], to destinationURL: URL) throws {
         var zipData = Data()
         var centralDirectory = Data()
         var offsets: [UInt32] = []
@@ -149,16 +152,16 @@ enum ExportManager {
         zipData += eocd
 
         try zipData.write(to: destinationURL)
-    }
+    } // end writeZipEntries
 
-    private static func uint16LE(_ v: UInt16) -> Data {
+    nonisolated private static func uint16LE(_ v: UInt16) -> Data {
         var x = v.littleEndian; return Data(bytes: &x, count: 2)
     }
-    private static func uint32LE(_ v: UInt32) -> Data {
+    nonisolated private static func uint32LE(_ v: UInt32) -> Data {
         var x = v.littleEndian; return Data(bytes: &x, count: 4)
     }
 
-    private static func crc32(_ data: Data) -> UInt32 {
+    nonisolated private static func crc32(_ data: Data) -> UInt32 {
         var crc: UInt32 = 0xFFFFFFFF
         for byte in data {
             crc ^= UInt32(byte)
@@ -170,7 +173,7 @@ enum ExportManager {
         return crc ^ 0xFFFFFFFF
     }
 
-    private static func zlibDeflate(_ data: Data) -> Data {
+    nonisolated private static func zlibDeflate(_ data: Data) -> Data {
         // NSData.CompressionAlgorithm.zlib on Apple platforms produces raw DEFLATE
         // (equivalent to deflateInit2 with windowBits=-15), which is what ZIP entries require.
         guard let compressed = try? (data as NSData).compressed(using: .zlib) as Data else { return data }

@@ -52,9 +52,6 @@ struct DocumentEditorView: View {
     @State private var findRequested = false
     @State private var exporter = ExportController()
     @State private var imageImportError: String?
-    /// Captures the PDF at the moment the user taps "Slideshow" so the
-    /// fullScreenCover does not need to access compiler.pdfDocument in body.
-    @State private var slideshowDocument: PDFDocument?
 
     private var fontPaths: [String] { FontManager.allFontPaths(for: document) }
     private var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
@@ -157,7 +154,6 @@ struct DocumentEditorView: View {
             }
             Divider()
             Button {
-                slideshowDocument = compiler.pdfDocument
                 showingSlideshow = true
             } label: {
                 Label("Slideshow", systemImage: "play.rectangle")
@@ -225,7 +221,7 @@ struct DocumentEditorView: View {
         }
         .sheet(item: $exporter.exportURL) { url in ActivityView(activityItems: [url]) }
         .fullScreenCover(isPresented: $showingSlideshow) {
-            if let pdf = slideshowDocument {
+            if let pdf = compiler.pdfDocument {
                 SlideshowView(document: pdf)
             }
         }
