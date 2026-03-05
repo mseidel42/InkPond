@@ -27,3 +27,6 @@ TypstResult typst_compile(const char *source, const TypstOptions *options);
 
 /// Free a TypstResult returned by typst_compile.
 void typst_free_result(TypstResult result);
+
+/// Returns typst-ios crate version (static UTF-8 string).
+const char *typst_version(void);

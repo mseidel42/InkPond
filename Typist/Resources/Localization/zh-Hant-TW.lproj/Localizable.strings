@@ -9,9 +9,12 @@
 "sort.title_za" = "標題（Z-A）";
 "sort.created_newest" = "最近建立";
 "sort.created_oldest" = "最早建立";
+"doc.time.created" = "建立";
+"doc.time.modified" = "修改";
 
 "action.find_replace" = "尋找與取代";
 "settings.version_format" = "版本 %@（%@）";
+"settings.typst_version_format" = "Typst-ios %@";
 
 "error.file.cannot_delete_entry" = "入口檔案不可刪除。";
 "error.file.already_exists" = "名為「%@」的檔案已存在。";

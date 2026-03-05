@@ -64,6 +64,7 @@ struct DocumentListView: View {
     @State private var syncTask: Task<Void, Never>?
     @State private var sortOption: SortOption = .modifiedNewest
     @State private var showingSortPopover = false
+    private let rowDateFormat = Date.FormatStyle(date: .abbreviated, time: .shortened)
 
     private var filteredDocuments: [TypistDocument] {
         guard !searchText.isEmpty else { return documents }
@@ -178,18 +179,32 @@ struct DocumentListView: View {
     }
 
     private func documentRow(_ document: TypistDocument) -> some View {
-        NavigationLink(value: document) {
+        let isSelected = selectedDocument === document
+
+        return NavigationLink(value: document) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(document.title)
                     .font(.headline)
+                    .foregroundStyle(isSelected ? Color.catppuccinBlue : Color.primary)
                     .lineLimit(1)
-                Text(document.modifiedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(Color.catppuccinSubtext1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(L10n.tr("doc.time.created")): \(document.createdAt.formatted(rowDateFormat))")
+                    Text("\(L10n.tr("doc.time.modified")): \(document.modifiedAt.formatted(rowDateFormat))")
+                }
+                .font(.caption)
+                .foregroundStyle(Color.catppuccinSubtext1)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
         }
-        .listRowBackground(Color.catppuccinElevated)
+        .listRowBackground(
+            ZStack {
+                Color.catppuccinElevated
+                if isSelected {
+                    Color.catppuccinBlue.opacity(0.16)
+                }
+            }
+        )
         .contextMenu {
             Button {
                 renamingDocument = document

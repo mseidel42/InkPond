@@ -22,6 +22,11 @@ struct SettingsView: View {
         return L10n.format("settings.version_format", v, b)
     }
 
+    private var typstVersionString: String? {
+        guard let version = TypstBridge.runtimeVersion else { return nil }
+        return L10n.format("settings.typst_version_format", version)
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -76,6 +81,11 @@ struct SettingsView: View {
                 Text(versionString)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if let typstVersionString {
+                    Text(typstVersionString)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 20)

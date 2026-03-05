@@ -434,6 +434,15 @@ pub unsafe extern "C" fn typst_free_result(result: TypstResult) {
     }
 }
 
+/// Get the embedded typst-ios crate version.
+///
+/// Returns a pointer to a static null-terminated UTF-8 string.
+#[no_mangle]
+pub extern "C" fn typst_version() -> *const c_char {
+    static VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "\0");
+    VERSION.as_ptr() as *const c_char
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

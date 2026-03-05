@@ -21,6 +21,15 @@ enum TypstBridgeError: Error, LocalizedError {
 }
 
 struct TypstBridge {
+    nonisolated static var runtimeVersion: String? {
+#if TYPST_FFI_AVAILABLE
+        guard let cVersion = typst_version() else { return nil }
+        return String(cString: cVersion)
+#else
+        return nil
+#endif
+    }
+
     /// Compile Typst source to PDF data.
     ///
     /// - Parameters:

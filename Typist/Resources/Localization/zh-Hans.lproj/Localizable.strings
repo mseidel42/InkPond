@@ -9,9 +9,12 @@
 "sort.title_za" = "标题（Z-A）";
 "sort.created_newest" = "最近创建";
 "sort.created_oldest" = "最早创建";
+"doc.time.created" = "创建";
+"doc.time.modified" = "修改";
 
 "action.find_replace" = "查找与替换";
 "settings.version_format" = "版本 %@（%@）";
+"settings.typst_version_format" = "Typst-ios %@";
 
 "error.file.cannot_delete_entry" = "入口文件不能删除。";
 "error.file.already_exists" = "名为“%@”的文件已存在。";

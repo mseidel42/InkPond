@@ -90,7 +90,7 @@ Typist/
     └── Typist-Bridging-Header.h
 
 rust-ffi/
-├── Cargo.toml               # Rust dependencies (typst 0.14)
+├── Cargo.toml               # Rust dependencies (typst 0.14.2)
 ├── build-ios.sh             # Build script for iOS framework
 └── src/
     └── lib.rs               # Rust FFI bindings
@@ -100,7 +100,7 @@ rust-ffi/
 
 - **SwiftUI** — Declarative UI framework
 - **SwiftData** — Modern data persistence
-- **Typst 0.14** — Typesetting engine via Rust FFI
+- **Typst 0.14.2** — Typesetting engine via Rust FFI
 - **Rust** — FFI layer for Typst integration
 
 ## Acknowledgements

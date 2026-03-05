@@ -46,6 +46,7 @@ struct DocumentEditorView: View {
     @State private var editorText: String = ""
     @State private var entrySource: String = ""
     @State private var compileToken: UUID = UUID()
+    @State private var isLoadingFileContent = false
 
     // MARK: - UI state
     @State private var selectedTab: Int = 0
@@ -235,7 +236,10 @@ struct DocumentEditorView: View {
             loadFile(named: document.entryFileName)
         }
         .onDisappear { compiler.cancel() }
-        .onChange(of: editorText) { _, newText in saveCurrentFile(content: newText) }
+        .onChange(of: editorText) { _, newText in
+            guard !isLoadingFileContent else { return }
+            saveCurrentFile(content: newText)
+        }
         .onChange(of: insertionRequest) { _, newValue in
             if newValue == nil {
                 pumpPendingInsertionsIfNeeded()
@@ -292,12 +296,16 @@ struct DocumentEditorView: View {
     private func loadFile(named name: String) {
         let text = (try? ProjectFileManager.readTypFile(named: name, for: document)) ?? ""
         currentFileName = name
+        isLoadingFileContent = true
         editorText = text
+        isLoadingFileContent = false
         if name == document.entryFileName { entrySource = text }
     }
 
     private func saveCurrentFile(content: String) {
         guard !currentFileName.isEmpty else { return }
+        let existingContent = try? ProjectFileManager.readTypFile(named: currentFileName, for: document)
+        guard existingContent != content else { return }
         try? ProjectFileManager.writeTypFile(named: currentFileName, content: content, for: document)
         document.modifiedAt = Date()
         if isEditingEntryFile {

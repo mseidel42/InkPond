@@ -76,7 +76,7 @@ struct EditorView: UIViewRepresentable {
             textView.undoManager?.registerUndo(withTarget: textView) { tv in
                 tv.textStorage.replaceCharacters(in: insertedRange, with: originalContent)
                 tv.selectedRange = selectedRange
-                (tv as? TypstTextView)?.applyHighlighting()
+                tv.applyHighlighting()
                 tv.delegate?.textViewDidChange?(tv)
             }
             textView.undoManager?.setActionName("Insert Image")

@@ -118,6 +118,7 @@ struct PreviewPane: View {
     /// Only compile when the source contains meaningful content.
     private func compileIfNeeded() {
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            compiler.clearPreview()
             return
         }
         compiler.compile(source: source, fontPaths: fontPaths, rootDir: rootDir)

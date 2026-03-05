@@ -9,9 +9,12 @@
 "sort.title_za" = "Title (Z-A)";
 "sort.created_newest" = "Recently Created";
 "sort.created_oldest" = "Oldest Created";
+"doc.time.created" = "Create";
+"doc.time.modified" = "Modify";
 
 "action.find_replace" = "Find & Replace";
 "settings.version_format" = "Version %@ (%@)";
+"settings.typst_version_format" = "Typst-ios %@";
 
 "error.file.cannot_delete_entry" = "The entry file cannot be deleted.";
 "error.file.already_exists" = "A file named \"%@\" already exists.";

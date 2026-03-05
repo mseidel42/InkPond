@@ -42,8 +42,6 @@ final class LineNumberGutterView: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let textView else { return }
-        let layoutManager = textView.layoutManager
-        let textContainer = textView.textContainer
 
         // Resolve dynamic UIColors against the current trait collection before converting to CGColor.
         let resolvedBg = gutterBgColor.resolvedColor(with: traitCollection)
@@ -58,6 +56,8 @@ final class LineNumberGutterView: UIView {
             .foregroundColor: resolvedFg,
         ]
 
+        let layoutManager = textView.layoutManager
+        let textContainer = textView.textContainer
         let visibleGlyphRange = layoutManager.glyphRange(forBoundingRect: textView.bounds, in: textContainer)
         let visibleCharRange = layoutManager.characterRange(forGlyphRange: visibleGlyphRange, actualGlyphRange: nil)
 
@@ -67,7 +67,13 @@ final class LineNumberGutterView: UIView {
         let preText = nsString.substring(to: visibleCharRange.location)
         lineNumber += preText.components(separatedBy: "\n").count - 1
 
-        let insetTop = textView.textContainerInset.top
+        func caretRectForOffset(_ offset: Int) -> CGRect? {
+            let clampedOffset = min(max(offset, 0), nsString.length)
+            guard let position = textView.position(from: textView.beginningOfDocument, offset: clampedOffset) else {
+                return nil
+            }
+            return textView.caretRect(for: position)
+        }
 
         var index = visibleCharRange.location
         while index <= NSMaxRange(visibleCharRange) {
@@ -81,21 +87,20 @@ final class LineNumberGutterView: UIView {
                 break
             }
 
-            let glyphRange = layoutManager.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
-            var lineRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-            lineRect.origin.y += insetTop
-
+            let nextIndex = NSMaxRange(charRange)
+            guard let startCaretRect = caretRectForOffset(index) else {
+                break
+            }
             let numberString = "\(lineNumber)" as NSString
             let stringSize = numberString.size(withAttributes: attributes)
             let drawPoint = CGPoint(
                 x: gutterWidth - stringSize.width - 8,
-                y: lineRect.origin.y + (lineRect.height - stringSize.height) / 2
+                y: startCaretRect.minY + (max(startCaretRect.height, Self.gutterFont.lineHeight) - stringSize.height) / 2
             )
             numberString.draw(at: drawPoint, withAttributes: attributes)
 
             lineNumber += 1
 
-            let nextIndex = NSMaxRange(charRange)
             if nextIndex <= index {
                 break
             }
