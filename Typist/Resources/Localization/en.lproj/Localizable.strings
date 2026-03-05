@@ -88,8 +88,11 @@
 "Projects" = "Projects";
 "Import ZIP" = "Import ZIP";
 "Acknowledgements" = "Acknowledgements";
+"Special Thanks" = "Special Thanks";
 "The open-source typesetting system at the core of Typist." = "The open-source typesetting system at the core of Typist.";
 "Soothing pastel color palette powering the editor themes." = "Soothing pastel color palette powering the editor themes.";
 "Bundled CJK fonts used as default fallbacks in Typist." = "Bundled CJK fonts used as default fallbacks in Typist.";
+"Reference implementation for Swift/Rust interop." = "Reference implementation for Swift/Rust interop.";
+"Thanks to everyone at Donut for support and inspiration." = "Thanks to everyone at Donut for support and inspiration.";
 "Compilation Error" = "Compilation Error";
 "Start typing to see a live preview" = "Start typing to see a live preview";

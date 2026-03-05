@@ -133,7 +133,7 @@ Typist/
 - [Typst](https://github.com/typst/typst)：用于排版与 PDF 生成的核心引擎（Apache 2.0）
 - [Catppuccin](https://github.com/catppuccin/catppuccin)：编辑器主题所使用的配色体系（MIT）
 - [Source Han Sans](https://github.com/adobe-fonts/source-han-sans) / [Source Han Serif](https://github.com/adobe-fonts/source-han-serif)：应用内置的 CJK 字体资源（SIL Open Font License 1.1）
-- [swift-bridge](https://github.com/chinedufn/swift-bridge)：Swift/Rust 互操作方案的重要参考
+- [swift-bridge](https://github.com/chinedufn/swift-bridge)：Swift/Rust 互操作方案的重要参考（MIT 或 Apache-2.0）
 
 ## 特别感谢
 

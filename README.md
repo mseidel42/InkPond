@@ -135,7 +135,7 @@ Typist/
 - [Typst](https://github.com/typst/typst) - core typesetting engine used for rendering and PDF generation (Apache 2.0)
 - [Catppuccin](https://github.com/catppuccin/catppuccin) - color system used by the editor themes (MIT)
 - [Source Han Sans](https://github.com/adobe-fonts/source-han-sans) / [Source Han Serif](https://github.com/adobe-fonts/source-han-serif) - bundled CJK fonts used by default in the app (SIL Open Font License 1.1)
-- [swift-bridge](https://github.com/chinedufn/swift-bridge) - inspiration and reference for Swift/Rust interop patterns
+- [swift-bridge](https://github.com/chinedufn/swift-bridge) - inspiration and reference for Swift/Rust interop patterns (MIT or Apache-2.0)
 
 ## Special Thanks
 
