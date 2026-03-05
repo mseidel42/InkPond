@@ -90,5 +90,6 @@
 "Acknowledgements" = "Acknowledgements";
 "The open-source typesetting system at the core of Typist." = "The open-source typesetting system at the core of Typist.";
 "Soothing pastel color palette powering the editor themes." = "Soothing pastel color palette powering the editor themes.";
+"Bundled CJK fonts used as default fallbacks in Typist." = "Bundled CJK fonts used as default fallbacks in Typist.";
 "Compilation Error" = "Compilation Error";
 "Start typing to see a live preview" = "Start typing to see a live preview";

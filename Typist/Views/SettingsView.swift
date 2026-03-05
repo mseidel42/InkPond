@@ -172,6 +172,13 @@ private struct AcknowledgementsView: View {
                     url: "https://github.com/catppuccin/catppuccin"
                 )
                 .listRowBackground(Color.catppuccinElevated)
+                creditRow(
+                    name: "Source Han Sans / Serif",
+                    detail: "Bundled CJK fonts used as default fallbacks in Typist.",
+                    license: "OFL-1.1",
+                    url: "https://github.com/adobe-fonts/source-han-sans"
+                )
+                .listRowBackground(Color.catppuccinElevated)
             }
         }
         .listStyle(.insetGrouped)

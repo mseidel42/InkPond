@@ -90,5 +90,6 @@
 "Acknowledgements" = "致谢";
 "The open-source typesetting system at the core of Typist." = "Typist 核心使用的开源排版系统。";
 "Soothing pastel color palette powering the editor themes." = "编辑器主题所用的柔和马卡龙配色。";
+"Bundled CJK fonts used as default fallbacks in Typist." = "Typist 默认使用的内置 CJK 回退字体。";
 "Compilation Error" = "编译错误";
 "Start typing to see a live preview" = "开始输入以查看实时预览";
