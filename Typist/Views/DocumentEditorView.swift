@@ -60,6 +60,7 @@ struct DocumentEditorView: View {
     @State private var findRequested = false
     @State private var exporter = ExportController()
     @State private var imageImportError: String?
+    @State private var previewActionError: String?
     @State private var isImageDropTarget = false
     @State private var pendingInsertionQueue: [String] = []
     @State private var imageImportToast: String?
@@ -173,10 +174,28 @@ struct DocumentEditorView: View {
         return "Export .typ"
     }
 
+    private var canTriggerPreviewActions: Bool {
+        !entrySource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var toolbarMenu: some View {
         Menu {
             Button { showingFileBrowser = true } label: { Label("Project Files", systemImage: "folder") }
             Button { showingProjectSettings = true } label: { Label("Project Settings", systemImage: "gearshape") }
+            Divider()
+            Button {
+                compilePreviewNow()
+            } label: {
+                Label("Compile Now", systemImage: "play.circle")
+            }
+            .disabled(!canTriggerPreviewActions)
+
+            Button {
+                clearCachesAndRecompile()
+            } label: {
+                Label("Recompile", systemImage: "arrow.clockwise.circle")
+            }
+            .disabled(!canTriggerPreviewActions)
             Divider()
             Button { findRequested = true } label: { Label("Find & Replace", systemImage: "magnifyingglass") }
             Divider()
@@ -197,98 +216,118 @@ struct DocumentEditorView: View {
         }
     }
 
+    private var editorChrome: some View {
+        contentLayout
+            .navigationTitle(document.title)
+            .navigationSubtitleCompat(currentFileName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.catppuccinMantle, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .background(Color.catppuccinMantle.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: shareButtonAction) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .tint(themeManager.colorScheme == .light ? .black : .white)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    toolbarMenu
+                        .tint(themeManager.colorScheme == .light ? .black : .white)
+                }
+            }
+    }
+
+    private var editorSheetsAndEvents: some View {
+        editorChrome
+            .photosPicker(isPresented: $showingPhotoPicker,
+                          selection: $selectedPhotoItems,
+                          maxSelectionCount: 1,
+                          matching: .images)
+            .onChange(of: selectedPhotoItems) { _, items in handleImageSelection(items) }
+            .sheet(isPresented: $showingProjectSettings) {
+                ProjectSettingsSheet(document: document, openFile: openFile)
+            }
+            .sheet(isPresented: $showingFileBrowser) {
+                ProjectFileBrowserSheet(document: document, currentFileName: currentFileName, openFile: openFile)
+            }
+            .onAppear {
+                ProjectFileManager.ensureProjectStructure(for: document)
+                ProjectFileManager.migrateContentIfNeeded(for: document)
+                loadFile(named: document.entryFileName)
+            }
+            .onDisappear { compiler.cancel() }
+            .onChange(of: editorText) { _, newText in
+                guard !isLoadingFileContent else { return }
+                saveCurrentFile(content: newText)
+            }
+            .onChange(of: insertionRequest) { _, newValue in
+                if newValue == nil {
+                    pumpPendingInsertionsIfNeeded()
+                }
+            }
+    }
+
+    private var editorOverlaysAndAlerts: some View {
+        editorSheetsAndEvents
+            .overlay {
+                if exporter.isExporting {
+                    ZStack {
+                        Color.black.opacity(0.2).ignoresSafeArea()
+                        ProgressView("Compiling…")
+                            .padding()
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let toast = imageImportToast {
+                    Text(toast)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.black.opacity(0.75), in: Capsule())
+                        .padding(.bottom, 18)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .sheet(item: $exporter.exportURL) { url in ActivityView(activityItems: [url]) }
+            .fullScreenCover(isPresented: $showingSlideshow) {
+                if let pdf = compiler.pdfDocument {
+                    SlideshowView(document: pdf)
+                }
+            }
+            .alert("Export Error", isPresented: Binding(
+                get: { exporter.exportError != nil },
+                set: { if !$0 { exporter.exportError = nil } }
+            )) {
+                Button("OK") { exporter.exportError = nil }
+            } message: {
+                Text(exporter.exportError ?? "")
+            }
+            .alert("Image Import Error", isPresented: Binding(
+                get: { imageImportError != nil },
+                set: { if !$0 { imageImportError = nil } }
+            )) {
+                Button("OK") { imageImportError = nil }
+            } message: {
+                Text(imageImportError ?? "")
+            }
+            .alert("Cache Error", isPresented: Binding(
+                get: { previewActionError != nil },
+                set: { if !$0 { previewActionError = nil } }
+            )) {
+                Button("OK") { previewActionError = nil }
+            } message: {
+                Text(previewActionError ?? "")
+            }
+    }
+
     // MARK: - Body
 
     var body: some View {
-        contentLayout
-        .navigationTitle(document.title)
-        .navigationSubtitleCompat(currentFileName)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Color.catppuccinMantle, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .background(Color.catppuccinMantle.ignoresSafeArea())
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: shareButtonAction) {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .tint(themeManager.colorScheme == .light ? .black : .white)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                toolbarMenu
-                    .tint(themeManager.colorScheme == .light ? .black : .white)
-            }
-        }
-        .photosPicker(isPresented: $showingPhotoPicker,
-                      selection: $selectedPhotoItems,
-                      maxSelectionCount: 1,
-                      matching: .images)
-        .onChange(of: selectedPhotoItems) { _, items in handleImageSelection(items) }
-        .sheet(isPresented: $showingProjectSettings) {
-            ProjectSettingsSheet(document: document, openFile: openFile)
-        }
-        .sheet(isPresented: $showingFileBrowser) {
-            ProjectFileBrowserSheet(document: document, currentFileName: currentFileName, openFile: openFile)
-        }
-        .onAppear {
-            ProjectFileManager.ensureProjectStructure(for: document)
-            ProjectFileManager.migrateContentIfNeeded(for: document)
-            loadFile(named: document.entryFileName)
-        }
-        .onDisappear { compiler.cancel() }
-        .onChange(of: editorText) { _, newText in
-            guard !isLoadingFileContent else { return }
-            saveCurrentFile(content: newText)
-        }
-        .onChange(of: insertionRequest) { _, newValue in
-            if newValue == nil {
-                pumpPendingInsertionsIfNeeded()
-            }
-        }
-        .overlay {
-            if exporter.isExporting {
-                ZStack {
-                    Color.black.opacity(0.2).ignoresSafeArea()
-                    ProgressView("Compiling…")
-                        .padding()
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                }
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if let toast = imageImportToast {
-                Text(toast)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.black.opacity(0.75), in: Capsule())
-                    .padding(.bottom, 18)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .sheet(item: $exporter.exportURL) { url in ActivityView(activityItems: [url]) }
-        .fullScreenCover(isPresented: $showingSlideshow) {
-            if let pdf = compiler.pdfDocument {
-                SlideshowView(document: pdf)
-            }
-        }
-        .alert("Export Error", isPresented: Binding(
-            get: { exporter.exportError != nil },
-            set: { if !$0 { exporter.exportError = nil } }
-        )) {
-            Button("OK") { exporter.exportError = nil }
-        } message: {
-            Text(exporter.exportError ?? "")
-        }
-        .alert("Image Import Error", isPresented: Binding(
-            get: { imageImportError != nil },
-            set: { if !$0 { imageImportError = nil } }
-        )) {
-            Button("OK") { imageImportError = nil }
-        } message: {
-            Text(imageImportError ?? "")
-        }
+        editorOverlaysAndAlerts
     }
 
     // MARK: - File operations
@@ -318,6 +357,33 @@ struct DocumentEditorView: View {
     func openFile(named name: String) {
         saveCurrentFile(content: editorText)
         loadFile(named: name)
+    }
+
+    private func compilePreviewNow() {
+        compiler.compileNow(source: entrySource, fontPaths: fontPaths, rootDir: rootDir)
+    }
+
+    private func clearCachesAndRecompile() {
+        let source = entrySource
+        let fontPaths = fontPaths
+        let rootDir = rootDir
+
+        compiler.clearPreview()
+
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try PreviewPackageCacheStore().clearAll()
+                }.value
+                await MainActor.run {
+                    compiler.compileNow(source: source, fontPaths: fontPaths, rootDir: rootDir)
+                }
+            } catch {
+                await MainActor.run {
+                    previewActionError = error.localizedDescription
+                }
+            }
+        }
     }
 
     // MARK: - Image handling

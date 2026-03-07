@@ -11,6 +11,11 @@ import Observation
 
 @Observable
 final class TypstCompiler {
+    enum CompileMode {
+        case debounced
+        case immediate
+    }
+
     private(set) var pdfDocument: PDFDocument?
     private(set) var errorMessage: String?
     private(set) var isCompiling: Bool = false
@@ -22,16 +27,18 @@ final class TypstCompiler {
 
     /// Schedule a compilation 500 ms after the last call.
     /// Cancels any in-flight compile task before scheduling a new one.
-    func compile(source: String, fontPaths: [String], rootDir: String? = nil) {
+    func compile(source: String, fontPaths: [String], rootDir: String? = nil, mode: CompileMode = .debounced) {
         compileTask?.cancel()
         compileGeneration &+= 1
         let generation = compileGeneration
         compileTask = Task { [weak self] in
             guard let self else { return }
-            do {
-                try await Task.sleep(for: .milliseconds(500))
-            } catch {
-                return // cancelled — do nothing
+            if mode == .debounced {
+                do {
+                    try await Task.sleep(for: .milliseconds(500))
+                } catch {
+                    return // cancelled — do nothing
+                }
             }
 
             guard !Task.isCancelled else { return }
@@ -58,6 +65,10 @@ final class TypstCompiler {
                 }
             }
         }
+    }
+
+    func compileNow(source: String, fontPaths: [String], rootDir: String? = nil) {
+        compile(source: source, fontPaths: fontPaths, rootDir: rootDir, mode: .immediate)
     }
 
     /// Clear current preview content and cancel any in-flight compilation.

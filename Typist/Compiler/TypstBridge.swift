@@ -21,6 +21,13 @@ enum TypstBridgeError: Error, LocalizedError {
 }
 
 struct TypstBridge {
+    nonisolated static var packageCacheDirectoryURL: URL? {
+        FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("typst-packages", isDirectory: true)
+    }
+
     nonisolated static var runtimeVersion: String? {
 #if TYPST_FFI_AVAILABLE
         guard let cVersion = typst_version() else { return nil }
@@ -46,11 +53,7 @@ struct TypstBridge {
         }
 
         // App caches directory for @preview package downloads.
-        let cacheDir = FileManager.default
-            .urls(for: .cachesDirectory, in: .userDomainMask)
-            .first?
-            .appendingPathComponent("typst-packages")
-            .path
+        let cacheDir = packageCacheDirectoryURL?.path
 
         // Hold C strings alive for the duration of the FFI call.
         return source.withCString { cSource in

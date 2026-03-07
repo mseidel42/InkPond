@@ -89,6 +89,61 @@ struct TypistTests {
         #expect(FileManager.default.fileExists(atPath: dest.path))
     }
 
+    @Test func previewPackageCacheSnapshotListsPackagesAndTotalSize() throws {
+        let root = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try makeCachePackage(root: root, namespace: "preview", name: "touying", version: "0.6.2", files: [
+            ("package.typ", Data("hello".utf8)),
+            ("assets/icon.bin", Data([0x00, 0x01, 0x02]))
+        ])
+        try makeCachePackage(root: root, namespace: "preview", name: "charged-ieee", version: "0.1.4", files: [
+            ("template.typ", Data("abc".utf8))
+        ])
+
+        let snapshot = try PreviewPackageCacheStore(rootURL: root).snapshot()
+
+        #expect(snapshot.entries.map(\.id) == [
+            "preview/charged-ieee/0.1.4",
+            "preview/touying/0.6.2"
+        ])
+        #expect(snapshot.totalSizeInBytes == 11)
+    }
+
+    @Test func previewPackageCacheRemoveDeletesPackageAndCleansEmptyParents() throws {
+        let root = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try makeCachePackage(root: root, namespace: "preview", name: "touying", version: "0.6.2", files: [
+            ("package.typ", Data("hello".utf8))
+        ])
+
+        let store = PreviewPackageCacheStore(rootURL: root)
+        let entry = try #require(store.snapshot().entries.first)
+
+        try store.remove(entry)
+
+        let remainingSnapshot = try store.snapshot()
+        #expect(remainingSnapshot.entries.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("preview").path))
+    }
+
+    @Test func previewPackageCacheClearAllLeavesEmptyRootDirectory() throws {
+        let root = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try makeCachePackage(root: root, namespace: "preview", name: "touying", version: "0.6.2", files: [
+            ("package.typ", Data("hello".utf8))
+        ])
+
+        let store = PreviewPackageCacheStore(rootURL: root)
+        try store.clearAll()
+
+        #expect(FileManager.default.fileExists(atPath: root.path))
+        let contents = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        #expect(contents.isEmpty)
+    }
+
     private func makeDocument(projectID: String) -> TypistDocument {
         let doc = TypistDocument(title: "Test", content: "")
         doc.projectID = projectID
@@ -102,6 +157,29 @@ struct TypistTests {
             .appendingPathComponent("TypistTests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    private func makeCachePackage(
+        root: URL,
+        namespace: String,
+        name: String,
+        version: String,
+        files: [(path: String, data: Data)]
+    ) throws {
+        let versionDir = root
+            .appendingPathComponent(namespace, isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+            .appendingPathComponent(version, isDirectory: true)
+        try FileManager.default.createDirectory(at: versionDir, withIntermediateDirectories: true)
+
+        for file in files {
+            let fileURL = versionDir.appendingPathComponent(file.path)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try file.data.write(to: fileURL)
+        }
     }
 
     /// Build a minimal ZIP containing STORE entries only. Sufficient for parser regression tests.
