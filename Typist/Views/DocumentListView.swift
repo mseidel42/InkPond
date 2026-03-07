@@ -259,7 +259,7 @@ struct DocumentListView: View {
     }
 
     private var toolbarButtonTint: Color {
-        .catppuccinText
+        colorScheme == .dark ? .white : .black
     }
 
     @ToolbarContentBuilder

@@ -17,19 +17,43 @@ private final class PassivePDFView: PDFView {
     override var canBecomeFirstResponder: Bool { false }
 }
 
+final class PDFContainerView: UIView {
+    fileprivate let pdfView = PassivePDFView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        addSubview(pdfView)
+        pdfView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            pdfView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            pdfView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            pdfView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            pdfView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
 struct PDFKitView: UIViewRepresentable {
     let document: PDFDocument
 
-    func makeUIView(context: Context) -> PDFView {
-        let pdfView = PassivePDFView()
+    func makeUIView(context: Context) -> PDFContainerView {
+        let container = PDFContainerView()
+        let pdfView = container.pdfView
         pdfView.autoScales = true
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
         pdfView.backgroundColor = .catppuccinMantle
-        return pdfView
+        return container
     }
 
-    func updateUIView(_ pdfView: PDFView, context: Context) {
+    func updateUIView(_ container: PDFContainerView, context: Context) {
+        let pdfView = container.pdfView
         // Save scroll position based on view geometry rather than currentDestination.
         // currentDestination tracks the last *navigation* target, not the current
         // scroll offset, so it drifts by one page on every recompile.
