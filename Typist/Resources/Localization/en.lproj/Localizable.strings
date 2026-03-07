@@ -16,6 +16,9 @@
 "doc.list.empty.action" = "New Document";
 
 "action.find_replace" = "Find & Replace";
+"action.insert_image" = "Insert Image";
+"action.typing" = "Typing";
+"action.delete" = "Delete";
 "settings.version_format" = "Version %@ (%@)";
 "settings.typst_version_format" = "Typst-ios %@";
 
@@ -34,6 +37,8 @@
 "error.typst.unknown_compilation" = "Unknown compilation error";
 "error.image.load_data_failed" = "Failed to load image data.";
 "error.image.process_failed" = "Could not process image.";
+"toast.image_inserted.single" = "Inserted %@";
+"toast.image_inserted.multiple" = "Inserted %d images";
 
 "No Document Selected" = "No Document Selected";
 "Select a document from the list or create a new one." = "Select a document from the list or create a new one.";
@@ -57,6 +62,10 @@
 "Project Settings" = "Project Settings";
 "Export Project as Zip" = "Export Project as Zip";
 "Slideshow" = "Slideshow";
+"No .typ Files Found" = "No .typ Files Found";
+"Typist could not find any .typ files in this project." = "Typist could not find any .typ files in this project.";
+"Choose Entry File" = "Choose Entry File";
+"This project does not include main.typ. Choose the file used for compilation." = "This project does not include main.typ. Choose the file used for compilation.";
 "Image Import Error" = "Image Import Error";
 "No .typ files" = "No .typ files";
 "Source Files" = "Source Files";

@@ -173,16 +173,16 @@ struct ProjectFileBrowserSheet: View {
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.15), in: Capsule())
-                    .foregroundStyle(Color.accentColor)
+                    .background(Color.catppuccinBlue.opacity(0.16), in: Capsule())
+                    .foregroundStyle(Color.catppuccinBlue)
             }
             if name == currentFileName {
                 Text("Editing")
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.green.opacity(0.15), in: Capsule())
-                    .foregroundStyle(Color.green)
+                    .background(Color.catppuccinSuccess.opacity(0.16), in: Capsule())
+                    .foregroundStyle(Color.catppuccinSuccess)
             }
         }
     }

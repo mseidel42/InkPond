@@ -93,7 +93,7 @@ struct DocumentEditorView: View {
         .overlay {
             if isImageDropTarget {
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.accentColor.opacity(0.8), style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                    .stroke(Color.catppuccinBlue.opacity(0.85), style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
                     .padding(12)
                     .allowsHitTesting(false)
             }
@@ -198,7 +198,7 @@ struct DocumentEditorView: View {
             }
             .disabled(!canTriggerPreviewActions)
             Divider()
-            Button { findRequested = true } label: { Label("Find & Replace", systemImage: "magnifyingglass") }
+            Button { findRequested = true } label: { Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass") }
             Divider()
             Button {
                 exporter.exportZip(for: document)
@@ -230,11 +230,11 @@ struct DocumentEditorView: View {
                     Button(action: shareButtonAction) {
                         Image(systemName: "square.and.arrow.up")
                     }
-                    .tint(themeManager.colorScheme == .light ? .black : .white)
+                    .tint(Color.catppuccinText)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     toolbarMenu
-                        .tint(themeManager.colorScheme == .light ? .black : .white)
+                        .tint(Color.catppuccinText)
                 }
             }
     }
@@ -280,10 +280,10 @@ struct DocumentEditorView: View {
             .overlay {
                 if exporter.isExporting {
                     ZStack {
-                        Color.black.opacity(0.2).ignoresSafeArea()
+                        Color.catppuccinOverlayScrim.ignoresSafeArea()
                         ProgressView("Compiling…")
                             .padding()
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            .catppuccinFloatingSurface(cornerRadius: 12)
                     }
                 }
             }
@@ -291,10 +291,10 @@ struct DocumentEditorView: View {
                 if let toast = imageImportToast {
                     Text(toast)
                         .font(.footnote.weight(.medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.catppuccinText)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(.black.opacity(0.75), in: Capsule())
+                        .catppuccinFloatingSurface(cornerRadius: 999)
                         .padding(.bottom, 18)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -470,7 +470,7 @@ struct DocumentEditorView: View {
                 let result = try await importImageAsset(from: source)
                 await MainActor.run {
                     enqueueInsertion(result.reference)
-                    showImageImportToast("Inserted \(result.relativePath)")
+                    showImageImportToast(L10n.imageInserted(path: result.relativePath))
                 }
             } catch {
                 await MainActor.run {
@@ -519,9 +519,9 @@ struct DocumentEditorView: View {
                 }
                 if let firstPath = insertedImages.first {
                     if insertedImages.count == 1 {
-                        showImageImportToast("Inserted \(firstPath)")
+                        showImageImportToast(L10n.imageInserted(path: firstPath))
                     } else {
-                        showImageImportToast("Inserted \(insertedImages.count) images")
+                        showImageImportToast(L10n.imagesInserted(count: insertedImages.count))
                     }
                 }
                 if let firstError {

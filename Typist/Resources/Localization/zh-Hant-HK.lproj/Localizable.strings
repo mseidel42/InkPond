@@ -16,6 +16,9 @@
 "doc.list.empty.action" = "新增文件";
 
 "action.find_replace" = "尋找及取代";
+"action.insert_image" = "插入圖片";
+"action.typing" = "輸入";
+"action.delete" = "刪除";
 "settings.version_format" = "版本 %@（%@）";
 "settings.typst_version_format" = "Typst-ios %@";
 
@@ -34,6 +37,8 @@
 "error.typst.unknown_compilation" = "未知編譯錯誤";
 "error.image.load_data_failed" = "載入圖片資料失敗。";
 "error.image.process_failed" = "無法處理圖片。";
+"toast.image_inserted.single" = "已插入 %@";
+"toast.image_inserted.multiple" = "已插入 %d 張圖片";
 
 "No Document Selected" = "未選取文件";
 "Select a document from the list or create a new one." = "請從清單中選擇文件，或建立新文件。";
@@ -57,6 +62,10 @@
 "Project Settings" = "專案設定";
 "Export Project as Zip" = "將專案匯出為 ZIP";
 "Slideshow" = "幻燈片";
+"No .typ Files Found" = "找不到 .typ 檔案";
+"Typist could not find any .typ files in this project." = "Typist 在這個專案中找不到任何 .typ 檔案。";
+"Choose Entry File" = "選擇入口檔案";
+"This project does not include main.typ. Choose the file used for compilation." = "這個專案不包含 main.typ。請選擇用於編譯的檔案。";
 "Image Import Error" = "圖片匯入錯誤";
 "No .typ files" = "沒有 .typ 檔案";
 "Source Files" = "原始檔";

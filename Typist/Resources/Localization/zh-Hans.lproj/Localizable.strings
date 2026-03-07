@@ -16,6 +16,9 @@
 "doc.list.empty.action" = "新建文档";
 
 "action.find_replace" = "查找与替换";
+"action.insert_image" = "插入图片";
+"action.typing" = "输入";
+"action.delete" = "删除";
 "settings.version_format" = "版本 %@（%@）";
 "settings.typst_version_format" = "Typst-ios %@";
 
@@ -34,6 +37,8 @@
 "error.typst.unknown_compilation" = "未知编译错误";
 "error.image.load_data_failed" = "加载图片数据失败。";
 "error.image.process_failed" = "图片处理失败。";
+"toast.image_inserted.single" = "已插入 %@";
+"toast.image_inserted.multiple" = "已插入 %d 张图片";
 
 "No Document Selected" = "未选择文档";
 "Select a document from the list or create a new one." = "请从列表中选择文档，或新建一个文档。";
@@ -57,6 +62,10 @@
 "Project Settings" = "项目设置";
 "Export Project as Zip" = "导出项目为 ZIP";
 "Slideshow" = "幻灯片";
+"No .typ Files Found" = "未找到 .typ 文件";
+"Typist could not find any .typ files in this project." = "Typist 在这个项目中没有找到任何 .typ 文件。";
+"Choose Entry File" = "选择入口文件";
+"This project does not include main.typ. Choose the file used for compilation." = "这个项目不包含 main.typ。请选择用于编译的文件。";
 "Image Import Error" = "图片导入错误";
 "No .typ files" = "没有 .typ 文件";
 "Source Files" = "源文件";

@@ -101,7 +101,7 @@ struct PreviewPane: View {
             if compiler.isCompiling {
                 ProgressView()
                     .padding(8)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .catppuccinFloatingSurface(cornerRadius: 8)
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
@@ -148,12 +148,12 @@ struct PreviewPane: View {
         ScrollView {
             Text(message)
                 .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.catppuccinText)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxHeight: 120)
-        .background(Color.red.opacity(0.85))
+        .background(Color.catppuccinDanger.opacity(0.9))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .padding()
     }

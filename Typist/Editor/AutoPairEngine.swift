@@ -74,7 +74,7 @@ struct AutoPairEngine {
                 (tv as? TypstTextView)?.applyHighlighting()
                 tv.delegate?.textViewDidChange?(tv)
             }
-            textView.undoManager?.setActionName("Typing")
+            textView.undoManager?.setActionName(L10n.tr("action.typing"))
 
             storage.replaceCharacters(in: selectedRange, with: pair)
             textView.selectedRange = NSRange(location: cursorLocation + 1, length: 0)
@@ -111,7 +111,7 @@ struct AutoPairEngine {
                 (tv as? TypstTextView)?.applyHighlighting()
                 tv.delegate?.textViewDidChange?(tv)
             }
-            textView.undoManager?.setActionName("Delete")
+            textView.undoManager?.setActionName(L10n.tr("action.delete"))
 
             storage.replaceCharacters(in: NSRange(location: cursor - 1, length: 2), with: "")
             textView.selectedRange = NSRange(location: cursor - 1, length: 0)
@@ -150,7 +150,7 @@ struct AutoPairEngine {
                 (tv as? TypstTextView)?.applyHighlighting()
                 tv.delegate?.textViewDidChange?(tv)
             }
-            textView.undoManager?.setActionName("Typing")
+            textView.undoManager?.setActionName(L10n.tr("action.typing"))
 
             storage.replaceCharacters(in: selectedRange, with: insertion)
             textView.selectedRange = NSRange(location: cursor + 1 + indent.count, length: 0)
@@ -168,7 +168,7 @@ struct AutoPairEngine {
                 (tv as? TypstTextView)?.applyHighlighting()
                 tv.delegate?.textViewDidChange?(tv)
             }
-            textView.undoManager?.setActionName("Typing")
+            textView.undoManager?.setActionName(L10n.tr("action.typing"))
 
             storage.replaceCharacters(in: selectedRange, with: insertion)
             textView.selectedRange = NSRange(location: cursor + insertion.count, length: 0)

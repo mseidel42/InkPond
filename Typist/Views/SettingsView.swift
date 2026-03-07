@@ -395,7 +395,7 @@ private struct AcknowledgementsView: View {
             if let link = URL(string: url) {
                 Link(url, destination: link)
                     .font(.caption)
-                    .tint(.catppuccinBlue)
+                    .tint(Color.catppuccinBlue)
             }
         }
         .padding(.vertical, 4)

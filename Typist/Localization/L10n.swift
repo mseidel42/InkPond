@@ -24,4 +24,12 @@ enum L10n {
     nonisolated static func deleteDocumentMessage(title: String) -> String {
         format("alert.delete_document.message", title)
     }
+
+    nonisolated static func imageInserted(path: String) -> String {
+        format("toast.image_inserted.single", path)
+    }
+
+    nonisolated static func imagesInserted(count: Int) -> String {
+        format("toast.image_inserted.multiple", count)
+    }
 }

@@ -79,7 +79,7 @@ struct EditorView: UIViewRepresentable {
                 tv.applyHighlighting()
                 tv.delegate?.textViewDidChange?(tv)
             }
-            textView.undoManager?.setActionName("Insert Image")
+            textView.undoManager?.setActionName(L10n.tr("action.insert_image"))
 
             textView.textStorage.replaceCharacters(in: selectedRange, with: text)
             textView.selectedRange = NSRange(location: selectedRange.location + insertedRange.length, length: 0)

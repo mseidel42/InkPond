@@ -90,14 +90,13 @@ struct DocumentListView: View {
             .searchable(text: $searchText, prompt: "Search")
             .navigationTitle("Typist")
             .toolbar { if isIPad { iPadToolbar } else { iPhoneToolbar } }
-            .toolbarBackground(.visible, for: .navigationBar)
             .overlay {
                 if exporter.isExporting {
                     ZStack {
-                        Color.black.opacity(0.2).ignoresSafeArea()
+                        Color.catppuccinOverlayScrim.ignoresSafeArea()
                         ProgressView("Compiling…")
                             .padding()
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            .catppuccinFloatingSurface(cornerRadius: 12)
                     }
                 }
             }
@@ -252,9 +251,6 @@ struct DocumentListView: View {
             Label(L10n.tr("doc.list.empty.title"), systemImage: "folder")
         } description: {
             Text(L10n.tr("doc.list.empty.message"))
-        } actions: {
-            Button(L10n.tr("doc.list.empty.action"), action: addDocument)
-                .buttonStyle(.borderedProminent)
         }
     }
 
@@ -263,7 +259,7 @@ struct DocumentListView: View {
     }
 
     private var toolbarButtonTint: Color {
-        colorScheme == .light ? .black : .white
+        .catppuccinText
     }
 
     @ToolbarContentBuilder
@@ -299,12 +295,12 @@ struct DocumentListView: View {
             Button { showingSettings = true } label: {
                 Image(systemName: "gearshape")
             }
-            .tint(colorScheme == .light ? .black : nil)
+            .tint(toolbarButtonTint)
         }
         ToolbarSpacer(.flexible, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
             Button(action: addDocument) { Image(systemName: "folder.badge.plus") }
-                .tint(colorScheme == .light ? .black : nil)
+                .tint(toolbarButtonTint)
         }
     }
 
@@ -338,19 +334,22 @@ struct DocumentListView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .background {
+                            if option == sortOption {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Color.catppuccinSurface0)
+                            }
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .background {
-                        if option == sortOption {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.catppuccinSurface0)
-                        }
-                    }
+                    .padding(.horizontal, 4)
                 }
             }
-            .padding(8)
-            .frame(minWidth: 220)
+            .padding(10)
+            .frame(minWidth: 188)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .presentationCompactAdaptation(.popover)
         }
     }

@@ -154,6 +154,20 @@ extension UIColor {
     static let catppuccinText = UIColor {
         $0.userInterfaceStyle == .dark ? UIColor(hex: "#CDD6F4") : UIColor(hex: "#4C4F69")
     }
+    /// Semantic success accent within the Catppuccin palette.
+    static let catppuccinSuccess = UIColor {
+        $0.userInterfaceStyle == .dark ? UIColor(hex: "#A6E3A1") : UIColor(hex: "#40A02B")
+    }
+    /// Semantic danger accent within the Catppuccin palette.
+    static let catppuccinDanger = UIColor {
+        $0.userInterfaceStyle == .dark ? UIColor(hex: "#F38BA8") : UIColor(hex: "#D20F39")
+    }
+    /// Shared dimming scrim for modal work states.
+    static let catppuccinOverlayScrim = UIColor {
+        $0.userInterfaceStyle == .dark
+            ? UIColor(hex: "#11111B").withAlphaComponent(0.52)
+            : UIColor(hex: "#DCE0E8").withAlphaComponent(0.42)
+    }
 }
 
 // MARK: - SwiftUI Color adaptive palette
@@ -165,6 +179,47 @@ extension Color {
     static let catppuccinSubtext1 = Color(UIColor.catppuccinSubtext1)
     static let catppuccinBase     = Color(UIColor.catppuccinBase)
     static let catppuccinElevated = Color(UIColor.catppuccinElevated)
+    static let catppuccinText     = Color(UIColor.catppuccinText)
+    static let catppuccinSuccess  = Color(UIColor.catppuccinSuccess)
+    static let catppuccinDanger   = Color(UIColor.catppuccinDanger)
+    static let catppuccinOverlayScrim = Color(UIColor.catppuccinOverlayScrim)
+}
+
+private struct CatppuccinFloatingSurfaceModifier: ViewModifier {
+    let cornerRadius: CGFloat
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                .glassEffect(
+                    .regular.tint(Color.catppuccinSurface0.opacity(0.18)),
+                    in: .rect(cornerRadius: cornerRadius)
+                )
+        } else {
+            content
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(Color.catppuccinSurface0.opacity(0.45), lineWidth: 1)
+                }
+        }
+    }
+}
+
+extension View {
+    func catppuccinFloatingSurface(cornerRadius: CGFloat = 12) -> some View {
+        modifier(CatppuccinFloatingSurfaceModifier(cornerRadius: cornerRadius))
+    }
+
+    @ViewBuilder
+    func liquidGlassButtonIfAvailable() -> some View {
+        if #available(iOS 26, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self
+        }
+    }
 }
 
 // MARK: - UIColor hex initializer

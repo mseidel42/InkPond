@@ -42,11 +42,10 @@ struct InitialEntryFilePickerSheet: View {
             .safeAreaInset(edge: .bottom) {
                 Text("This project does not include main.typ. Choose the file used for compilation.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.catppuccinText)
                     .padding(.horizontal)
                     .padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.ultraThinMaterial)
             }
         }
         .interactiveDismissDisabled()
