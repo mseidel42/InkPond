@@ -39,6 +39,11 @@ struct ProjectFiles {
     var fontFiles: [String]  // file names inside fonts/
 }
 
+struct EntryFileResolution {
+    let entryFileName: String?
+    let requiresInitialSelection: Bool
+}
+
 // MARK: - ProjectFileManager
 
 enum ProjectFileManager {
@@ -111,6 +116,19 @@ enum ProjectFileManager {
             let name = url.lastPathComponent
             return knownProjectIDs.contains(name) ? nil : name
         }.sorted()
+    }
+
+    static func trackedFolderNames() -> Set<String> {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: documentsURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: .skipsHiddenFiles
+        ) else { return [] }
+
+        return Set(contents.compactMap { url -> String? in
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
+            return url.lastPathComponent
+        })
     }
 
     // MARK: - Legacy migration
@@ -292,11 +310,60 @@ enum ProjectFileManager {
         return ProjectFiles(typFiles: typFiles, imageFiles: imageFiles, fontFiles: fontFiles)
     }
 
+    static func listAllTypFiles(for document: TypistDocument) -> [String] {
+        listAllTypFiles(in: projectDirectory(for: document))
+    }
+
+    static func listAllTypFiles(in projectDirectory: URL) -> [String] {
+        let fm = FileManager.default
+        let rootURL = projectDirectory.standardizedFileURL
+        let rootComponents = rootURL.pathComponents
+        guard let enumerator = fm.enumerator(
+            at: rootURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var typFiles: [String] = []
+
+        for case let fileURL as URL in enumerator {
+            guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else {
+                continue
+            }
+            guard fileURL.pathExtension == "typ" else { continue }
+
+            let standardizedFileURL = fileURL.standardizedFileURL
+            let fileComponents = standardizedFileURL.pathComponents
+            guard fileComponents.starts(with: rootComponents) else { continue }
+
+            let relativeComponents = fileComponents.dropFirst(rootComponents.count)
+            guard !relativeComponents.isEmpty else { continue }
+
+            let relativePath = relativeComponents.joined(separator: "/")
+            typFiles.append(relativePath)
+        }
+
+        return typFiles.sorted()
+    }
+
+    static func resolveImportedEntryFile(from typFiles: [String]) -> EntryFileResolution {
+        let sortedFiles = typFiles.sorted()
+        if let mainFile = sortedFiles.first(where: { ($0 as NSString).lastPathComponent == "main.typ" }) {
+            return EntryFileResolution(entryFileName: mainFile, requiresInitialSelection: false)
+        }
+        if let firstTypFile = sortedFiles.first {
+            return EntryFileResolution(entryFileName: firstTypFile, requiresInitialSelection: true)
+        }
+        return EntryFileResolution(entryFileName: nil, requiresInitialSelection: false)
+    }
+
     // MARK: - Content migration
 
     /// One-time migration: write document.content → entry file on disk.
     /// Does nothing if entry file already exists with non-empty content, or if document.content is empty.
     static func migrateContentIfNeeded(for document: TypistDocument) {
+        guard !document.requiresInitialEntrySelection else { return }
+
         let entryURL = entryFileURL(for: document)
         let fm = FileManager.default
 
@@ -307,6 +374,7 @@ enum ProjectFileManager {
 
         // Write content from SwiftData field to disk
         let source = document.content
+        guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         try? source.write(to: entryURL, atomically: true, encoding: .utf8)
         os_log(.info, "ProjectFileManager: migrated content to %{public}@ for %{public}@",
                document.entryFileName, document.projectID)

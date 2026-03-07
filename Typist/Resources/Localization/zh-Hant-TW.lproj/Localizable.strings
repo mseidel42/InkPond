@@ -11,6 +11,9 @@
 "sort.created_oldest" = "最早建立";
 "doc.time.created" = "建立";
 "doc.time.modified" = "修改";
+"doc.list.empty.title" = "尚無文件";
+"doc.list.empty.message" = "建立新文件，開始寫作。";
+"doc.list.empty.action" = "新增文件";
 
 "action.find_replace" = "尋找與取代";
 "settings.version_format" = "版本 %@（%@）";

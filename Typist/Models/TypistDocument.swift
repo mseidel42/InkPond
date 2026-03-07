@@ -18,6 +18,7 @@ final class TypistDocument {
     var imageInsertMode: String = "image"
     var imageDirectoryName: String = "images"
     var entryFileName: String = "main.typ"
+    var requiresInitialEntrySelection: Bool = false
 
     init(title: String = L10n.untitledBase, content: String = "") {
         self.title = title

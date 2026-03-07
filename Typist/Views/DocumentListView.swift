@@ -75,6 +75,14 @@ struct DocumentListView: View {
         filteredDocuments.sorted(by: sortOption.areInIncreasingOrder)
     }
 
+    private var isShowingSearchEmptyState: Bool {
+        !searchText.isEmpty && sortedDocuments.isEmpty
+    }
+
+    private var isShowingLibraryEmptyState: Bool {
+        documents.isEmpty && searchText.isEmpty
+    }
+
     private var isIPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     var body: some View {
@@ -164,6 +172,13 @@ struct DocumentListView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(Color.catppuccinBase)
+        .overlay {
+            if isShowingLibraryEmptyState {
+                libraryEmptyState
+            } else if isShowingSearchEmptyState {
+                searchEmptyState
+            }
+        }
         .task {
             ProjectFileManager.migrateLegacyStructure(documents: documents)
             syncWithFilesystem()
@@ -230,6 +245,21 @@ struct DocumentListView: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+
+    private var libraryEmptyState: some View {
+        ContentUnavailableView {
+            Label(L10n.tr("doc.list.empty.title"), systemImage: "folder")
+        } description: {
+            Text(L10n.tr("doc.list.empty.message"))
+        } actions: {
+            Button(L10n.tr("doc.list.empty.action"), action: addDocument)
+                .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var searchEmptyState: some View {
+        ContentUnavailableView.search(text: searchText)
     }
 
     private var toolbarButtonTint: Color {
@@ -344,16 +374,27 @@ struct DocumentListView: View {
     }
 
     private func syncWithFilesystem() {
+        let existingFolders = ProjectFileManager.trackedFolderNames()
+
+        for document in documents where !existingFolders.contains(document.projectID) {
+            if selectedDocument == document {
+                selectedDocument = nil
+            }
+            modelContext.delete(document)
+        }
+
         let knownIDs = Set(documents.map { $0.projectID })
         let newFolders = ProjectFileManager.untrackedFolderNames(knownProjectIDs: knownIDs)
         for folderName in newFolders {
             let folderURL = ProjectFileManager.projectDirectory(folderName: folderName)
-            let typFiles = (try? FileManager.default.contentsOfDirectory(atPath: folderURL.path))?
-                .filter { $0.hasSuffix(".typ") }.sorted() ?? []
-            let entryFile = typFiles.first(where: { $0 == "main.typ" }) ?? typFiles.first ?? "main.typ"
+            let typFiles = ProjectFileManager.listAllTypFiles(in: folderURL)
             let doc = TypistDocument(title: folderName, content: "")
             doc.projectID = folderName
-            doc.entryFileName = entryFile
+            let resolution = ProjectFileManager.resolveImportedEntryFile(from: typFiles)
+            if let entryFile = resolution.entryFileName {
+                doc.entryFileName = entryFile
+            }
+            doc.requiresInitialEntrySelection = resolution.requiresInitialSelection
             modelContext.insert(doc)
         }
     }
@@ -390,11 +431,12 @@ struct DocumentListView: View {
 
         do {
             let extracted = try ZipImporter.extract(from: url, to: destDir)
-            // Detect entry file: prefer main.typ, else first .typ file
-            let typFiles = extracted.filter { $0.hasSuffix(".typ") && !$0.contains("/") }
-            if let entry = typFiles.first(where: { $0 == "main.typ" }) ?? typFiles.first {
+            let typFiles = extracted.filter { $0.hasSuffix(".typ") }
+            let resolution = ProjectFileManager.resolveImportedEntryFile(from: typFiles)
+            if let entry = resolution.entryFileName {
                 doc.entryFileName = entry
             }
+            doc.requiresInitialEntrySelection = resolution.requiresInitialSelection
             selectedDocument = doc
         } catch {
             modelContext.delete(doc)

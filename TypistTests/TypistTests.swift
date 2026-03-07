@@ -89,6 +89,24 @@ struct TypistTests {
         #expect(FileManager.default.fileExists(atPath: dest.path))
     }
 
+    @Test func resolveImportedEntryFileRequiresSelectionWhenMainTypIsMissing() {
+        let resolution = ProjectFileManager.resolveImportedEntryFile(from: ["chapter.typ", "appendix.typ"])
+
+        #expect(resolution.entryFileName == "appendix.typ")
+        #expect(resolution.requiresInitialSelection)
+    }
+
+    @Test func migrateContentIfNeededSkipsEmptyContent() throws {
+        let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
+        ProjectFileManager.ensureProjectStructure(for: doc)
+        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+
+        ProjectFileManager.migrateContentIfNeeded(for: doc)
+
+        let entryURL = ProjectFileManager.entryFileURL(for: doc)
+        #expect(!FileManager.default.fileExists(atPath: entryURL.path))
+    }
+
     @Test func previewPackageCacheSnapshotListsPackagesAndTotalSize() throws {
         let root = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

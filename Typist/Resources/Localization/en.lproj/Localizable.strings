@@ -11,6 +11,9 @@
 "sort.created_oldest" = "Oldest Created";
 "doc.time.created" = "Create";
 "doc.time.modified" = "Modify";
+"doc.list.empty.title" = "No Documents Yet";
+"doc.list.empty.message" = "Create a new document to start writing.";
+"doc.list.empty.action" = "New Document";
 
 "action.find_replace" = "Find & Replace";
 "settings.version_format" = "Version %@ (%@)";

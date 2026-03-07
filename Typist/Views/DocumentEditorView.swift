@@ -65,6 +65,7 @@ struct DocumentEditorView: View {
     @State private var pendingInsertionQueue: [String] = []
     @State private var imageImportToast: String?
     @State private var toastDismissTask: Task<Void, Never>?
+    @State private var showingInitialEntryFilePicker = false
 
     private var fontPaths: [String] { FontManager.allFontPaths(for: document) }
     private var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
@@ -251,10 +252,16 @@ struct DocumentEditorView: View {
             .sheet(isPresented: $showingFileBrowser) {
                 ProjectFileBrowserSheet(document: document, currentFileName: currentFileName, openFile: openFile)
             }
+            .sheet(isPresented: $showingInitialEntryFilePicker) {
+                InitialEntryFilePickerSheet(document: document) { fileName in
+                    document.entryFileName = fileName
+                    document.requiresInitialEntrySelection = false
+                    showingInitialEntryFilePicker = false
+                    loadFile(named: fileName)
+                }
+            }
             .onAppear {
-                ProjectFileManager.ensureProjectStructure(for: document)
-                ProjectFileManager.migrateContentIfNeeded(for: document)
-                loadFile(named: document.entryFileName)
+                prepareDocumentForEditing()
             }
             .onDisappear { compiler.cancel() }
             .onChange(of: editorText) { _, newText in
@@ -331,6 +338,29 @@ struct DocumentEditorView: View {
     }
 
     // MARK: - File operations
+
+    private func prepareDocumentForEditing() {
+        ProjectFileManager.ensureProjectStructure(for: document)
+
+        let typFiles = ProjectFileManager.listAllTypFiles(for: document)
+        if document.requiresInitialEntrySelection {
+            let resolution = ProjectFileManager.resolveImportedEntryFile(from: typFiles)
+            if let suggestedEntry = resolution.entryFileName {
+                if !typFiles.contains(document.entryFileName) {
+                    document.entryFileName = suggestedEntry
+                }
+                showingInitialEntryFilePicker = true
+                currentFileName = ""
+                editorText = ""
+                entrySource = ""
+                return
+            }
+            document.requiresInitialEntrySelection = false
+        }
+
+        ProjectFileManager.migrateContentIfNeeded(for: document)
+        loadFile(named: document.entryFileName)
+    }
 
     private func loadFile(named name: String) {
         let text = (try? ProjectFileManager.readTypFile(named: name, for: document)) ?? ""
