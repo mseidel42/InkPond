@@ -19,6 +19,10 @@ final class TypistDocument {
     var imageDirectoryName: String = "images"
     var entryFileName: String = "main.typ"
     var requiresInitialEntrySelection: Bool = false
+    var requiresImportConfiguration: Bool = false
+    var importEntryFileOptions: [String] = []
+    var importImageDirectoryOptions: [String] = []
+    var importFontDirectoryOptions: [String] = []
 
     init(title: String = L10n.untitledBase, content: String = "") {
         self.title = title

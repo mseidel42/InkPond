@@ -52,7 +52,6 @@ struct DocumentEditorView: View {
     @State private var selectedTab: Int = 0
     @State private var showingSlideshow = false
     @State private var editorFraction: CGFloat = 0.5
-    @State private var showingProjectSettings = false
     @State private var showingPhotoPicker = false
     @State private var showingFileBrowser = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
@@ -65,7 +64,7 @@ struct DocumentEditorView: View {
     @State private var pendingInsertionQueue: [String] = []
     @State private var imageImportToast: String?
     @State private var toastDismissTask: Task<Void, Never>?
-    @State private var showingInitialEntryFilePicker = false
+    @State private var showingImportConfiguration = false
 
     private var fontPaths: [String] { FontManager.allFontPaths(for: document) }
     private var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
@@ -182,7 +181,6 @@ struct DocumentEditorView: View {
     private var toolbarMenu: some View {
         Menu {
             Button { showingFileBrowser = true } label: { Label("Project Files", systemImage: "folder") }
-            Button { showingProjectSettings = true } label: { Label("Project Settings", systemImage: "gearshape") }
             Divider()
             Button {
                 compilePreviewNow()
@@ -246,18 +244,32 @@ struct DocumentEditorView: View {
                           maxSelectionCount: 1,
                           matching: .images)
             .onChange(of: selectedPhotoItems) { _, items in handleImageSelection(items) }
-            .sheet(isPresented: $showingProjectSettings) {
-                ProjectSettingsSheet(document: document, openFile: openFile)
-            }
             .sheet(isPresented: $showingFileBrowser) {
                 ProjectFileBrowserSheet(document: document, currentFileName: currentFileName, openFile: openFile)
             }
-            .sheet(isPresented: $showingInitialEntryFilePicker) {
-                InitialEntryFilePickerSheet(document: document) { fileName in
-                    document.entryFileName = fileName
+            .sheet(isPresented: $showingImportConfiguration) {
+                InitialEntryFilePickerSheet(document: document) { selectedEntry, selectedImageDirectory, selectedFontDirectory in
+                    if let selectedEntry {
+                        document.entryFileName = selectedEntry
+                    }
                     document.requiresInitialEntrySelection = false
-                    showingInitialEntryFilePicker = false
-                    loadFile(named: fileName)
+                    if let selectedImageDirectory {
+                        document.imageDirectoryName = selectedImageDirectory
+                    } else {
+                        document.imageDirectoryName = "images"
+                        ProjectFileManager.ensureImageDirectory(for: document)
+                    }
+                    if let selectedFontDirectory {
+                        _ = ProjectFileManager.importFontFiles(from: selectedFontDirectory, for: document)
+                    } else {
+                        ProjectFileManager.ensureFontsDirectory(for: document)
+                    }
+                    document.requiresImportConfiguration = false
+                    document.importEntryFileOptions = []
+                    document.importImageDirectoryOptions = []
+                    document.importFontDirectoryOptions = []
+                    showingImportConfiguration = false
+                    loadFile(named: document.entryFileName)
                 }
             }
             .onAppear {
@@ -340,21 +352,32 @@ struct DocumentEditorView: View {
     // MARK: - File operations
 
     private func prepareDocumentForEditing() {
-        ProjectFileManager.ensureProjectStructure(for: document)
+        ProjectFileManager.ensureProjectRoot(for: document)
 
         let typFiles = ProjectFileManager.listAllTypFiles(for: document)
-        if document.requiresInitialEntrySelection {
+        if document.requiresImportConfiguration || document.requiresInitialEntrySelection {
             let resolution = ProjectFileManager.resolveImportedEntryFile(from: typFiles)
             if let suggestedEntry = resolution.entryFileName {
                 if !typFiles.contains(document.entryFileName) {
                     document.entryFileName = suggestedEntry
                 }
-                showingInitialEntryFilePicker = true
+                if document.importEntryFileOptions.isEmpty {
+                    document.importEntryFileOptions = typFiles
+                }
+                showingImportConfiguration = true
                 currentFileName = ""
                 editorText = ""
                 entrySource = ""
                 return
             }
+            if !document.importImageDirectoryOptions.isEmpty || !document.importFontDirectoryOptions.isEmpty {
+                showingImportConfiguration = true
+                currentFileName = ""
+                editorText = ""
+                entrySource = ""
+                return
+            }
+            document.requiresImportConfiguration = false
             document.requiresInitialEntrySelection = false
         }
 

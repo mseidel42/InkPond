@@ -39,6 +39,24 @@ struct ProjectFiles {
     var fontFiles: [String]  // file names inside fonts/
 }
 
+struct ProjectTreeNode: Identifiable, Hashable {
+    enum Kind: Hashable {
+        case directory
+        case typ
+        case image
+        case font
+        case other
+    }
+
+    let relativePath: String
+    let displayName: String
+    let kind: Kind
+    let children: [ProjectTreeNode]
+
+    var id: String { relativePath }
+    var isDirectory: Bool { kind == .directory }
+}
+
 struct EntryFileResolution {
     let entryFileName: String?
     let requiresInitialSelection: Bool
@@ -161,6 +179,9 @@ enum ProjectFileManager {
 
     static func imagesDirectory(for document: TypistDocument) -> URL {
         let imageDirName = safeImageDirectoryName(from: document.imageDirectoryName)
+        if imageDirName.isEmpty {
+            return projectDirectory(for: document)
+        }
         return projectDirectory(for: document)
             .appendingPathComponent(imageDirName, isDirectory: true)
     }
@@ -172,14 +193,31 @@ enum ProjectFileManager {
 
     // MARK: - Lifecycle
 
-    static func ensureProjectStructure(for document: TypistDocument) {
-        let fm = FileManager.default
-        let dirs = [projectDirectory(for: document),
-                    imagesDirectory(for: document),
-                    fontsDirectory(for: document)]
-        for dir in dirs {
-            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+    static func ensureProjectRoot(for document: TypistDocument) {
+        try? FileManager.default.createDirectory(at: projectDirectory(for: document), withIntermediateDirectories: true)
+    }
+
+    static func ensureImageDirectory(for document: TypistDocument) {
+        ensureProjectRoot(for: document)
+        let imageDirectory = imagesDirectory(for: document)
+        if imageDirectory.standardizedFileURL != projectDirectory(for: document).standardizedFileURL {
+            try? FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true)
         }
+    }
+
+    static func ensureFontsDirectory(for document: TypistDocument) {
+        ensureProjectRoot(for: document)
+        try? FileManager.default.createDirectory(at: fontsDirectory(for: document), withIntermediateDirectories: true)
+    }
+
+    static func ensureDefaultAssetDirectories(for document: TypistDocument) {
+        ensureImageDirectory(for: document)
+        ensureFontsDirectory(for: document)
+    }
+
+    static func ensureProjectStructure(for document: TypistDocument) {
+        ensureProjectRoot(for: document)
+        ensureDefaultAssetDirectories(for: document)
     }
 
     static func deleteProjectDirectory(for document: TypistDocument) {
@@ -215,13 +253,11 @@ enum ProjectFileManager {
     // MARK: - .typ file CRUD
 
     static func readTypFile(named name: String, for document: TypistDocument) throws -> String {
-        try validateFileName(name)
         let url = try validatedProjectPath(relativePath: name, for: document)
         return try String(contentsOf: url, encoding: .utf8)
     }
 
     static func writeTypFile(named name: String, content: String, for document: TypistDocument) throws {
-        try validateFileName(name)
         let url = try validatedProjectPath(relativePath: name, for: document)
         try content.write(to: url, atomically: true, encoding: .utf8)
     }
@@ -240,7 +276,6 @@ enum ProjectFileManager {
         guard name != document.entryFileName else {
             throw TypistFileError.cannotDeleteEntryFile
         }
-        try validateFileName(name)
         let url = try validatedProjectPath(relativePath: name, for: document)
         try FileManager.default.removeItem(at: url)
         os_log(.info, "ProjectFileManager: deleted %{public}@ from %{public}@", name, document.projectID)
@@ -260,7 +295,7 @@ enum ProjectFileManager {
         let accessing = sourceURL.startAccessingSecurityScopedResource()
         defer { if accessing { sourceURL.stopAccessingSecurityScopedResource() } }
 
-        ensureProjectStructure(for: document)
+        ensureProjectRoot(for: document)
         let destDir = try validatedProjectPath(relativePath: subdir, for: document, allowEmpty: true)
         try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
         let fileName = sourceURL.lastPathComponent
@@ -315,6 +350,12 @@ enum ProjectFileManager {
     }
 
     static func listAllTypFiles(in projectDirectory: URL) -> [String] {
+        listAllFiles(in: projectDirectory)
+            .filter { $0.hasSuffix(".typ") }
+            .sorted()
+    }
+
+    static func listAllFiles(in projectDirectory: URL) -> [String] {
         let fm = FileManager.default
         let rootURL = projectDirectory.standardizedFileURL
         let rootComponents = rootURL.pathComponents
@@ -324,13 +365,12 @@ enum ProjectFileManager {
             options: [.skipsHiddenFiles]
         ) else { return [] }
 
-        var typFiles: [String] = []
+        var files: [String] = []
 
         for case let fileURL as URL in enumerator {
             guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else {
                 continue
             }
-            guard fileURL.pathExtension == "typ" else { continue }
 
             let standardizedFileURL = fileURL.standardizedFileURL
             let fileComponents = standardizedFileURL.pathComponents
@@ -340,10 +380,52 @@ enum ProjectFileManager {
             guard !relativeComponents.isEmpty else { continue }
 
             let relativePath = relativeComponents.joined(separator: "/")
-            typFiles.append(relativePath)
+            files.append(relativePath)
         }
 
-        return typFiles.sorted()
+        return files.sorted()
+    }
+
+    static func projectTree(for document: TypistDocument) -> [ProjectTreeNode] {
+        let imageDirectoryName = safeImageDirectoryName(from: document.imageDirectoryName)
+        return buildProjectTree(in: projectDirectory(for: document), relativePrefix: "", imageDirectoryName: imageDirectoryName)
+    }
+
+    static func imageDirectoryCandidates(from relativePaths: [String]) -> [String] {
+        directoryCandidates(from: relativePaths)
+    }
+
+    static func fontDirectoryCandidates(from relativePaths: [String]) -> [String] {
+        directoryCandidates(from: relativePaths)
+    }
+
+    static func importFontFiles(from relativeDirectory: String, for document: TypistDocument) -> [String] {
+        let urls = listFiles(in: relativeDirectory, for: document, matching: ["otf", "ttf", "woff", "woff2"])
+        guard !urls.isEmpty else {
+            document.fontFileNames = []
+            return []
+        }
+
+        ensureFontsDirectory(for: document)
+        let fontsDir = fontsDirectory(for: document)
+
+        let imported = urls.compactMap { sourceURL -> String? in
+            let fileName = sourceURL.lastPathComponent
+            let destination = fontsDir.appendingPathComponent(fileName)
+            if sourceURL.standardizedFileURL != destination.standardizedFileURL {
+                try? FileManager.default.removeItem(at: destination)
+                do {
+                    try FileManager.default.copyItem(at: sourceURL, to: destination)
+                } catch {
+                    return nil
+                }
+            }
+            return fileName
+        }
+
+        let uniqueNames = Array(Set(imported)).sorted()
+        document.fontFileNames = uniqueNames
+        return uniqueNames
     }
 
     static func resolveImportedEntryFile(from typFiles: [String]) -> EntryFileResolution {
@@ -355,6 +437,69 @@ enum ProjectFileManager {
             return EntryFileResolution(entryFileName: firstTypFile, requiresInitialSelection: true)
         }
         return EntryFileResolution(entryFileName: nil, requiresInitialSelection: false)
+    }
+
+    private static func buildProjectTree(
+        in directory: URL,
+        relativePrefix: String,
+        imageDirectoryName: String
+    ) -> [ProjectTreeNode] {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        let nodes = contents.compactMap { url -> ProjectTreeNode? in
+            let name = url.lastPathComponent
+            let relativePath = relativePrefix.isEmpty ? name : "\(relativePrefix)/\(name)"
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+
+            if values?.isDirectory == true {
+                return ProjectTreeNode(
+                    relativePath: relativePath,
+                    displayName: name,
+                    kind: .directory,
+                    children: buildProjectTree(
+                        in: url,
+                        relativePrefix: relativePath,
+                        imageDirectoryName: imageDirectoryName
+                    )
+                )
+            }
+
+            return ProjectTreeNode(
+                relativePath: relativePath,
+                displayName: name,
+                kind: fileKind(for: relativePath, imageDirectoryName: imageDirectoryName),
+                children: []
+            )
+        }
+
+        return nodes.sorted { lhs, rhs in
+            if lhs.isDirectory != rhs.isDirectory {
+                return lhs.isDirectory && !rhs.isDirectory
+            }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+    }
+
+    private static func fileKind(for relativePath: String, imageDirectoryName: String) -> ProjectTreeNode.Kind {
+        let ext = (relativePath as NSString).pathExtension.lowercased()
+        if ext == "typ" { return .typ }
+        if relativePath.hasPrefix("fonts/") { return .font }
+        if !imageDirectoryName.isEmpty, relativePath.hasPrefix(imageDirectoryName + "/") { return .image }
+        switch ext {
+        case "jpg", "jpeg", "png", "gif", "svg", "webp":
+            return .image
+        case "otf", "ttf", "woff", "woff2":
+            return .font
+        default:
+            return .other
+        }
     }
 
     // MARK: - Content migration
@@ -417,7 +562,7 @@ enum ProjectFileManager {
     /// Keep image subdirectory as one safe path component to avoid path traversal.
     private static func safeImageDirectoryName(from raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return "images" }
+        if trimmed.isEmpty { return "" }
         guard !trimmed.contains("/"),
               !trimmed.contains("\\"),
               trimmed != ".",
@@ -433,11 +578,59 @@ enum ProjectFileManager {
     /// Returns the relative path for use in Typst source (e.g. "images/img-A1B2C3D4.jpg").
     @discardableResult
     static func saveImage(data: Data, fileName: String, for document: TypistDocument) throws -> String {
-        ensureProjectStructure(for: document)
+        ensureImageDirectory(for: document)
         let imageDir = safeImageDirectoryName(from: document.imageDirectoryName)
         let dest = imagesDirectory(for: document).appendingPathComponent(fileName)
         try data.write(to: dest)
         os_log(.info, "ProjectFileManager: saved image %{public}@", fileName)
-        return "\(imageDir)/\(fileName)"
+        return imageDir.isEmpty ? fileName : "\(imageDir)/\(fileName)"
+    }
+
+    private static func directoryCandidates(from relativePaths: [String]) -> [String] {
+        var directories: Set<String> = [""]
+
+        for path in relativePaths {
+            let normalized = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { continue }
+
+            let components = normalized.split(separator: "/").map(String.init)
+            guard components.count > 1 else {
+                directories.insert("")
+                continue
+            }
+
+            for depth in 1..<(components.count) {
+                let directory = components.prefix(depth).joined(separator: "/")
+                directories.insert(directory)
+            }
+        }
+
+        return directories.sorted {
+            let lhsIsRoot = $0.isEmpty
+            let rhsIsRoot = $1.isEmpty
+            if lhsIsRoot != rhsIsRoot {
+                return lhsIsRoot
+            }
+            return $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+    }
+
+    private static func listFiles(in relativeDirectory: String, for document: TypistDocument, matching extensions: Set<String>) -> [URL] {
+        let directoryURL = (try? validatedProjectPath(relativePath: relativeDirectory, for: document, allowEmpty: true))
+            ?? projectDirectory(for: document)
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return urls.filter { url in
+            let ext = url.pathExtension.lowercased()
+            return extensions.contains(ext)
+        }.sorted {
+            $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
+        }
     }
 }

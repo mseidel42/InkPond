@@ -12,12 +12,16 @@ struct ProjectFileBrowserSheet: View {
     var openFile: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var projectFiles: ProjectFiles = ProjectFiles(typFiles: [], imageFiles: [], fontFiles: [])
+    @State private var projectTree: [ProjectTreeNode] = []
+    @State private var entryFiles: [String] = []
+    @State private var expandedNodes: Set<String> = []
+    @State private var isSettingsExpanded = false
     @State private var showingNewFileAlert = false
     @State private var newFileName = ""
     @State private var showingImporter = false
-    @State private var deleteError: String?
-    @State private var showingDeleteError = false
+    @State private var showingFontPicker = false
+    @State private var actionError: String?
+    @State private var showingActionError = false
 
     private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "svg", "webp"]
     private static let fontExtensions: Set<String> = ["otf", "ttf", "woff", "woff2"]
@@ -25,90 +29,19 @@ struct ProjectFileBrowserSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                // MARK: .typ files
-                Section {
-                    if projectFiles.typFiles.isEmpty {
-                        Text("No .typ files")
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        ForEach(projectFiles.typFiles, id: \.self) { name in
-                            Button {
-                                openFile(name)
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "doc.plaintext")
-                                        .foregroundStyle(.secondary)
-                                    Text(name)
-                                        .foregroundStyle(.primary)
-                                    Spacer()
-                                    badges(for: name)
-                                }
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    deleteTypFile(name)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                                .disabled(name == document.entryFileName)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Source Files")
+                DisclosureGroup(isExpanded: $isSettingsExpanded) {
+                    projectSettings
+                } label: {
+                    Label("Project Settings", systemImage: "gearshape")
                 }
 
-                // MARK: Image files
-                Section {
-                    if projectFiles.imageFiles.isEmpty {
-                        Text("No images")
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        ForEach(projectFiles.imageFiles, id: \.self) { name in
-                            HStack {
-                                Image(systemName: "photo")
-                                    .foregroundStyle(.secondary)
-                                Text(name)
-                                    .foregroundStyle(.primary)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    deleteImageFile(name)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
+                if projectTree.isEmpty {
+                    Text("No files")
+                        .foregroundStyle(.tertiary)
+                } else {
+                    ForEach(projectTree) { node in
+                        treeRow(for: node)
                     }
-                } header: {
-                    Text("Images")
-                }
-
-                // MARK: Font files
-                Section {
-                    if projectFiles.fontFiles.isEmpty {
-                        Text("No fonts")
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        ForEach(projectFiles.fontFiles, id: \.self) { name in
-                            HStack {
-                                Image(systemName: "textformat")
-                                    .foregroundStyle(.secondary)
-                                Text(name)
-                                    .foregroundStyle(.primary)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    deleteFontFile(name)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Fonts")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -146,10 +79,10 @@ struct ProjectFileBrowserSheet: View {
             } message: {
                 Text("Enter a name for the new .typ file.")
             }
-            .alert("Error", isPresented: $showingDeleteError) {
+            .alert("Error", isPresented: $showingActionError) {
                 Button("OK") {}
             } message: {
-                Text(deleteError ?? "")
+                Text(actionError ?? "")
             }
             .fileImporter(
                 isPresented: $showingImporter,
@@ -158,17 +91,145 @@ struct ProjectFileBrowserSheet: View {
             ) { result in
                 handleImport(result)
             }
+            .fileImporter(
+                isPresented: $showingFontPicker,
+                allowedContentTypes: [.font],
+                allowsMultipleSelection: true
+            ) { result in
+                handleFontImport(result)
+            }
         }
         .presentationDetents([.medium, .large])
-        .onAppear { refreshFiles() }
+        .onAppear { refreshProjectState() }
+        .onChange(of: document.imageDirectoryName) { _, _ in
+            refreshProjectState()
+        }
     }
 
-    // MARK: - Badges
+    private var projectSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Entry File")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Entry File", selection: $document.entryFileName) {
+                    ForEach(entryFiles, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .onChange(of: document.entryFileName) { _, newName in
+                    openFile(newName)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Image Insertion")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Format", selection: $document.imageInsertMode) {
+                    Text("#image(\"path\")").tag("image")
+                    Text("#figure(image(\"path\"), caption: [...])").tag("figure")
+                }
+                .pickerStyle(.segmented)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Image Directory")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                TextField("Subdirectory name", text: $document.imageDirectoryName)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Fonts")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        showingFontPicker = true
+                    } label: {
+                        Label("Add Font…", systemImage: "plus")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption)
+                }
+
+                if document.fontFileNames.isEmpty {
+                    Text("No fonts")
+                        .foregroundStyle(.tertiary)
+                } else {
+                    ForEach(document.fontFileNames.sorted(), id: \.self) { name in
+                        Label(name, systemImage: "textformat")
+                            .font(.subheadline)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func treeRow(for node: ProjectTreeNode) -> AnyView {
+        if node.isDirectory {
+            return AnyView(DisclosureGroup(isExpanded: expansionBinding(for: node.relativePath)) {
+                ForEach(node.children) { child in
+                    treeRow(for: child)
+                }
+            } label: {
+                rowLabel(for: node)
+            })
+        } else if node.kind == .typ {
+            return AnyView(Button {
+                openFile(node.relativePath)
+                dismiss()
+            } label: {
+                rowLabel(for: node)
+            }
+            .buttonStyle(.plain)
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                    deleteTypFile(node.relativePath)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(node.relativePath == document.entryFileName)
+            })
+        } else {
+            return AnyView(rowLabel(for: node)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        deleteFile(at: node.relativePath, kind: node.kind)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                })
+        }
+    }
+
+    private func rowLabel(for node: ProjectTreeNode) -> some View {
+        HStack {
+            Image(systemName: iconName(for: node))
+                .foregroundStyle(.secondary)
+            Text(node.displayName)
+                .foregroundStyle(.primary)
+            Spacer()
+            if node.kind == .typ {
+                badges(for: node.relativePath)
+            }
+        }
+    }
 
     @ViewBuilder
-    private func badges(for name: String) -> some View {
+    private func badges(for path: String) -> some View {
         HStack(spacing: 4) {
-            if name == document.entryFileName {
+            if path == document.entryFileName {
                 Text("Entry")
                     .font(.caption2)
                     .padding(.horizontal, 6)
@@ -176,7 +237,7 @@ struct ProjectFileBrowserSheet: View {
                     .background(Color.catppuccinBlue.opacity(0.16), in: Capsule())
                     .foregroundStyle(Color.catppuccinBlue)
             }
-            if name == currentFileName {
+            if path == currentFileName {
                 Text("Editing")
                     .font(.caption2)
                     .padding(.horizontal, 6)
@@ -187,10 +248,38 @@ struct ProjectFileBrowserSheet: View {
         }
     }
 
-    // MARK: - Actions
+    private func iconName(for node: ProjectTreeNode) -> String {
+        switch node.kind {
+        case .directory:
+            return "folder"
+        case .typ:
+            return "doc.plaintext"
+        case .image:
+            return "photo"
+        case .font:
+            return "textformat"
+        case .other:
+            return "doc"
+        }
+    }
 
-    private func refreshFiles() {
-        projectFiles = ProjectFileManager.listProjectFiles(for: document)
+    private func expansionBinding(for path: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedNodes.contains(path) },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedNodes.insert(path)
+                } else {
+                    expandedNodes.remove(path)
+                }
+            }
+        )
+    }
+
+    private func refreshProjectState() {
+        projectTree = ProjectFileManager.projectTree(for: document)
+        let allTypFiles = ProjectFileManager.listAllTypFiles(for: document)
+        entryFiles = allTypFiles.isEmpty ? [document.entryFileName] : allTypFiles
     }
 
     private func createNewFile() {
@@ -201,40 +290,33 @@ struct ProjectFileBrowserSheet: View {
         guard !name.isEmpty else { return }
         do {
             try ProjectFileManager.createTypFile(named: name, for: document)
-            refreshFiles()
+            refreshProjectState()
             openFile(name)
             dismiss()
         } catch {
-            deleteError = error.localizedDescription
-            showingDeleteError = true
+            present(error)
         }
     }
 
-    private func deleteTypFile(_ name: String) {
+    private func deleteTypFile(_ path: String) {
         do {
-            try ProjectFileManager.deleteTypFile(named: name, for: document)
-            refreshFiles()
+            try ProjectFileManager.deleteTypFile(named: path, for: document)
+            refreshProjectState()
         } catch {
-            deleteError = error.localizedDescription
-            showingDeleteError = true
+            present(error)
         }
     }
 
-    private func deleteImageFile(_ name: String) {
-        let relativePath = "\(document.imageDirectoryName)/\(name)"
+    private func deleteFile(at relativePath: String, kind: ProjectTreeNode.Kind) {
         do {
             try ProjectFileManager.deleteProjectFile(relativePath: relativePath, for: document)
-            refreshFiles()
+            if kind == .font {
+                document.fontFileNames.removeAll { $0 == (relativePath as NSString).lastPathComponent }
+            }
+            refreshProjectState()
         } catch {
-            deleteError = error.localizedDescription
-            showingDeleteError = true
+            present(error)
         }
-    }
-
-    private func deleteFontFile(_ name: String) {
-        FontManager.deleteFont(fileName: name, from: document)
-        document.fontFileNames.removeAll { $0 == name }
-        refreshFiles()
     }
 
     private func handleImport(_ result: Result<[URL], Error>) {
@@ -251,7 +333,6 @@ struct ProjectFileBrowserSheet: View {
             }
 
             if subdir.isEmpty {
-                // Copy directly into project root; overwrite if exists
                 let accessing = url.startAccessingSecurityScopedResource()
                 defer { if accessing { url.stopAccessingSecurityScopedResource() } }
                 let dest = ProjectFileManager.projectDirectory(for: document)
@@ -262,7 +343,6 @@ struct ProjectFileBrowserSheet: View {
                 _ = try? ProjectFileManager.importFile(from: url, to: subdir, for: document)
             }
 
-            // Register imported font in document
             if Self.fontExtensions.contains(ext) {
                 let name = url.lastPathComponent
                 if !document.fontFileNames.contains(name) {
@@ -270,6 +350,22 @@ struct ProjectFileBrowserSheet: View {
                 }
             }
         }
-        refreshFiles()
+        refreshProjectState()
+    }
+
+    private func handleFontImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result else { return }
+        for url in urls {
+            if let name = try? FontManager.importFont(from: url, for: document),
+               !document.fontFileNames.contains(name) {
+                document.fontFileNames.append(name)
+            }
+        }
+        refreshProjectState()
+    }
+
+    private func present(_ error: Error) {
+        actionError = error.localizedDescription
+        showingActionError = true
     }
 }

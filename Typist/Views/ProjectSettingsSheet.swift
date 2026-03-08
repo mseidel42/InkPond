@@ -97,7 +97,7 @@ struct ProjectSettingsSheet: View {
             }
         }
         .onAppear {
-            typFiles = ProjectFileManager.listProjectFiles(for: document).typFiles
+            typFiles = ProjectFileManager.listAllTypFiles(for: document)
             if typFiles.isEmpty { typFiles = [document.entryFileName] }
             // Pre-compute font names off the render cycle (reads font files from disk)
             bundledFontNames = FontManager.bundledCJKFontPaths.map { path in

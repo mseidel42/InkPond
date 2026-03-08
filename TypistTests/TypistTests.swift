@@ -107,6 +107,87 @@ struct TypistTests {
         #expect(!FileManager.default.fileExists(atPath: entryURL.path))
     }
 
+    @Test func projectFileManagerSupportsNestedTypPaths() throws {
+        let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
+        ProjectFileManager.ensureProjectStructure(for: doc)
+        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+
+        let nestedDir = ProjectFileManager.projectDirectory(for: doc).appendingPathComponent("chapters", isDirectory: true)
+        try FileManager.default.createDirectory(at: nestedDir, withIntermediateDirectories: true)
+
+        try ProjectFileManager.writeTypFile(named: "chapters/intro.typ", content: "Hello", for: doc)
+
+        let loaded = try ProjectFileManager.readTypFile(named: "chapters/intro.typ", for: doc)
+        #expect(loaded == "Hello")
+
+        try ProjectFileManager.deleteTypFile(named: "chapters/intro.typ", for: doc)
+        #expect(!FileManager.default.fileExists(atPath: nestedDir.appendingPathComponent("intro.typ").path))
+    }
+
+    @Test func projectFileManagerBuildsProjectTreeFromRoot() throws {
+        let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
+        ProjectFileManager.ensureProjectStructure(for: doc)
+        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+
+        try ProjectFileManager.writeTypFile(named: "main.typ", content: "", for: doc)
+        let chapterDir = ProjectFileManager.projectDirectory(for: doc).appendingPathComponent("chapters", isDirectory: true)
+        try FileManager.default.createDirectory(at: chapterDir, withIntermediateDirectories: true)
+        try ProjectFileManager.writeTypFile(named: "chapters/intro.typ", content: "", for: doc)
+
+        let imageURL = ProjectFileManager.imagesDirectory(for: doc).appendingPathComponent("cover.png")
+        try Data([0x01]).write(to: imageURL)
+
+        let tree = ProjectFileManager.projectTree(for: doc)
+
+        #expect(tree.map(\.displayName) == ["chapters", "fonts", "images", "main.typ"])
+        let chapters = try #require(tree.first(where: { $0.relativePath == "chapters" }))
+        #expect(chapters.children.map(\.relativePath) == ["chapters/intro.typ"])
+        let images = try #require(tree.first(where: { $0.relativePath == "images" }))
+        #expect(images.children.map(\.relativePath) == ["images/cover.png"])
+    }
+
+    @Test func projectFileManagerListsAllFilesRecursively() throws {
+        let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
+        ProjectFileManager.ensureProjectStructure(for: doc)
+        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+
+        try ProjectFileManager.writeTypFile(named: "main.typ", content: "", for: doc)
+        let nestedImage = ProjectFileManager.projectDirectory(for: doc)
+            .appendingPathComponent("assets/icons", isDirectory: true)
+        try FileManager.default.createDirectory(at: nestedImage, withIntermediateDirectories: true)
+        try Data([0x01]).write(to: nestedImage.appendingPathComponent("logo.png"))
+
+        let files = ProjectFileManager.listAllFiles(in: ProjectFileManager.projectDirectory(for: doc))
+        #expect(files == ["assets/icons/logo.png", "main.typ"])
+    }
+
+    @Test func projectFileManagerFindsImportDirectoryCandidates() {
+        let files = [
+            "main.typ",
+            "assets/cover.png",
+            "assets/diagram.svg",
+            "fonts/Inter-Regular.otf",
+            "vendor/fonts/Mono.ttf",
+            "vendor/fonts/nested/Mono-Bold.ttf",
+            "logo.jpg"
+        ]
+
+        #expect(ProjectFileManager.imageDirectoryCandidates(from: files) == ["", "assets", "fonts", "vendor", "vendor/fonts", "vendor/fonts/nested"])
+        #expect(ProjectFileManager.fontDirectoryCandidates(from: files) == ["", "assets", "fonts", "vendor", "vendor/fonts", "vendor/fonts/nested"])
+    }
+
+    @Test func projectFileManagerAllowsRootImageDirectory() throws {
+        let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
+        doc.imageDirectoryName = ""
+        ProjectFileManager.ensureProjectStructure(for: doc)
+        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+
+        let relativePath = try ProjectFileManager.saveImage(data: Data([0x01]), fileName: "cover.png", for: doc)
+
+        #expect(relativePath == "cover.png")
+        #expect(FileManager.default.fileExists(atPath: ProjectFileManager.projectDirectory(for: doc).appendingPathComponent("cover.png").path))
+    }
+
     @Test func previewPackageCacheSnapshotListsPackagesAndTotalSize() throws {
         let root = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

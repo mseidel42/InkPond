@@ -67,7 +67,7 @@ enum FontManager {
         let accessing = sourceURL.startAccessingSecurityScopedResource()
         defer { if accessing { sourceURL.stopAccessingSecurityScopedResource() } }
 
-        ProjectFileManager.ensureProjectStructure(for: document)
+        ProjectFileManager.ensureFontsDirectory(for: document)
         let fileName = sourceURL.lastPathComponent
         let destination = ProjectFileManager.fontsDirectory(for: document)
             .appendingPathComponent(fileName)

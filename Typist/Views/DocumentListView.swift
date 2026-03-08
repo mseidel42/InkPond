@@ -386,6 +386,7 @@ struct DocumentListView: View {
         let newFolders = ProjectFileManager.untrackedFolderNames(knownProjectIDs: knownIDs)
         for folderName in newFolders {
             let folderURL = ProjectFileManager.projectDirectory(folderName: folderName)
+            let allFiles = ProjectFileManager.listAllFiles(in: folderURL)
             let typFiles = ProjectFileManager.listAllTypFiles(in: folderURL)
             let doc = TypistDocument(title: folderName, content: "")
             doc.projectID = folderName
@@ -394,6 +395,12 @@ struct DocumentListView: View {
                 doc.entryFileName = entryFile
             }
             doc.requiresInitialEntrySelection = resolution.requiresInitialSelection
+            doc.importEntryFileOptions = typFiles.sorted()
+            doc.importImageDirectoryOptions = ProjectFileManager.imageDirectoryCandidates(from: allFiles)
+            doc.importFontDirectoryOptions = ProjectFileManager.fontDirectoryCandidates(from: allFiles)
+            doc.requiresImportConfiguration = resolution.requiresInitialSelection
+                || !doc.importImageDirectoryOptions.isEmpty
+                || !doc.importFontDirectoryOptions.isEmpty
             modelContext.insert(doc)
         }
     }
@@ -412,7 +419,7 @@ struct DocumentListView: View {
         let doc = TypistDocument(title: title, content: "")
         doc.projectID = ProjectFileManager.uniqueFolderName(for: title)
         modelContext.insert(doc)
-        ProjectFileManager.ensureProjectStructure(for: doc)
+        ProjectFileManager.ensureProjectRoot(for: doc)
         try? ProjectFileManager.writeTypFile(named: "main.typ", content: "", for: doc)
         selectedDocument = doc
     }
@@ -422,7 +429,7 @@ struct DocumentListView: View {
         let doc = TypistDocument(title: title, content: "")
         doc.projectID = ProjectFileManager.uniqueFolderName(for: title)
         modelContext.insert(doc)
-        ProjectFileManager.ensureProjectStructure(for: doc)
+        ProjectFileManager.ensureProjectRoot(for: doc)
         let destDir = ProjectFileManager.projectDirectory(for: doc)
 
         let accessed = url.startAccessingSecurityScopedResource()
@@ -436,6 +443,12 @@ struct DocumentListView: View {
                 doc.entryFileName = entry
             }
             doc.requiresInitialEntrySelection = resolution.requiresInitialSelection
+            doc.importEntryFileOptions = typFiles.sorted()
+            doc.importImageDirectoryOptions = ProjectFileManager.imageDirectoryCandidates(from: extracted)
+            doc.importFontDirectoryOptions = ProjectFileManager.fontDirectoryCandidates(from: extracted)
+            doc.requiresImportConfiguration = resolution.requiresInitialSelection
+                || !doc.importImageDirectoryOptions.isEmpty
+                || !doc.importFontDirectoryOptions.isEmpty
             selectedDocument = doc
         } catch {
             modelContext.delete(doc)
