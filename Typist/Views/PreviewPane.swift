@@ -51,6 +51,11 @@ private final class PassivePDFView: PDFView {
     override var canBecomeFirstResponder: Bool { false }
 }
 
+private struct PDFPreviewScrollState {
+    let contentOffset: CGPoint
+    let scaleFactor: CGFloat
+}
+
 final class PDFContainerView: UIView {
     fileprivate let pdfView = PassivePDFView()
 
@@ -71,6 +76,101 @@ final class PDFContainerView: UIView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    func reloadDocument(_ document: PDFDocument, focusCoordinator: EditorFocusCoordinator?) {
+        pdfView.backgroundColor = .catppuccinMantle
+
+        guard pdfView.document !== document else {
+            focusCoordinator?.setResignSuppressed(false)
+            return
+        }
+
+        let savedState = captureScrollState()
+
+        // Prevent PDFKit from dismissing the software keyboard while it
+        // tears down / rebuilds page views for the new document.
+        focusCoordinator?.setResignSuppressed(true)
+        pdfView.document = document
+
+        guard let savedState else {
+            // First load: let PDFView pick the initial scale automatically.
+            pdfView.autoScales = true
+            DispatchQueue.main.async { [weak self, weak focusCoordinator] in
+                guard let self, self.pdfView.document === document else { return }
+                focusCoordinator?.setResignSuppressed(false)
+            }
+            return
+        }
+
+        pdfView.autoScales = false
+        pdfView.scaleFactor = savedState.scaleFactor
+
+        DispatchQueue.main.async { [weak self, weak focusCoordinator] in
+            guard let self, self.pdfView.document === document else { return }
+
+            self.layoutIfNeeded()
+            self.pdfView.layoutIfNeeded()
+            self.pdfView.scaleFactor = self.clampedScaleFactor(savedState.scaleFactor)
+
+            if let scrollView = self.findScrollView(in: self.pdfView) {
+                scrollView.layoutIfNeeded()
+                let clampedOffset = self.clampedContentOffset(
+                    savedState.contentOffset,
+                    in: scrollView
+                )
+                if scrollView.contentOffset != clampedOffset {
+                    scrollView.setContentOffset(clampedOffset, animated: false)
+                }
+            }
+
+            focusCoordinator?.setResignSuppressed(false)
+        }
+    }
+
+    private func captureScrollState() -> PDFPreviewScrollState? {
+        guard pdfView.document != nil,
+              let scrollView = findScrollView(in: pdfView) else {
+            return nil
+        }
+
+        return PDFPreviewScrollState(
+            contentOffset: scrollView.contentOffset,
+            scaleFactor: pdfView.scaleFactor
+        )
+    }
+
+    private func findScrollView(in view: UIView) -> UIScrollView? {
+        if let scrollView = view as? UIScrollView {
+            return scrollView
+        }
+
+        for subview in view.subviews {
+            if let scrollView = findScrollView(in: subview) {
+                return scrollView
+            }
+        }
+
+        return nil
+    }
+
+    private func clampedContentOffset(_ contentOffset: CGPoint, in scrollView: UIScrollView) -> CGPoint {
+        let inset = scrollView.adjustedContentInset
+        let minX = -inset.left
+        let minY = -inset.top
+        let maxX = max(minX, scrollView.contentSize.width - scrollView.bounds.width + inset.right)
+        let maxY = max(minY, scrollView.contentSize.height - scrollView.bounds.height + inset.bottom)
+
+        return CGPoint(
+            x: min(max(contentOffset.x, minX), maxX),
+            y: min(max(contentOffset.y, minY), maxY)
+        )
+    }
+
+    private func clampedScaleFactor(_ scaleFactor: CGFloat) -> CGFloat {
+        let minScale = pdfView.minScaleFactor > 0 ? pdfView.minScaleFactor : scaleFactor
+        let maxScale = pdfView.maxScaleFactor > 0 ? pdfView.maxScaleFactor : scaleFactor
+        return min(max(scaleFactor, minScale), maxScale)
+    }
 }
 
 struct PDFKitView: UIViewRepresentable {
@@ -88,50 +188,7 @@ struct PDFKitView: UIViewRepresentable {
     }
 
     func updateUIView(_ container: PDFContainerView, context: Context) {
-        let pdfView = container.pdfView
-        // Save scroll position based on view geometry rather than currentDestination.
-        // currentDestination tracks the last *navigation* target, not the current
-        // scroll offset, so it drifts by one page on every recompile.
-        var savedPageIndex: Int?
-        var savedPageY: CGFloat = .greatestFiniteMagnitude  // PDF y-coord at visible top
-        var savedScale: CGFloat?
-
-        if let oldDoc = pdfView.document,
-           let page = pdfView.currentPage {
-            let box = page.bounds(for: .mediaBox)
-            let pageInView = pdfView.convert(box, from: page)
-            // How much of the page (in view-space) is scrolled above the visible top?
-            if pageInView.height > 0 {
-                let hiddenFraction = max(0, -pageInView.minY) / pageInView.height
-                // Convert back to PDF coordinates (y=0 at bottom, y=height at top).
-                savedPageY = box.maxY - hiddenFraction * box.height
-            }
-            savedPageIndex = oldDoc.index(for: page)
-            savedScale = pdfView.scaleFactor
-        }
-
-        // Prevent PDFKit from dismissing the software keyboard while it
-        // tears down / rebuilds page views for the new document.
-        focusCoordinator?.setResignSuppressed(true)
-        pdfView.document = document
-        pdfView.backgroundColor = .catppuccinMantle
-
-        if let pageIndex = savedPageIndex,
-           let scale = savedScale,
-           let newPage = document.page(at: pageIndex) {
-            pdfView.autoScales = false
-            pdfView.scaleFactor = scale
-            DispatchQueue.main.async {
-                pdfView.go(to: PDFDestination(page: newPage, at: CGPoint(x: 0, y: savedPageY)))
-                focusCoordinator?.setResignSuppressed(false)
-            }
-        } else {
-            // First load: let PDFView pick the initial scale automatically.
-            pdfView.autoScales = true
-            DispatchQueue.main.async {
-                focusCoordinator?.setResignSuppressed(false)
-            }
-        }
+        container.reloadDocument(document, focusCoordinator: focusCoordinator)
     }
 }
 
