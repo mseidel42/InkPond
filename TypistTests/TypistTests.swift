@@ -170,14 +170,38 @@ struct TypistTests {
             "main.typ",
             "assets/cover.png",
             "assets/diagram.svg",
+            "assets/reference.pdf",
             "fonts/Inter-Regular.otf",
+            "illustration.eps",
             "vendor/fonts/Mono.ttf",
             "vendor/fonts/nested/Mono-Bold.ttf",
-            "logo.jpg"
+            "logo.jpg",
+            "scans/scan.tiff",
+            "thumb.bmp"
         ]
 
-        #expect(ProjectFileManager.imageDirectoryCandidates(from: files) == ["", "assets"])
+        #expect(ProjectFileManager.imageDirectoryCandidates(from: files) == ["", "assets", "scans"])
         #expect(ProjectFileManager.fontDirectoryCandidates(from: files) == ["", "fonts", "vendor", "vendor/fonts", "vendor/fonts/nested"])
+    }
+
+    @Test func projectFileManagerTreatsPDFEPSBitmapAndTIFFAsImages() throws {
+        let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
+        ProjectFileManager.ensureProjectStructure(for: doc)
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
+
+        let projectDir = ProjectFileManager.projectDirectory(for: doc)
+        try Data([0x01]).write(to: projectDir.appendingPathComponent("attachment.pdf"))
+        try Data([0x02]).write(to: projectDir.appendingPathComponent("vector.eps"))
+        try Data([0x03]).write(to: projectDir.appendingPathComponent("bitmap.bmp"))
+        try Data([0x04]).write(to: ProjectFileManager.imagesDirectory(for: doc).appendingPathComponent("scan.tiff"))
+
+        let tree = ProjectFileManager.projectTree(for: doc)
+
+        #expect(isImageKind(tree.first(where: { $0.relativePath == "attachment.pdf" })?.kind))
+        #expect(isImageKind(tree.first(where: { $0.relativePath == "vector.eps" })?.kind))
+        #expect(isImageKind(tree.first(where: { $0.relativePath == "bitmap.bmp" })?.kind))
+        let images = try #require(tree.first(where: { $0.relativePath == "images" }))
+        #expect(isImageKind(images.children.first(where: { $0.relativePath == "images/scan.tiff" })?.kind))
     }
 
     @Test func projectFileManagerRecognizesOnlyRealImportChoices() {
@@ -302,6 +326,11 @@ struct TypistTests {
         #expect(manager.mode == "sepia")
         #expect(manager.currentMode == .system)
         #expect(manager.colorScheme == nil)
+    }
+
+    @Test func typstCompilerUsesLowerQoSForPreviewThanExplicitCompile() {
+        #expect(TypstCompiler.taskPriority(for: .debounced) == .utility)
+        #expect(TypstCompiler.taskPriority(for: .immediate) == .default)
     }
 
     @MainActor
@@ -657,6 +686,13 @@ struct TypistTests {
         }
     }
 
+}
+
+private func isImageKind(_ kind: ProjectTreeNode.Kind?) -> Bool {
+    if case .image? = kind {
+        return true
+    }
+    return false
 }
 
 private final class LockedCounter: @unchecked Sendable {

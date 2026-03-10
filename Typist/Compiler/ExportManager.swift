@@ -15,7 +15,7 @@ enum ExportManager {
         let fontPaths = FontManager.allFontPaths(for: document)
         let rootDir = ProjectFileManager.projectDirectory(for: document).path
 
-        return await Task.detached {
+        return await Task.detached(priority: TypstCompiler.taskPriority(for: .immediate)) {
             TypstBridge.compile(source: source, fontPaths: fontPaths, rootDir: rootDir)
         }.value
     }

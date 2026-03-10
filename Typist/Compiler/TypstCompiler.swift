@@ -26,6 +26,7 @@ final class TypstCompiler {
         let source: String
         let fontPaths: [String]
         let rootDir: String?
+        let mode: CompileMode
         let generation: UInt64
     }
 
@@ -71,12 +72,24 @@ final class TypstCompiler {
         self.sleep = sleep
     }
 
+    nonisolated static func taskPriority(for mode: CompileMode) -> TaskPriority {
+        switch mode {
+        case .debounced:
+            // Preview refreshes should yield to direct user actions.
+            return .utility
+        case .immediate:
+            // Match the typical QoS of Rust's worker pool to avoid inversion warnings.
+            return .medium
+        }
+    }
+
     func compile(source: String, fontPaths: [String], rootDir: String? = nil, mode: CompileMode = .debounced) {
         compileGeneration &+= 1
         let request = CompileRequest(
             source: source,
             fontPaths: fontPaths,
             rootDir: rootDir,
+            mode: mode,
             generation: compileGeneration
         )
         enqueue(request, mode: mode)
@@ -150,8 +163,9 @@ final class TypstCompiler {
 
         let compileWorker = self.compileWorker
         let documentBuilder = self.documentBuilder
+        let priority = Self.taskPriority(for: request.mode)
         activeTask = Task { [weak self] in
-            let workerResult = await Task.detached(priority: .userInitiated) {
+            let workerResult = await Task.detached(priority: priority) {
                 Self.runCompilation(
                     request: request,
                     compileWorker: compileWorker,

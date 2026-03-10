@@ -4,6 +4,9 @@
 //
 
 import SwiftUI
+import ImageIO
+import PDFKit
+import QuickLook
 import UniformTypeIdentifiers
 
 struct ProjectFileBrowserSheet: View {
@@ -20,9 +23,17 @@ struct ProjectFileBrowserSheet: View {
     @State private var showingImporter = false
     @State private var actionError: String?
     @State private var showingActionError = false
+    @State private var previewItem: PreviewItem?
+    @State private var cachedPreviewAspectRatios: [String: CGFloat] = [:]
 
-    private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "svg", "webp"]
+    private static let imageExtensions = ProjectFileManager.supportedImageFileExtensions
     private static let fontExtensions: Set<String> = ["otf", "ttf", "woff", "woff2"]
+    
+    private var visibleRows: [VisibleProjectRow] {
+        var rows: [VisibleProjectRow] = []
+        appendVisibleRows(from: projectTree, depth: 0, into: &rows)
+        return rows
+    }
 
     var body: some View {
         NavigationStack {
@@ -31,8 +42,8 @@ struct ProjectFileBrowserSheet: View {
                     Text("No files")
                         .foregroundStyle(.tertiary)
                 } else {
-                    ForEach(projectTree) { node in
-                        treeRow(for: node)
+                    ForEach(visibleRows) { row in
+                        rowView(for: row)
                     }
                 }
             }
@@ -88,6 +99,15 @@ struct ProjectFileBrowserSheet: View {
                 handleImport(result)
             }
         }
+        .overlay {
+            if let previewItem {
+                ProjectFileCenteredPreviewOverlay(item: previewItem) {
+                    closePreview()
+                }
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
         .presentationDetents([.medium, .large])
         .onAppear { refreshProjectState() }
         .onChange(of: document.imageDirectoryName) { _, _ in
@@ -98,23 +118,25 @@ struct ProjectFileBrowserSheet: View {
         }
     }
 
-    private func treeRow(for node: ProjectTreeNode) -> AnyView {
+    private func rowView(for row: VisibleProjectRow) -> AnyView {
+        let node = row.node
         if node.isDirectory {
-            return AnyView(DisclosureGroup(isExpanded: expansionBinding(for: node.relativePath)) {
-                ForEach(node.children) { child in
-                    treeRow(for: child)
-                }
+            return AnyView(Button {
+                toggleExpansion(for: node.relativePath)
             } label: {
-                rowLabel(for: node)
-            })
+                rowLabel(for: row)
+            }
+            .buttonStyle(ProjectFileRowButtonStyle())
+            .contentShape(Rectangle()))
         } else if node.kind == .typ {
             return AnyView(Button {
                 openFile(node.relativePath)
                 dismiss()
             } label: {
-                rowLabel(for: node)
+                rowLabel(for: row)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProjectFileRowButtonStyle())
+            .contentShape(Rectangle())
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button(role: .destructive) {
                     deleteTypFile(node.relativePath)
@@ -123,8 +145,23 @@ struct ProjectFileBrowserSheet: View {
                 }
                 .disabled(node.relativePath == document.entryFileName)
             })
+        } else if node.kind == .image {
+            return AnyView(Button {
+                previewFile(node.relativePath)
+            } label: {
+                rowLabel(for: row)
+            }
+            .buttonStyle(ProjectFileRowButtonStyle())
+            .contentShape(Rectangle())
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                    deleteFile(at: node.relativePath, kind: node.kind)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            })
         } else {
-            return AnyView(rowLabel(for: node)
+            return AnyView(rowLabel(for: row)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         deleteFile(at: node.relativePath, kind: node.kind)
@@ -135,10 +172,21 @@ struct ProjectFileBrowserSheet: View {
         }
     }
 
-    private func rowLabel(for node: ProjectTreeNode) -> some View {
-        HStack {
+    private func rowLabel(for row: VisibleProjectRow) -> some View {
+        let node = row.node
+        return HStack(spacing: 10) {
+            if node.isDirectory {
+                Image(systemName: row.isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 12, alignment: .center)
+            } else {
+                Color.clear
+                    .frame(width: 12, height: 1)
+            }
             Image(systemName: iconName(for: node))
                 .foregroundStyle(.secondary)
+                .frame(width: 22, alignment: .center)
             Text(node.displayName)
                 .foregroundStyle(.primary)
             Spacer()
@@ -146,6 +194,9 @@ struct ProjectFileBrowserSheet: View {
                 badges(for: node.relativePath)
             }
         }
+        .padding(.leading, CGFloat(row.depth) * 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -185,17 +236,24 @@ struct ProjectFileBrowserSheet: View {
         }
     }
 
-    private func expansionBinding(for path: String) -> Binding<Bool> {
-        Binding(
-            get: { expandedNodes.contains(path) },
-            set: { isExpanded in
-                if isExpanded {
-                    expandedNodes.insert(path)
-                } else {
-                    expandedNodes.remove(path)
-                }
+    private func appendVisibleRows(from nodes: [ProjectTreeNode], depth: Int, into rows: inout [VisibleProjectRow]) {
+        for node in nodes {
+            let isExpanded = expandedNodes.contains(node.relativePath)
+            rows.append(VisibleProjectRow(node: node, depth: depth, isExpanded: isExpanded))
+            if node.isDirectory, isExpanded {
+                appendVisibleRows(from: node.children, depth: depth + 1, into: &rows)
             }
-        )
+        }
+    }
+
+    private func toggleExpansion(for path: String) {
+        withAnimation(.snappy(duration: 0.22, extraBounce: 0.03)) {
+            if expandedNodes.contains(path) {
+                expandedNodes.remove(path)
+            } else {
+                expandedNodes.insert(path)
+            }
+        }
     }
 
     private func refreshProjectState() {
@@ -239,6 +297,43 @@ struct ProjectFileBrowserSheet: View {
         }
     }
 
+    private func previewFile(_ relativePath: String) {
+        do {
+            let url = try ProjectFileManager.projectFileURL(relativePath: relativePath, for: document)
+            let item = PreviewItem(
+                id: relativePath,
+                displayName: (relativePath as NSString).lastPathComponent,
+                url: url,
+                preferredAspectRatio: cachedPreviewAspectRatios[relativePath]
+            )
+            withAnimation(.snappy(duration: 0.32, extraBounce: 0.04)) {
+                previewItem = item
+            }
+            resolvePreviewAspectRatioIfNeeded(for: relativePath, url: url)
+        } catch {
+            present(error)
+        }
+    }
+
+    private func closePreview() {
+        withAnimation(.snappy(duration: 0.28, extraBounce: 0)) {
+            previewItem = nil
+        }
+    }
+
+    private func resolvePreviewAspectRatioIfNeeded(for relativePath: String, url: URL) {
+        guard cachedPreviewAspectRatios[relativePath] == nil else { return }
+
+        Task.detached(priority: .userInitiated) {
+            let ratio = PreviewItem.preferredAspectRatio(for: url)
+            guard let ratio else { return }
+
+            await MainActor.run {
+                cachedPreviewAspectRatios[relativePath] = ratio
+            }
+        }
+    }
+
     private func handleImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result else {
             if case .failure(let error) = result {
@@ -279,5 +374,214 @@ struct ProjectFileBrowserSheet: View {
     private func present(_ error: Error) {
         actionError = error.localizedDescription
         showingActionError = true
+    }
+
+    fileprivate struct PreviewItem: Identifiable, Equatable {
+        let id: String
+        let displayName: String
+        let url: URL
+        var preferredAspectRatio: CGFloat?
+
+        nonisolated static func preferredAspectRatio(for url: URL) -> CGFloat? {
+            if let imageRatio = imageAspectRatio(for: url) {
+                return imageRatio
+            }
+            if let pdfRatio = pdfAspectRatio(for: url) {
+                return pdfRatio
+            }
+            return nil
+        }
+
+        private nonisolated static func imageAspectRatio(for url: URL) -> CGFloat? {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+                  let height = properties[kCGImagePropertyPixelHeight] as? CGFloat,
+                  width > 0,
+                  height > 0 else {
+                return nil
+            }
+            return width / height
+        }
+
+        private nonisolated static func pdfAspectRatio(for url: URL) -> CGFloat? {
+            guard url.pathExtension.lowercased() == "pdf",
+                  let document = PDFDocument(url: url),
+                  let page = document.page(at: 0) else {
+                return nil
+            }
+            let bounds = page.bounds(for: .mediaBox)
+            guard bounds.width > 0, bounds.height > 0 else { return nil }
+            return bounds.width / bounds.height
+        }
+    }
+}
+
+private struct VisibleProjectRow: Identifiable, Hashable {
+    let node: ProjectTreeNode
+    let depth: Int
+    let isExpanded: Bool
+
+    var id: String { node.id }
+}
+
+private struct ProjectFileRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0))
+            )
+            .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+            .listRowBackground(Color.clear)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+private struct ProjectFileCenteredPreviewOverlay: View {
+    let item: ProjectFileBrowserSheet.PreviewItem
+    let close: () -> Void
+
+    private let cornerRadius: CGFloat = 28
+    private let chromeHeight: CGFloat = 52
+
+    var body: some View {
+        GeometryReader { proxy in
+            let panelWidth = min(max(proxy.size.width * 0.84, 360), 920)
+            let contentAspectRatio = item.preferredAspectRatio ?? 1.18
+            let maxHeight = min(proxy.size.height * 0.9, 860)
+            let minHeight = min(max(proxy.size.height * 0.42, 300), maxHeight)
+            let idealHeight = panelWidth / max(contentAspectRatio, 0.33) + chromeHeight
+            let panelHeight = min(max(idealHeight, minHeight), maxHeight)
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+            ZStack {
+                Rectangle()
+                    .fill(.black.opacity(0.12))
+                    .ignoresSafeArea()
+                    .onTapGesture(perform: close)
+
+                VStack(spacing: 18) {
+                    VStack(spacing: 0) {
+                        HStack(spacing: 12) {
+                            Text(item.displayName)
+                                .font(.headline.weight(.semibold))
+                                .lineLimit(1)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(.clear)
+
+                        Divider()
+
+                        ProjectFileQuickLookPreview(url: item.url)
+                    }
+                    .frame(
+                        width: panelWidth,
+                        height: panelHeight
+                    )
+                    .projectPreviewGlassCard(cornerRadius: cornerRadius)
+                    .clipShape(shape)
+                    .overlay(
+                        shape
+                            .strokeBorder(.quaternary, lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.14), radius: 30, y: 18)
+
+                    PreviewCloseButton(action: close)
+                }
+                .padding(20)
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func projectPreviewGlassCard(cornerRadius: CGFloat) -> some View {
+        if #available(iOS 26.0, *) {
+            self
+                .background(.clear, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self.background(.thinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+    }
+}
+
+private struct PreviewCloseButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer {
+                Button(action: action) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .clipShape(Circle())
+            }
+            .accessibilityLabel("Close Preview")
+        } else {
+            Button(action: action) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close Preview")
+        }
+    }
+}
+
+private struct ProjectFileQuickLookPreview: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(url: url)
+    }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        controller.view.backgroundColor = .clear
+        controller.view.isOpaque = false
+        return controller
+    }
+
+    func updateUIViewController(_ controller: QLPreviewController, context: Context) {
+        guard context.coordinator.url != url else { return }
+        context.coordinator.url = url
+        controller.reloadData()
+    }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        var url: URL
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+            1
+        }
+
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
+        }
     }
 }

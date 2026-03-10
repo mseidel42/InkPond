@@ -286,15 +286,19 @@ struct DocumentListView: View {
         ToolbarItem(placement: .bottomBar) {
             sortMenu
         }
-        ToolbarSpacer(.flexible, placement: .bottomBar)
-        DefaultToolbarItem(kind: .search, placement: .bottomBar)
-        ToolbarSpacer(.flexible, placement: .bottomBar)
+        if #available(iOS 26, *) {
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+        }
         ToolbarItem(placement: .bottomBar) {
             Button { showingSettings = true } label: {
                 Image(systemName: "gearshape")
             }
         }
-        ToolbarSpacer(.flexible, placement: .bottomBar)
+        if #available(iOS 26, *) {
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+        }
         ToolbarItem(placement: .bottomBar) {
             Button(action: addDocument) { Image(systemName: "folder.badge.plus") }
         }

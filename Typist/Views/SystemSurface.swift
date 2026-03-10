@@ -23,4 +23,13 @@ extension View {
                 }
         }
     }
+
+    @ViewBuilder
+    func glassButtonStyleIfAvailable() -> some View {
+        if #available(iOS 26, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.bordered)
+        }
+    }
 }

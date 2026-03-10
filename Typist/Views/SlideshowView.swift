@@ -150,7 +150,7 @@ struct SlideshowView: View {
                     Image(systemName: "xmark")
                         .font(.title2.weight(.semibold))
                 }
-                .buttonStyle(.glass)
+                .glassButtonStyleIfAvailable()
 
                 Spacer()
 
@@ -208,7 +208,7 @@ struct SlideshowView: View {
             Image(systemName: systemImage)
                 .font(.title2.weight(.semibold))
         }
-        .buttonStyle(.glass)
+        .glassButtonStyleIfAvailable()
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.3)
     }

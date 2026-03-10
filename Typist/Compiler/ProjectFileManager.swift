@@ -65,7 +65,10 @@ struct EntryFileResolution {
 // MARK: - ProjectFileManager
 
 enum ProjectFileManager {
-    private static let imageFileExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "svg", "webp"]
+    static let supportedImageFileExtensions: Set<String> = [
+        "bmp", "eps", "gif", "heic", "heif", "jpg", "jpeg",
+        "pdf", "png", "svg", "tif", "tiff", "webp"
+    ]
     private static let fontFileExtensions: Set<String> = ["otf", "ttf", "woff", "woff2"]
 
     // MARK: - Directory layout
@@ -268,6 +271,10 @@ enum ProjectFileManager {
         projectDirectory(for: document).appendingPathComponent(name)
     }
 
+    static func projectFileURL(relativePath: String, for document: TypistDocument) throws -> URL {
+        try validatedProjectPath(relativePath: relativePath, for: document)
+    }
+
     // MARK: - Path validation
 
     /// Reject names that contain path separators or parent-directory components.
@@ -424,7 +431,7 @@ enum ProjectFileManager {
     }
 
     static func imageDirectoryCandidates(from relativePaths: [String]) -> [String] {
-        relevantDirectoryCandidates(from: relativePaths, matching: imageFileExtensions)
+        relevantDirectoryCandidates(from: relativePaths, matching: supportedImageFileExtensions)
     }
 
     static func fontDirectoryCandidates(from relativePaths: [String]) -> [String] {
@@ -534,9 +541,10 @@ enum ProjectFileManager {
         if ext == "typ" { return .typ }
         if relativePath.hasPrefix("fonts/") { return .font }
         if !imageDirectoryName.isEmpty, relativePath.hasPrefix(imageDirectoryName + "/") { return .image }
-        switch ext {
-        case "jpg", "jpeg", "png", "gif", "svg", "webp":
+        if supportedImageFileExtensions.contains(ext) {
             return .image
+        }
+        switch ext {
         case "otf", "ttf", "woff", "woff2":
             return .font
         default:
