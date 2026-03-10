@@ -9,6 +9,14 @@
 "sort.title_za" = "Title (Z-A)";
 "sort.created_newest" = "Recently Created";
 "sort.created_oldest" = "Oldest Created";
+"sort.field.title" = "Name";
+"sort.field.modified" = "Date Modified";
+"sort.field.created" = "Date Created";
+"sort.direction.ascending" = "Ascending";
+"sort.direction.descending" = "Descending";
+"sort.menu.sort_by" = "Sort By";
+"sort.menu.order" = "Order";
+"sort.menu.button" = "Sort";
 "doc.time.created" = "Create";
 "doc.time.modified" = "Modify";
 "doc.list.empty.title" = "No Documents Yet";
@@ -19,6 +27,20 @@
 "action.insert_image" = "Insert Image";
 "action.typing" = "Typing";
 "action.delete" = "Delete";
+"app_fonts.title" = "App Fonts";
+"project_fonts.title" = "Project Fonts";
+"app_fonts.summary.built_in_only" = "Built-in only";
+"app_fonts.summary.imported" = "%d imported";
+"app_fonts.alert.error" = "Font Error";
+"app_fonts.overview.title" = "App fonts are available to every project.";
+"app_fonts.overview.detail" = "Bundled Source Han CJK fonts are built in and read-only. Imported App fonts are not included when you export a project ZIP.";
+"project_fonts.footer" = "App fonts are available to every project. Built-in App fonts are read-only; Add Font imports project-only fonts.";
+"project_fonts.empty" = "No project fonts";
+"font.scope.built_in" = "built-in";
+"font.scope.app" = "app";
+"font.scope.project" = "project";
+"app_fonts.export_warning.title" = "App Fonts Not Included";
+"app_fonts.export_warning.message" = "Project ZIP exports only the project directory. Imported App fonts are not bundled and must exist separately on the destination device.";
 "settings.version_format" = "Version %@ (%@)";
 "settings.typst_version_format" = "Typst-ios %@";
 

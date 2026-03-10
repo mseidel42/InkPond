@@ -64,6 +64,7 @@ struct DocumentEditorView: View {
     @State private var editorFraction: CGFloat = 0.5
     @State private var showingPhotoPicker = false
     @State private var showingFileBrowser = false
+    @State private var showingProjectSettings = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var insertionRequest: String?
     @State private var findRequested = false
@@ -209,36 +210,48 @@ struct DocumentEditorView: View {
 
     private var toolbarMenu: some View {
         Menu {
-            Button { showingFileBrowser = true } label: { Label("Project Files", systemImage: "folder") }
-            Divider()
-            Button {
-                compilePreviewNow()
-            } label: {
-                Label("Compile Now", systemImage: "play.circle")
+            Section {
+                Button { showingFileBrowser = true } label: {
+                    Label("Project Files", systemImage: "folder")
+                }
+                Button { showingProjectSettings = true } label: {
+                    Label("Project Settings", systemImage: "gearshape")
+                }
+                Button {
+                    triggerZipExport()
+                } label: {
+                    Label("Export Project as Zip", systemImage: "archivebox")
+                }
             }
-            .disabled(!canTriggerPreviewActions)
 
-            Button {
-                clearCachesAndRecompile()
-            } label: {
-                Label("Recompile", systemImage: "arrow.clockwise.circle")
+            Section {
+                Button { findRequested = true } label: {
+                    Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass")
+                }
             }
-            .disabled(!canTriggerPreviewActions)
-            Divider()
-            Button { findRequested = true } label: { Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass") }
-            Divider()
-            Button {
-                triggerZipExport()
-            } label: {
-                Label("Export Project as Zip", systemImage: "archivebox")
+
+            Section {
+                Button {
+                    compilePreviewNow()
+                } label: {
+                    Label("Compile Now", systemImage: "play.circle")
+                }
+                .disabled(!canTriggerPreviewActions)
+
+                Button {
+                    clearCachesAndRecompile()
+                } label: {
+                    Label("Recompile", systemImage: "arrow.clockwise.circle")
+                }
+                .disabled(!canTriggerPreviewActions)
+
+                Button {
+                    showingSlideshow = true
+                } label: {
+                    Label("Slideshow", systemImage: "play.rectangle")
+                }
+                .disabled(!compiler.compiledOnce)
             }
-            Divider()
-            Button {
-                showingSlideshow = true
-            } label: {
-                Label("Slideshow", systemImage: "play.rectangle")
-            }
-            .disabled(!compiler.compiledOnce)
         } label: {
             Image(systemName: "ellipsis.circle")
         }
@@ -275,6 +288,9 @@ struct DocumentEditorView: View {
             .onChange(of: selectedPhotoItems) { _, items in handleImageSelection(items) }
             .sheet(isPresented: $showingFileBrowser) {
                 ProjectFileBrowserSheet(document: document, currentFileName: currentFileName, openFile: openFile)
+            }
+            .sheet(isPresented: $showingProjectSettings) {
+                ProjectSettingsSheet(document: document, openFile: openFile)
             }
             .sheet(isPresented: $showingImportConfiguration) {
                 InitialEntryFilePickerSheet(document: document) { selectedEntry, selectedImageDirectory, selectedFontDirectory in
@@ -358,14 +374,14 @@ struct DocumentEditorView: View {
             } message: {
                 Text(exporter.exportError ?? "")
             }
-            .alert("App Fonts Not Included", isPresented: $showingZipExportWarning) {
+            .alert(L10n.appFontsExportWarningTitle, isPresented: $showingZipExportWarning) {
                 Button("Cancel", role: .cancel) {}
                 Button("Continue") {
                     flushPendingSave()
                     exporter.exportZip(for: document)
                 }
             } message: {
-                Text("Project ZIP exports only the project directory. Imported App fonts are not bundled and must exist separately on the destination device.")
+                Text(L10n.appFontsExportWarningMessage)
             }
             .alert("Image Import Error", isPresented: Binding(
                 get: { imageImportError != nil },

@@ -9,6 +9,14 @@
 "sort.title_za" = "標題（Z-A）";
 "sort.created_newest" = "最近建立";
 "sort.created_oldest" = "最早建立";
+"sort.field.title" = "名稱";
+"sort.field.modified" = "修改日期";
+"sort.field.created" = "建立日期";
+"sort.direction.ascending" = "遞增";
+"sort.direction.descending" = "遞減";
+"sort.menu.sort_by" = "排序方式";
+"sort.menu.order" = "排序順序";
+"sort.menu.button" = "排序";
 "doc.time.created" = "建立";
 "doc.time.modified" = "修改";
 "doc.list.empty.title" = "尚無文件";
@@ -19,6 +27,20 @@
 "action.insert_image" = "插入圖片";
 "action.typing" = "輸入";
 "action.delete" = "刪除";
+"app_fonts.title" = "App 字型";
+"project_fonts.title" = "專案字型";
+"app_fonts.summary.built_in_only" = "僅內建";
+"app_fonts.summary.imported" = "已匯入 %d 個";
+"app_fonts.alert.error" = "字型錯誤";
+"app_fonts.overview.title" = "App 字型可供所有專案使用。";
+"app_fonts.overview.detail" = "內建的思源 CJK 字型為唯讀。匯出專案 ZIP 時不會包含已匯入的 App 字型。";
+"project_fonts.footer" = "App 字型可供所有專案使用。內建 App 字型為唯讀；「新增字型」會匯入僅目前專案可用的字型。";
+"project_fonts.empty" = "沒有專案字型";
+"font.scope.built_in" = "內建";
+"font.scope.app" = "App";
+"font.scope.project" = "專案";
+"app_fonts.export_warning.title" = "不包含 App 字型";
+"app_fonts.export_warning.message" = "專案 ZIP 只會匯出專案目錄。已匯入的 App 字型不會被打包，目標裝置需另行提供這些字型。";
 "settings.version_format" = "版本 %@（%@）";
 "settings.typst_version_format" = "Typst-ios %@";
 

@@ -9,6 +9,14 @@
 "sort.title_za" = "标题（Z-A）";
 "sort.created_newest" = "最近创建";
 "sort.created_oldest" = "最早创建";
+"sort.field.title" = "名称";
+"sort.field.modified" = "修改日期";
+"sort.field.created" = "创建日期";
+"sort.direction.ascending" = "升序";
+"sort.direction.descending" = "降序";
+"sort.menu.sort_by" = "排序方式";
+"sort.menu.order" = "排序顺序";
+"sort.menu.button" = "排序";
 "doc.time.created" = "创建";
 "doc.time.modified" = "修改";
 "doc.list.empty.title" = "还没有文档";
@@ -19,6 +27,20 @@
 "action.insert_image" = "插入图片";
 "action.typing" = "输入";
 "action.delete" = "删除";
+"app_fonts.title" = "App 字体";
+"project_fonts.title" = "项目字体";
+"app_fonts.summary.built_in_only" = "仅内置";
+"app_fonts.summary.imported" = "已导入 %d 个";
+"app_fonts.alert.error" = "字体错误";
+"app_fonts.overview.title" = "App 字体对所有项目可用。";
+"app_fonts.overview.detail" = "内置的思源 CJK 字体为只读。导出的项目 ZIP 不会包含导入的 App 字体。";
+"project_fonts.footer" = "App 字体对所有项目可用。内置 App 字体为只读；“添加字体”会导入仅当前项目可用的字体。";
+"project_fonts.empty" = "没有项目字体";
+"font.scope.built_in" = "内置";
+"font.scope.app" = "App";
+"font.scope.project" = "项目";
+"app_fonts.export_warning.title" = "不包含 App 字体";
+"app_fonts.export_warning.message" = "项目 ZIP 只会导出项目目录。导入的 App 字体不会被打包，目标设备需单独提供这些字体。";
 "settings.version_format" = "版本 %@（%@）";
 "settings.typst_version_format" = "Typst-ios %@";
 

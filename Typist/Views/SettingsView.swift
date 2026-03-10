@@ -40,7 +40,7 @@ struct SettingsView: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(Color.catppuccinBase)
+            .background(Color.catppuccinBase.ignoresSafeArea())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -66,6 +66,8 @@ struct SettingsView: View {
                 Text(zipImportError ?? "")
             }
         }
+        .background(Color.catppuccinBase.ignoresSafeArea())
+        .presentationBackground(Color.catppuccinBase)
         .id(themeManager.themeID)
         .preferredColorScheme(themeManager.colorScheme)
     }
@@ -149,10 +151,14 @@ struct SettingsView: View {
                 AppFontManagementView()
             } label: {
                 HStack {
-                    Label("App Fonts", systemImage: "textformat")
+                    Label(L10n.appFontsTitle, systemImage: "character.textbox")
                         .foregroundStyle(.primary)
                     Spacer()
-                    Text(appFontLibrary.isEmpty ? "Built-in only" : "\(appFontLibrary.fileNames.count) imported")
+                    Text(
+                        appFontLibrary.isEmpty
+                            ? L10n.appFontsBuiltInOnlySummary
+                            : L10n.appFontsImportedSummary(count: appFontLibrary.fileNames.count)
+                    )
                         .foregroundStyle(.secondary)
                 }
             }
@@ -197,8 +203,8 @@ private struct AppFontManagementView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.catppuccinBase)
-        .navigationTitle("App Fonts")
+        .background(Color.catppuccinBase.ignoresSafeArea())
+        .navigationTitle(L10n.appFontsTitle)
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
             isPresented: $showingFontPicker,
@@ -218,7 +224,7 @@ private struct AppFontManagementView: View {
                 actionError = error.localizedDescription
             }
         }
-        .alert("Font Error", isPresented: Binding(
+        .alert(L10n.appFontsErrorTitle, isPresented: Binding(
             get: { actionError != nil },
             set: { if !$0 { actionError = nil } }
         )) {
@@ -231,9 +237,9 @@ private struct AppFontManagementView: View {
     private var overviewSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text("App fonts are available to every project.")
+                Text(L10n.appFontsOverviewTitle)
                     .font(.body.weight(.medium))
-                Text("Bundled Source Han CJK fonts are built in and read-only. Imported App fonts are not included when you export a project ZIP.")
+                Text(L10n.appFontsOverviewDetail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -243,7 +249,7 @@ private struct AppFontManagementView: View {
     }
 
     private var fontsSection: some View {
-        Section("App Fonts") {
+        Section(L10n.appFontsTitle) {
             ForEach(appFontLibrary.items) { item in
                 appFontRow(item)
                     .listRowBackground(Color.catppuccinElevated)
@@ -259,7 +265,7 @@ private struct AppFontManagementView: View {
             Button {
                 showingFontPicker = true
             } label: {
-                Label("Add Font…", systemImage: "plus")
+                Label("Add Font…", systemImage: "plus.circle")
                     .foregroundStyle(.primary)
             }
             .listRowBackground(Color.catppuccinElevated)
@@ -268,10 +274,10 @@ private struct AppFontManagementView: View {
 
     private func appFontRow(_ item: AppFontItem) -> some View {
         HStack {
-            Label(item.displayName, systemImage: "textformat")
+            Label(item.displayName, systemImage: "character.textbox")
                 .foregroundStyle(item.isBuiltIn ? .secondary : .primary)
             Spacer()
-            Text(item.isBuiltIn ? "built-in" : "app")
+            Text(item.isBuiltIn ? L10n.fontScopeBuiltIn : L10n.fontScopeApp)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -294,7 +300,7 @@ private struct PreviewPackageCacheManagementView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.catppuccinBase)
+        .background(Color.catppuccinBase.ignoresSafeArea())
         .navigationTitle("Package Cache")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
@@ -483,7 +489,7 @@ private struct AcknowledgementsView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.catppuccinBase)
+        .background(Color.catppuccinBase.ignoresSafeArea())
         .navigationTitle("Acknowledgements")
         .navigationBarTitleDisplayMode(.inline)
     }

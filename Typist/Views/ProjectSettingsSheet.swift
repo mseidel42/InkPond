@@ -47,37 +47,37 @@ struct ProjectSettingsSheet: View {
                 // MARK: Fonts
                 Section(
                     header: Text("Fonts"),
-                    footer: Text("App fonts are available to every project. Built-in App fonts are read-only; Add Font imports project-only fonts.")
+                    footer: Text(L10n.projectFontsFooter)
                 ) {
-                    Text("App Fonts")
+                    Text(L10n.appFontsTitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
                     ForEach(appFontLibrary.items) { item in
                         HStack {
-                            Label(item.displayName, systemImage: "textformat")
+                            Label(item.displayName, systemImage: "character.textbox")
                                 .foregroundStyle(item.isBuiltIn ? .secondary : .primary)
                             Spacer()
-                            Text(item.isBuiltIn ? "built-in" : "app")
+                            Text(item.isBuiltIn ? L10n.fontScopeBuiltIn : L10n.fontScopeApp)
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
                     }
 
-                    Text("Project Fonts")
+                    Text(L10n.projectFontsTitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
                     if document.fontFileNames.isEmpty {
-                        Text("No project fonts")
+                        Text(L10n.noProjectFonts)
                             .foregroundStyle(.tertiary)
                     }
 
                     ForEach(document.fontFileNames, id: \.self) { name in
                         HStack {
-                            Label(name, systemImage: "doc.text")
+                            Label(name, systemImage: "character.textbox")
                             Spacer()
-                            Text("project")
+                            Text(L10n.fontScopeProject)
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
@@ -91,12 +91,12 @@ struct ProjectSettingsSheet: View {
                     }
 
                     Button { showingFontPicker = true } label: {
-                        Label("Add Font…", systemImage: "plus")
+                        Label("Add Font…", systemImage: "plus.circle")
                     }
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.catppuccinBase)
+            .background(Color.catppuccinBase.ignoresSafeArea())
             .navigationTitle("Project Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -113,6 +113,8 @@ struct ProjectSettingsSheet: View {
                 Text(actionError ?? "")
             }
         }
+        .background(Color.catppuccinBase.ignoresSafeArea())
+        .presentationBackground(Color.catppuccinBase)
         .presentationDetents([.medium, .large])
         .fileImporter(
             isPresented: $showingFontPicker,

@@ -11,16 +11,13 @@ struct ProjectFileBrowserSheet: View {
     var currentFileName: String
     var openFile: (String) -> Void
 
-    @Environment(AppFontLibrary.self) private var appFontLibrary
     @Environment(\.dismiss) private var dismiss
     @State private var projectTree: [ProjectTreeNode] = []
-    @State private var entryFiles: [String] = []
     @State private var expandedNodes: Set<String> = []
-    @State private var isSettingsExpanded = false
+    @State private var showingProjectSettings = false
     @State private var showingNewFileAlert = false
     @State private var newFileName = ""
     @State private var showingImporter = false
-    @State private var showingFontPicker = false
     @State private var actionError: String?
     @State private var showingActionError = false
 
@@ -30,12 +27,6 @@ struct ProjectFileBrowserSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                DisclosureGroup(isExpanded: $isSettingsExpanded) {
-                    projectSettings
-                } label: {
-                    Label("Project Settings", systemImage: "gearshape")
-                }
-
                 if projectTree.isEmpty {
                     Text("No files")
                         .foregroundStyle(.tertiary)
@@ -46,14 +37,20 @@ struct ProjectFileBrowserSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.catppuccinBase)
+            .background(Color.catppuccinBase.ignoresSafeArea())
             .navigationTitle("Project Files")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        showingProjectSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+
                     Menu {
                         Button {
                             newFileName = ""
@@ -92,115 +89,17 @@ struct ProjectFileBrowserSheet: View {
             ) { result in
                 handleImport(result)
             }
-            .fileImporter(
-                isPresented: $showingFontPicker,
-                allowedContentTypes: [.font],
-                allowsMultipleSelection: true
-            ) { result in
-                handleFontImport(result)
-            }
         }
+        .background(Color.catppuccinBase.ignoresSafeArea())
+        .presentationBackground(Color.catppuccinBase)
         .presentationDetents([.medium, .large])
         .onAppear { refreshProjectState() }
         .onChange(of: document.imageDirectoryName) { _, _ in
             refreshProjectState()
         }
-    }
-
-    private var projectSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Entry File")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Picker("Entry File", selection: $document.entryFileName) {
-                    ForEach(entryFiles, id: \.self) { name in
-                        Text(name).tag(name)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .onChange(of: document.entryFileName) { _, newName in
-                    openFile(newName)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Image Insertion")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Picker("Format", selection: $document.imageInsertMode) {
-                    Text("#image(\"path\")").tag("image")
-                    Text("#figure(image(\"path\"), caption: [...])").tag("figure")
-                }
-                .pickerStyle(.segmented)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Image Directory")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                TextField("Subdirectory name", text: $document.imageDirectoryName)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Fonts")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        showingFontPicker = true
-                    } label: {
-                        Label("Add Font…", systemImage: "plus")
-                    }
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption)
-                }
-
-                Text("App Fonts")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                ForEach(appFontLibrary.items) { item in
-                    HStack {
-                        Label(item.displayName, systemImage: "textformat")
-                            .font(.subheadline)
-                            .foregroundStyle(item.isBuiltIn ? .secondary : .primary)
-                        Spacer()
-                        Text(item.isBuiltIn ? "built-in" : "app")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
-                Text("Project Fonts")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if document.fontFileNames.isEmpty {
-                    Text("No project fonts")
-                        .foregroundStyle(.tertiary)
-                } else {
-                    ForEach(document.fontFileNames.sorted(), id: \.self) { name in
-                        HStack {
-                            Label(name, systemImage: "textformat")
-                                .font(.subheadline)
-                            Spacer()
-                            Text("project")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-            }
+        .sheet(isPresented: $showingProjectSettings, onDismiss: refreshProjectState) {
+            ProjectSettingsSheet(document: document, openFile: openFile)
         }
-        .padding(.vertical, 8)
     }
 
     private func treeRow(for node: ProjectTreeNode) -> AnyView {
@@ -284,7 +183,7 @@ struct ProjectFileBrowserSheet: View {
         case .image:
             return "photo"
         case .font:
-            return "textformat"
+            return "character.textbox"
         case .other:
             return "doc"
         }
@@ -305,8 +204,6 @@ struct ProjectFileBrowserSheet: View {
 
     private func refreshProjectState() {
         projectTree = ProjectFileManager.projectTree(for: document)
-        let allTypFiles = ProjectFileManager.listAllTypFiles(for: document)
-        entryFiles = allTypFiles.isEmpty ? [document.entryFileName] : allTypFiles
     }
 
     private func createNewFile() {
@@ -372,30 +269,6 @@ struct ProjectFileBrowserSheet: View {
                     if !document.fontFileNames.contains(name) {
                         document.fontFileNames.append(name)
                     }
-                }
-            } catch {
-                firstError = firstError ?? error
-            }
-        }
-        refreshProjectState()
-        if let firstError {
-            present(firstError)
-        }
-    }
-
-    private func handleFontImport(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result else {
-            if case .failure(let error) = result {
-                present(error)
-            }
-            return
-        }
-        var firstError: Error?
-        for url in urls {
-            do {
-                let name = try FontManager.importFont(from: url, for: document)
-                if !document.fontFileNames.contains(name) {
-                    document.fontFileNames.append(name)
                 }
             } catch {
                 firstError = firstError ?? error

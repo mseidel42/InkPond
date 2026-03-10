@@ -7,41 +7,41 @@ import SwiftUI
 import SwiftData
 
 struct DocumentListView: View {
-    private enum SortOption: String, CaseIterable, Identifiable {
-        case modifiedNewest
-        case modifiedOldest
-        case titleAZ
-        case titleZA
-        case createdNewest
-        case createdOldest
+    private enum SortField: String, CaseIterable, Identifiable {
+        case title
+        case modifiedAt
+        case createdAt
 
         var id: String { rawValue }
 
         var label: String {
             switch self {
-            case .modifiedNewest: L10n.tr("sort.modified_newest")
-            case .modifiedOldest: L10n.tr("sort.modified_oldest")
-            case .titleAZ: L10n.tr("sort.title_az")
-            case .titleZA: L10n.tr("sort.title_za")
-            case .createdNewest: L10n.tr("sort.created_newest")
-            case .createdOldest: L10n.tr("sort.created_oldest")
+            case .title: L10n.tr("sort.field.title")
+            case .modifiedAt: L10n.tr("sort.field.modified")
+            case .createdAt: L10n.tr("sort.field.created")
+            }
+        }
+    }
+
+    private enum SortDirection: String, CaseIterable, Identifiable {
+        case ascending
+        case descending
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .ascending: L10n.tr("sort.direction.ascending")
+            case .descending: L10n.tr("sort.direction.descending")
             }
         }
 
-        func areInIncreasingOrder(_ lhs: TypistDocument, _ rhs: TypistDocument) -> Bool {
+        func orders(_ comparison: ComparisonResult) -> Bool {
             switch self {
-            case .modifiedNewest:
-                lhs.modifiedAt > rhs.modifiedAt
-            case .modifiedOldest:
-                lhs.modifiedAt < rhs.modifiedAt
-            case .titleAZ:
-                lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-            case .titleZA:
-                lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedDescending
-            case .createdNewest:
-                lhs.createdAt > rhs.createdAt
-            case .createdOldest:
-                lhs.createdAt < rhs.createdAt
+            case .ascending:
+                comparison == .orderedAscending
+            case .descending:
+                comparison == .orderedDescending
             }
         }
     }
@@ -63,8 +63,8 @@ struct DocumentListView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var monitor = DirectoryMonitor()
     @State private var syncTask: Task<Void, Never>?
-    @State private var sortOption: SortOption = .modifiedNewest
-    @State private var showingSortPopover = false
+    @State private var sortField: SortField = .modifiedAt
+    @State private var sortDirection: SortDirection = .descending
     private let rowDateFormat = Date.FormatStyle(date: .abbreviated, time: .shortened)
 
     private var filteredDocuments: [TypistDocument] {
@@ -73,7 +73,7 @@ struct DocumentListView: View {
     }
 
     private var sortedDocuments: [TypistDocument] {
-        filteredDocuments.sorted(by: sortOption.areInIncreasingOrder)
+        filteredDocuments.sorted(by: areDocumentsOrdered)
     }
 
     private var isShowingSearchEmptyState: Bool {
@@ -322,56 +322,59 @@ struct DocumentListView: View {
     }
 
     private var sortMenu: some View {
-        Button { showingSortPopover = true } label: {
+        Menu {
+            Picker(L10n.tr("sort.menu.sort_by"), selection: $sortField) {
+                ForEach(SortField.allCases) { field in
+                    Text(field.label).tag(field)
+                }
+            }
+
+            Picker(L10n.tr("sort.menu.order"), selection: $sortDirection) {
+                ForEach(SortDirection.allCases) { direction in
+                    Text(direction.label).tag(direction)
+                }
+            }
+        } label: {
             Image(systemName: "arrow.up.arrow.down")
                 .scaleEffect(0.8)
         }
         .buttonStyle(.plain)
         .tint(toolbarButtonTint)
-        .popover(
-            isPresented: $showingSortPopover,
-            attachmentAnchor: .point(.bottom),
-            arrowEdge: .top
-        ) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(SortOption.allCases) { option in
-                    Button {
-                        sortOption = option
-                        showingSortPopover = false
-                    } label: {
-                        HStack {
-                            Text(option.label)
-                                .font(.subheadline)
-                            Spacer(minLength: 12)
-                            Image(systemName: "checkmark")
-                                .font(.caption.weight(.bold))
-                                .opacity(option == sortOption ? 1 : 0)
-                        }
-                        .foregroundStyle(Color.primary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background {
-                            if option == sortOption {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(Color.catppuccinSurface0)
-                            }
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 4)
-                }
-            }
-            .padding(10)
-            .frame(minWidth: 188)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .presentationCompactAdaptation(.popover)
-        }
+        .accessibilityLabel(L10n.tr("sort.menu.button"))
+        .accessibilityValue("\(sortField.label), \(sortDirection.label)")
     }
 
     // MARK: - Actions
+
+    private func areDocumentsOrdered(_ lhs: TypistDocument, _ rhs: TypistDocument) -> Bool {
+        let primaryComparison = compare(lhs, rhs, by: sortField)
+        if primaryComparison != .orderedSame {
+            return sortDirection.orders(primaryComparison)
+        }
+
+        let titleComparison = lhs.title.localizedCaseInsensitiveCompare(rhs.title)
+        if titleComparison != .orderedSame {
+            return titleComparison == .orderedAscending
+        }
+
+        let modifiedComparison = lhs.modifiedAt.compare(rhs.modifiedAt)
+        if modifiedComparison != .orderedSame {
+            return modifiedComparison == .orderedDescending
+        }
+
+        return lhs.createdAt > rhs.createdAt
+    }
+
+    private func compare(_ lhs: TypistDocument, _ rhs: TypistDocument, by field: SortField) -> ComparisonResult {
+        switch field {
+        case .title:
+            lhs.title.localizedCaseInsensitiveCompare(rhs.title)
+        case .modifiedAt:
+            lhs.modifiedAt.compare(rhs.modifiedAt)
+        case .createdAt:
+            lhs.createdAt.compare(rhs.createdAt)
+        }
+    }
 
     /// Coalesce bursty filesystem events into a single sync pass.
     private func scheduleFilesystemSync(delay: Duration = .milliseconds(300)) {
