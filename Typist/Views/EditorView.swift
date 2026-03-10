@@ -9,6 +9,7 @@ struct EditorView: UIViewRepresentable {
     @Binding var text: String
     @Binding var insertionRequest: String?
     @Binding var findRequested: Bool
+    var focusCoordinator: EditorFocusCoordinator? = nil
     var theme: EditorTheme = .system
     var onPhotoTapped: () -> Void = {}
     var onImagePasted: (Data) -> Void = { _ in }
@@ -22,11 +23,13 @@ struct EditorView: UIViewRepresentable {
         let textView = TypstTextView()
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
+        focusCoordinator?.register(textView)
         textView.applyTheme(theme)
         return textView
     }
 
     func updateUIView(_ textView: TypstTextView, context: Context) {
+        focusCoordinator?.register(textView)
         textView.applyTheme(theme)
         textView.onPhotoButtonTapped = onPhotoTapped
         textView.onImagePasted = onImagePasted

@@ -69,7 +69,9 @@ xcodebuild -project Typist.xcodeproj -scheme Typist -configuration Debug -destin
 xcodebuild -project Typist.xcodeproj -scheme Typist -configuration Release -destination 'generic/platform=iOS' archive
 
 # Tests
-xcodebuild test -project Typist.xcodeproj -scheme Typist -destination 'platform=iOS Simulator,name=iPhone 16'
+xcodebuild test -project Typist.xcodeproj -scheme Typist -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
+# If your local simulator list differs, inspect available destinations first:
+# xcodebuild -showdestinations -project Typist.xcodeproj -scheme Typist
 ```
 
 ## Rust FFI Notes

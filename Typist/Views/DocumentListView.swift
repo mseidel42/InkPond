@@ -57,6 +57,7 @@ struct DocumentListView: View {
     @State private var exporter = ExportController()
     @State private var documentToDelete: TypistDocument?
     @State private var showingSettings = false
+    @State private var projectActionError: String? = nil
     @State private var zipImportError: String? = nil
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -116,10 +117,14 @@ struct DocumentListView: View {
                 TextField("Title", text: $newTitle)
                 Button("Rename") {
                     if let doc = renamingDocument {
-                        let newFolderName = ProjectFileManager.renameProjectDirectory(for: doc, to: newTitle)
-                        doc.projectID = newFolderName
-                        doc.title = newTitle
-                        doc.modifiedAt = Date()
+                        do {
+                            let newFolderName = try ProjectFileManager.renameProjectDirectory(for: doc, to: newTitle)
+                            doc.projectID = newFolderName
+                            doc.title = newTitle
+                            doc.modifiedAt = Date()
+                        } catch {
+                            projectActionError = error.localizedDescription
+                        }
                     }
                     renamingDocument = nil
                 }
@@ -131,9 +136,13 @@ struct DocumentListView: View {
             )) {
                 Button("Delete", role: .destructive) {
                     if let doc = documentToDelete {
-                        if selectedDocument == doc { selectedDocument = nil }
-                        ProjectFileManager.deleteProjectDirectory(for: doc)
-                        modelContext.delete(doc)
+                        do {
+                            try ProjectFileManager.deleteProjectDirectory(for: doc)
+                            if selectedDocument == doc { selectedDocument = nil }
+                            modelContext.delete(doc)
+                        } catch {
+                            projectActionError = error.localizedDescription
+                        }
                         documentToDelete = nil
                     }
                 }
@@ -142,6 +151,14 @@ struct DocumentListView: View {
                 if let doc = documentToDelete {
                     Text(L10n.deleteDocumentMessage(title: doc.title))
                 }
+            }
+            .alert("Project Error", isPresented: Binding(
+                get: { projectActionError != nil },
+                set: { if !$0 { projectActionError = nil } }
+            )) {
+                Button("OK") { projectActionError = nil }
+            } message: {
+                Text(projectActionError ?? "")
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView(onImport: { url in importZip(from: url) })
@@ -387,22 +404,45 @@ struct DocumentListView: View {
         for folderName in newFolders {
             let folderURL = ProjectFileManager.projectDirectory(folderName: folderName)
             let allFiles = ProjectFileManager.listAllFiles(in: folderURL)
-            let typFiles = ProjectFileManager.listAllTypFiles(in: folderURL)
             let doc = TypistDocument(title: folderName, content: "")
             doc.projectID = folderName
-            let resolution = ProjectFileManager.resolveImportedEntryFile(from: typFiles)
-            if let entryFile = resolution.entryFileName {
-                doc.entryFileName = entryFile
-            }
-            doc.requiresInitialEntrySelection = resolution.requiresInitialSelection
-            doc.importEntryFileOptions = typFiles.sorted()
-            doc.importImageDirectoryOptions = ProjectFileManager.imageDirectoryCandidates(from: allFiles)
-            doc.importFontDirectoryOptions = ProjectFileManager.fontDirectoryCandidates(from: allFiles)
-            doc.requiresImportConfiguration = resolution.requiresInitialSelection
-                || !doc.importImageDirectoryOptions.isEmpty
-                || !doc.importFontDirectoryOptions.isEmpty
+            configureImportedDocument(doc, relativePaths: allFiles)
             modelContext.insert(doc)
         }
+    }
+
+    private func configureImportedDocument(_ document: TypistDocument, relativePaths: [String]) {
+        let typFiles = relativePaths.filter { $0.hasSuffix(".typ") }.sorted()
+        let resolution = ProjectFileManager.resolveImportedEntryFile(from: typFiles)
+        if let entryFile = resolution.entryFileName {
+            document.entryFileName = entryFile
+        }
+        document.requiresInitialEntrySelection = resolution.requiresInitialSelection
+        document.importEntryFileOptions = resolution.requiresInitialSelection ? typFiles : []
+
+        let imageDirectoryOptions = ProjectFileManager.imageDirectoryCandidates(from: relativePaths)
+        if ProjectFileManager.requiresImportDirectorySelection(imageDirectoryOptions) {
+            document.importImageDirectoryOptions = imageDirectoryOptions
+        } else {
+            document.importImageDirectoryOptions = []
+            if let autoImageDirectory = ProjectFileManager.defaultImportDirectory(from: imageDirectoryOptions) {
+                document.imageDirectoryName = autoImageDirectory
+            }
+        }
+
+        let fontDirectoryOptions = ProjectFileManager.fontDirectoryCandidates(from: relativePaths)
+        if ProjectFileManager.requiresImportDirectorySelection(fontDirectoryOptions) {
+            document.importFontDirectoryOptions = fontDirectoryOptions
+        } else {
+            document.importFontDirectoryOptions = []
+            if let autoFontDirectory = ProjectFileManager.defaultImportDirectory(from: fontDirectoryOptions) {
+                _ = ProjectFileManager.importFontFiles(from: autoFontDirectory, for: document)
+            }
+        }
+
+        document.requiresImportConfiguration = document.requiresInitialEntrySelection
+            || !document.importImageDirectoryOptions.isEmpty
+            || !document.importFontDirectoryOptions.isEmpty
     }
 
     private func nextAvailableTitle() -> String {
@@ -418,9 +458,14 @@ struct DocumentListView: View {
         let title = nextAvailableTitle()
         let doc = TypistDocument(title: title, content: "")
         doc.projectID = ProjectFileManager.uniqueFolderName(for: title)
-        modelContext.insert(doc)
-        ProjectFileManager.ensureProjectRoot(for: doc)
-        try? ProjectFileManager.writeTypFile(named: "main.typ", content: "", for: doc)
+        do {
+            try ProjectFileManager.createInitialProject(for: doc)
+            modelContext.insert(doc)
+        } catch {
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+            projectActionError = error.localizedDescription
+            return
+        }
         selectedDocument = doc
     }
 
@@ -428,31 +473,19 @@ struct DocumentListView: View {
         let title = url.deletingPathExtension().lastPathComponent
         let doc = TypistDocument(title: title, content: "")
         doc.projectID = ProjectFileManager.uniqueFolderName(for: title)
-        modelContext.insert(doc)
-        ProjectFileManager.ensureProjectRoot(for: doc)
         let destDir = ProjectFileManager.projectDirectory(for: doc)
 
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
 
         do {
+            try ProjectFileManager.createProjectRoot(for: doc)
             let extracted = try ZipImporter.extract(from: url, to: destDir)
-            let typFiles = extracted.filter { $0.hasSuffix(".typ") }
-            let resolution = ProjectFileManager.resolveImportedEntryFile(from: typFiles)
-            if let entry = resolution.entryFileName {
-                doc.entryFileName = entry
-            }
-            doc.requiresInitialEntrySelection = resolution.requiresInitialSelection
-            doc.importEntryFileOptions = typFiles.sorted()
-            doc.importImageDirectoryOptions = ProjectFileManager.imageDirectoryCandidates(from: extracted)
-            doc.importFontDirectoryOptions = ProjectFileManager.fontDirectoryCandidates(from: extracted)
-            doc.requiresImportConfiguration = resolution.requiresInitialSelection
-                || !doc.importImageDirectoryOptions.isEmpty
-                || !doc.importFontDirectoryOptions.isEmpty
+            configureImportedDocument(doc, relativePaths: extracted)
+            modelContext.insert(doc)
             selectedDocument = doc
         } catch {
-            modelContext.delete(doc)
-            ProjectFileManager.deleteProjectDirectory(for: doc)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
             zipImportError = error.localizedDescription
         }
     }

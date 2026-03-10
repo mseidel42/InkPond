@@ -69,7 +69,9 @@ xcodebuild -project Typist.xcodeproj -scheme Typist -configuration Debug -destin
 xcodebuild -project Typist.xcodeproj -scheme Typist -configuration Release -destination 'generic/platform=iOS' archive
 
 # 测试
-xcodebuild test -project Typist.xcodeproj -scheme Typist -destination 'platform=iOS Simulator,name=iPhone 16'
+xcodebuild test -project Typist.xcodeproj -scheme Typist -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
+# 如果本机安装的模拟器不同，请先查看可用目标：
+# xcodebuild -showdestinations -project Typist.xcodeproj -scheme Typist
 ```
 
 ## Rust FFI 说明

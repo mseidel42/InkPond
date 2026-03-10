@@ -25,6 +25,12 @@ private extension View {
     }
 }
 
+private actor BackgroundDocumentFileWriter {
+    func write(_ content: String, to url: URL) throws {
+        try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+}
+
 struct DocumentEditorView: View {
     private enum ImageImportSource {
         case photoItem(PhotosPickerItem)
@@ -47,6 +53,9 @@ struct DocumentEditorView: View {
     @State private var entrySource: String = ""
     @State private var compileToken: UUID = UUID()
     @State private var isLoadingFileContent = false
+    @State private var lastPersistedText: String = ""
+    @State private var saveTask: Task<Void, Never>?
+    @State private var backgroundFileWriter = BackgroundDocumentFileWriter()
 
     // MARK: - UI state
     @State private var selectedTab: Int = 0
@@ -59,12 +68,14 @@ struct DocumentEditorView: View {
     @State private var findRequested = false
     @State private var exporter = ExportController()
     @State private var imageImportError: String?
+    @State private var fileSaveError: String?
     @State private var previewActionError: String?
     @State private var isImageDropTarget = false
     @State private var pendingInsertionQueue: [String] = []
     @State private var imageImportToast: String?
     @State private var toastDismissTask: Task<Void, Never>?
     @State private var showingImportConfiguration = false
+    @State private var focusCoordinator = EditorFocusCoordinator()
 
     private var fontPaths: [String] { FontManager.allFontPaths(for: document) }
     private var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
@@ -77,6 +88,7 @@ struct DocumentEditorView: View {
             text: $editorText,
             insertionRequest: $insertionRequest,
             findRequested: $findRequested,
+            focusCoordinator: focusCoordinator,
             theme: themeManager.currentTheme,
             onPhotoTapped: { showingPhotoPicker = true },
             onImagePasted: { pastedImageData in
@@ -102,7 +114,14 @@ struct DocumentEditorView: View {
     }
 
     private var previewPane: some View {
-        PreviewPane(compiler: compiler, source: entrySource, fontPaths: fontPaths, rootDir: rootDir, compileToken: compileToken)
+        PreviewPane(
+            compiler: compiler,
+            source: entrySource,
+            fontPaths: fontPaths,
+            rootDir: rootDir,
+            compileToken: compileToken,
+            focusCoordinator: focusCoordinator
+        )
             .background(Color.catppuccinMantle)
     }
 
@@ -165,8 +184,16 @@ struct DocumentEditorView: View {
 
     /// Context-aware share: PDF on iPad/preview tab, .typ on editor tab.
     private var shareButtonAction: () -> Void {
-        if sizeClass == .regular || selectedTab == 1 { return { exporter.exportPDF(for: document, cachedPDF: compiler.pdfDocument) } }
-        return { exporter.exportTypSource(for: document, fileName: currentFileName) }
+        if sizeClass == .regular || selectedTab == 1 {
+            return {
+                flushPendingSave()
+                exporter.exportPDF(for: document, cachedPDF: compiler.pdfDocument)
+            }
+        }
+        return {
+            flushPendingSave()
+            exporter.exportTypSource(for: document, fileName: currentFileName)
+        }
     }
 
     private var shareButtonLabel: String {
@@ -199,6 +226,7 @@ struct DocumentEditorView: View {
             Button { findRequested = true } label: { Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass") }
             Divider()
             Button {
+                flushPendingSave()
                 exporter.exportZip(for: document)
             } label: {
                 Label("Export Project as Zip", systemImage: "archivebox")
@@ -275,10 +303,14 @@ struct DocumentEditorView: View {
             .onAppear {
                 prepareDocumentForEditing()
             }
-            .onDisappear { compiler.cancel() }
+            .onDisappear {
+                flushPendingSave()
+                focusCoordinator.setResignSuppressed(false)
+                compiler.cancel()
+            }
             .onChange(of: editorText) { _, newText in
                 guard !isLoadingFileContent else { return }
-                saveCurrentFile(content: newText)
+                handleEditorTextChange(newText)
             }
             .onChange(of: insertionRequest) { _, newValue in
                 if newValue == nil {
@@ -333,6 +365,14 @@ struct DocumentEditorView: View {
             } message: {
                 Text(imageImportError ?? "")
             }
+            .alert("File Error", isPresented: Binding(
+                get: { fileSaveError != nil },
+                set: { if !$0 { fileSaveError = nil } }
+            )) {
+                Button("OK") { fileSaveError = nil }
+            } message: {
+                Text(fileSaveError ?? "")
+            }
             .alert("Cache Error", isPresented: Binding(
                 get: { previewActionError != nil },
                 set: { if !$0 { previewActionError = nil } }
@@ -361,24 +401,25 @@ struct DocumentEditorView: View {
                 if !typFiles.contains(document.entryFileName) {
                     document.entryFileName = suggestedEntry
                 }
-                if document.importEntryFileOptions.isEmpty {
+                if resolution.requiresInitialSelection && document.importEntryFileOptions.isEmpty {
                     document.importEntryFileOptions = typFiles
                 }
+            }
+            if !resolution.requiresInitialSelection {
+                document.importEntryFileOptions = []
+            }
+            document.requiresInitialEntrySelection = resolution.requiresInitialSelection
+            applyAutomaticImportDirectories()
+            document.requiresImportConfiguration = document.requiresInitialEntrySelection
+                || !document.importImageDirectoryOptions.isEmpty
+                || !document.importFontDirectoryOptions.isEmpty
+            if document.requiresImportConfiguration {
                 showingImportConfiguration = true
                 currentFileName = ""
                 editorText = ""
                 entrySource = ""
                 return
             }
-            if !document.importImageDirectoryOptions.isEmpty || !document.importFontDirectoryOptions.isEmpty {
-                showingImportConfiguration = true
-                currentFileName = ""
-                editorText = ""
-                entrySource = ""
-                return
-            }
-            document.requiresImportConfiguration = false
-            document.requiresInitialEntrySelection = false
         }
 
         ProjectFileManager.migrateContentIfNeeded(for: document)
@@ -386,37 +427,122 @@ struct DocumentEditorView: View {
     }
 
     private func loadFile(named name: String) {
+        saveTask?.cancel()
+        saveTask = nil
         let text = (try? ProjectFileManager.readTypFile(named: name, for: document)) ?? ""
         currentFileName = name
         isLoadingFileContent = true
         editorText = text
         isLoadingFileContent = false
-        if name == document.entryFileName { entrySource = text }
+        lastPersistedText = text
+        if name == document.entryFileName {
+            entrySource = text
+        }
     }
 
-    private func saveCurrentFile(content: String) {
+    private func handleEditorTextChange(_ content: String) {
         guard !currentFileName.isEmpty else { return }
-        let existingContent = try? ProjectFileManager.readTypFile(named: currentFileName, for: document)
-        guard existingContent != content else { return }
-        try? ProjectFileManager.writeTypFile(named: currentFileName, content: content, for: document)
         document.modifiedAt = Date()
         if isEditingEntryFile {
             entrySource = content
-        } else {
-            compileToken = UUID()
+        }
+        scheduleSave(content: content, for: currentFileName)
+    }
+
+    private func scheduleSave(content: String, for fileName: String) {
+        guard fileName == currentFileName else { return }
+        guard content != lastPersistedText else {
+            saveTask?.cancel()
+            saveTask = nil
+            return
+        }
+
+        let fileURL = ProjectFileManager.typFileURL(named: fileName, for: document)
+        let shouldRefreshPreviewAfterSave = fileName != document.entryFileName
+
+        saveTask?.cancel()
+        saveTask = Task {
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+
+            do {
+                try await backgroundFileWriter.write(content, to: fileURL)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    if self.currentFileName == fileName, self.editorText == content {
+                        self.lastPersistedText = content
+                        if shouldRefreshPreviewAfterSave {
+                            self.compileToken = UUID()
+                        }
+                    }
+                    self.saveTask = nil
+                }
+            } catch {
+                await MainActor.run {
+                    self.fileSaveError = error.localizedDescription
+                    self.saveTask = nil
+                }
+            }
+        }
+    }
+
+    private func flushPendingSave() {
+        saveTask?.cancel()
+        saveTask = nil
+        persistCurrentFileImmediately(content: editorText)
+    }
+
+    private func persistCurrentFileImmediately(content: String) {
+        guard !currentFileName.isEmpty else { return }
+        guard content != lastPersistedText else { return }
+
+        let shouldRefreshPreviewAfterSave = currentFileName != document.entryFileName
+        let fileURL = ProjectFileManager.typFileURL(named: currentFileName, for: document)
+
+        do {
+            try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            lastPersistedText = content
+            if shouldRefreshPreviewAfterSave {
+                compileToken = UUID()
+            }
+        } catch {
+            fileSaveError = error.localizedDescription
+        }
+    }
+
+    private func applyAutomaticImportDirectories() {
+        if !ProjectFileManager.requiresImportDirectorySelection(document.importImageDirectoryOptions) {
+            if let autoImageDirectory = ProjectFileManager.defaultImportDirectory(from: document.importImageDirectoryOptions) {
+                document.imageDirectoryName = autoImageDirectory
+            }
+            document.importImageDirectoryOptions = []
+        }
+
+        if !ProjectFileManager.requiresImportDirectorySelection(document.importFontDirectoryOptions) {
+            if let autoFontDirectory = ProjectFileManager.defaultImportDirectory(from: document.importFontDirectoryOptions) {
+                _ = ProjectFileManager.importFontFiles(from: autoFontDirectory, for: document)
+            }
+            document.importFontDirectoryOptions = []
         }
     }
 
     func openFile(named name: String) {
-        saveCurrentFile(content: editorText)
+        flushPendingSave()
         loadFile(named: name)
     }
 
     private func compilePreviewNow() {
+        flushPendingSave()
         compiler.compileNow(source: entrySource, fontPaths: fontPaths, rootDir: rootDir)
     }
 
     private func clearCachesAndRecompile() {
+        flushPendingSave()
         let source = entrySource
         let fontPaths = fontPaths
         let rootDir = rootDir

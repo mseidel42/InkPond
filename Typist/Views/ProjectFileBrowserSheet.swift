@@ -320,7 +320,13 @@ struct ProjectFileBrowserSheet: View {
     }
 
     private func handleImport(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result else { return }
+        guard case .success(let urls) = result else {
+            if case .failure(let error) = result {
+                present(error)
+            }
+            return
+        }
+        var firstError: Error?
         for url in urls {
             let ext = url.pathExtension.lowercased()
             let subdir: String
@@ -332,36 +338,46 @@ struct ProjectFileBrowserSheet: View {
                 subdir = ""
             }
 
-            if subdir.isEmpty {
-                let accessing = url.startAccessingSecurityScopedResource()
-                defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-                let dest = ProjectFileManager.projectDirectory(for: document)
-                    .appendingPathComponent(url.lastPathComponent)
-                try? FileManager.default.removeItem(at: dest)
-                try? FileManager.default.copyItem(at: url, to: dest)
-            } else {
-                _ = try? ProjectFileManager.importFile(from: url, to: subdir, for: document)
-            }
-
-            if Self.fontExtensions.contains(ext) {
-                let name = url.lastPathComponent
-                if !document.fontFileNames.contains(name) {
-                    document.fontFileNames.append(name)
+            do {
+                _ = try ProjectFileManager.importFile(from: url, to: subdir, for: document)
+                if Self.fontExtensions.contains(ext) {
+                    let name = url.lastPathComponent
+                    if !document.fontFileNames.contains(name) {
+                        document.fontFileNames.append(name)
+                    }
                 }
+            } catch {
+                firstError = firstError ?? error
             }
         }
         refreshProjectState()
+        if let firstError {
+            present(firstError)
+        }
     }
 
     private func handleFontImport(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result else { return }
+        guard case .success(let urls) = result else {
+            if case .failure(let error) = result {
+                present(error)
+            }
+            return
+        }
+        var firstError: Error?
         for url in urls {
-            if let name = try? FontManager.importFont(from: url, for: document),
-               !document.fontFileNames.contains(name) {
-                document.fontFileNames.append(name)
+            do {
+                let name = try FontManager.importFont(from: url, for: document)
+                if !document.fontFileNames.contains(name) {
+                    document.fontFileNames.append(name)
+                }
+            } catch {
+                firstError = firstError ?? error
             }
         }
         refreshProjectState()
+        if let firstError {
+            present(firstError)
+        }
     }
 
     private func present(_ error: Error) {

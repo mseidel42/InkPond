@@ -18,10 +18,10 @@ final class TypstTextView: UITextView {
     private var storedTheme: EditorTheme = .system
     private var appearanceRegistration: (any UITraitChangeRegistration)?
 
-    /// When true, `resignFirstResponder()` is refused.
+    /// When true, `resignFirstResponder()` is refused for this editor instance.
     /// Set by PDFKitView during document reload to prevent PDFKit from
     /// dismissing the software keyboard on iPadOS.
-    nonisolated(unsafe) static var suppressResignFirstResponder = false
+    var suppressResignFirstResponder = false
 
     var onPhotoButtonTapped: (() -> Void)? {
         didSet { (inputAccessoryView as? KeyboardAccessoryView)?.onPhotoButtonTapped = onPhotoButtonTapped }
@@ -119,7 +119,7 @@ final class TypstTextView: UITextView {
 
     @discardableResult
     override func resignFirstResponder() -> Bool {
-        if Self.suppressResignFirstResponder { return false }
+        if suppressResignFirstResponder { return false }
         return super.resignFirstResponder()
     }
 

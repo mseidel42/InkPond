@@ -49,7 +49,7 @@ struct TypistTests {
     @Test func projectFileManagerRejectsUnsafeRelativePaths() throws {
         let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
         ProjectFileManager.ensureProjectStructure(for: doc)
-        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
 
         var deleteUnsafe = false
         do {
@@ -75,7 +75,7 @@ struct TypistTests {
     @Test func projectFileManagerImportFileAllowsEmptySubdirAndReturnsFileName() throws {
         let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
         ProjectFileManager.ensureProjectStructure(for: doc)
-        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
 
         let srcDir = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: srcDir) }
@@ -99,7 +99,7 @@ struct TypistTests {
     @Test func migrateContentIfNeededSkipsEmptyContent() throws {
         let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
         ProjectFileManager.ensureProjectStructure(for: doc)
-        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
 
         ProjectFileManager.migrateContentIfNeeded(for: doc)
 
@@ -110,7 +110,7 @@ struct TypistTests {
     @Test func projectFileManagerSupportsNestedTypPaths() throws {
         let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
         ProjectFileManager.ensureProjectStructure(for: doc)
-        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
 
         let nestedDir = ProjectFileManager.projectDirectory(for: doc).appendingPathComponent("chapters", isDirectory: true)
         try FileManager.default.createDirectory(at: nestedDir, withIntermediateDirectories: true)
@@ -127,7 +127,7 @@ struct TypistTests {
     @Test func projectFileManagerBuildsProjectTreeFromRoot() throws {
         let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
         ProjectFileManager.ensureProjectStructure(for: doc)
-        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
 
         try ProjectFileManager.writeTypFile(named: "main.typ", content: "", for: doc)
         let chapterDir = ProjectFileManager.projectDirectory(for: doc).appendingPathComponent("chapters", isDirectory: true)
@@ -149,7 +149,7 @@ struct TypistTests {
     @Test func projectFileManagerListsAllFilesRecursively() throws {
         let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
         ProjectFileManager.ensureProjectStructure(for: doc)
-        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
 
         try ProjectFileManager.writeTypFile(named: "main.typ", content: "", for: doc)
         let nestedImage = ProjectFileManager.projectDirectory(for: doc)
@@ -172,15 +172,40 @@ struct TypistTests {
             "logo.jpg"
         ]
 
-        #expect(ProjectFileManager.imageDirectoryCandidates(from: files) == ["", "assets", "fonts", "vendor", "vendor/fonts", "vendor/fonts/nested"])
-        #expect(ProjectFileManager.fontDirectoryCandidates(from: files) == ["", "assets", "fonts", "vendor", "vendor/fonts", "vendor/fonts/nested"])
+        #expect(ProjectFileManager.imageDirectoryCandidates(from: files) == ["", "assets"])
+        #expect(ProjectFileManager.fontDirectoryCandidates(from: files) == ["", "fonts", "vendor", "vendor/fonts", "vendor/fonts/nested"])
+    }
+
+    @Test func projectFileManagerRecognizesOnlyRealImportChoices() {
+        #expect(!ProjectFileManager.requiresImportDirectorySelection([""]))
+        #expect(!ProjectFileManager.requiresImportDirectorySelection(["images"]))
+        #expect(ProjectFileManager.requiresImportDirectorySelection(["", "images"]))
+        #expect(ProjectFileManager.defaultImportDirectory(from: [""]) == String?.some(""))
+        #expect(ProjectFileManager.defaultImportDirectory(from: ["images"]) == String?.some("images"))
+        #expect(ProjectFileManager.defaultImportDirectory(from: ["", "images"]) == nil)
+        #expect(ProjectFileManager.defaultImportDirectory(from: []) == nil)
+    }
+
+    @Test func projectFileManagerRenameThrowsWhenProjectDirectoryIsMissing() {
+        let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
+
+        var gotMissingProject = false
+        do {
+            _ = try ProjectFileManager.renameProjectDirectory(for: doc, to: "Renamed")
+        } catch let error as TypistFileError {
+            if case .fileNotFound(let name) = error {
+                gotMissingProject = (name == doc.projectID)
+            }
+        } catch {}
+
+        #expect(gotMissingProject)
     }
 
     @Test func projectFileManagerAllowsRootImageDirectory() throws {
         let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
         doc.imageDirectoryName = ""
         ProjectFileManager.ensureProjectStructure(for: doc)
-        defer { ProjectFileManager.deleteProjectDirectory(for: doc) }
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
 
         let relativePath = try ProjectFileManager.saveImage(data: Data([0x01]), fileName: "cover.png", for: doc)
 

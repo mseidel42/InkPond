@@ -13,6 +13,7 @@ struct ProjectSettingsSheet: View {
     @State private var typFiles: [String] = []
     @State private var showingFontPicker = false
     @State private var bundledFontNames: [(path: String, name: String)] = []
+    @State private var actionError: String?
 
     var body: some View {
         NavigationStack {
@@ -81,6 +82,14 @@ struct ProjectSettingsSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .alert("Error", isPresented: Binding(
+                get: { actionError != nil },
+                set: { if !$0 { actionError = nil } }
+            )) {
+                Button("OK") { actionError = nil }
+            } message: {
+                Text(actionError ?? "")
+            }
         }
         .presentationDetents([.medium, .large])
         .fileImporter(
@@ -88,12 +97,25 @@ struct ProjectSettingsSheet: View {
             allowedContentTypes: [.font],
             allowsMultipleSelection: true
         ) { result in
-            guard case .success(let urls) = result else { return }
-            for url in urls {
-                if let name = try? FontManager.importFont(from: url, for: document),
-                   !document.fontFileNames.contains(name) {
-                    document.fontFileNames.append(name)
+            guard case .success(let urls) = result else {
+                if case .failure(let error) = result {
+                    actionError = error.localizedDescription
                 }
+                return
+            }
+            var firstError: Error?
+            for url in urls {
+                do {
+                    let name = try FontManager.importFont(from: url, for: document)
+                    if !document.fontFileNames.contains(name) {
+                        document.fontFileNames.append(name)
+                    }
+                } catch {
+                    firstError = firstError ?? error
+                }
+            }
+            if let firstError {
+                actionError = firstError.localizedDescription
             }
         }
         .onAppear {

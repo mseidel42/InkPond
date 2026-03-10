@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::io::Read;
 use std::os::raw::c_char;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use typst::diag::{FileError, FileResult, PackageError, SourceDiagnostic};
@@ -255,14 +255,101 @@ fn download_and_extract(url: &str, dest: &Path) -> Result<PathBuf, String> {
         .read_to_end(&mut buf)
         .map_err(|e| format!("read failed: {e}"))?;
 
-    std::fs::create_dir_all(dest).map_err(|e| format!("mkdir failed: {e}"))?;
+    let staging_dir = make_staging_directory(dest)?;
+    if let Err(error) = extract_tar_gz_bytes(&buf, &staging_dir) {
+        let _ = std::fs::remove_dir_all(&staging_dir);
+        return Err(error);
+    }
 
-    let gz = flate2::read::GzDecoder::new(std::io::Cursor::new(buf));
-    tar::Archive::new(gz)
-        .unpack(dest)
-        .map_err(|e| format!("extract failed: {e}"))?;
+    std::fs::rename(&staging_dir, dest).map_err(|e| format!("rename failed: {e}"))?;
 
     Ok(dest.to_owned())
+}
+
+fn make_staging_directory(dest: &Path) -> Result<PathBuf, String> {
+    let parent = dest
+        .parent()
+        .ok_or_else(|| format!("invalid destination path: {}", dest.display()))?;
+    std::fs::create_dir_all(parent).map_err(|e| format!("mkdir failed: {e}"))?;
+
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("clock error: {e}"))?
+        .as_nanos();
+    let file_name = dest
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("package");
+    let staging_dir = parent.join(format!(".{file_name}.extracting-{suffix}"));
+
+    if staging_dir.exists() {
+        std::fs::remove_dir_all(&staging_dir).map_err(|e| format!("cleanup failed: {e}"))?;
+    }
+    std::fs::create_dir_all(&staging_dir).map_err(|e| format!("mkdir failed: {e}"))?;
+    Ok(staging_dir)
+}
+
+fn extract_tar_gz_bytes(bytes: &[u8], dest: &Path) -> Result<(), String> {
+    let gz = flate2::read::GzDecoder::new(std::io::Cursor::new(bytes));
+    let mut archive = tar::Archive::new(gz);
+
+    let entries = archive
+        .entries()
+        .map_err(|e| format!("archive entries failed: {e}"))?;
+
+    for entry in entries {
+        let mut entry = entry.map_err(|e| format!("archive entry failed: {e}"))?;
+        let entry_type = entry.header().entry_type();
+
+        if entry_type.is_symlink() || entry_type.is_hard_link() {
+            return Err("archive contains unsupported link entries".to_string());
+        }
+
+        let relative_path = sanitized_archive_path(
+            &entry
+                .path()
+                .map_err(|e| format!("archive path failed: {e}"))?,
+        )?;
+
+        if relative_path.as_os_str().is_empty() {
+            continue;
+        }
+
+        let target_path = dest.join(&relative_path);
+        if entry_type.is_dir() {
+            std::fs::create_dir_all(&target_path).map_err(|e| format!("mkdir failed: {e}"))?;
+            continue;
+        }
+
+        if !entry_type.is_file() {
+            return Err(format!("archive contains unsupported entry type: {entry_type:?}"));
+        }
+
+        if let Some(parent) = target_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("mkdir failed: {e}"))?;
+        }
+        entry
+            .unpack(&target_path)
+            .map_err(|e| format!("extract failed: {e}"))?;
+    }
+
+    Ok(())
+}
+
+fn sanitized_archive_path(path: &Path) -> Result<PathBuf, String> {
+    let mut sanitized = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::CurDir => continue,
+            Component::Normal(part) => sanitized.push(part),
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+                return Err(format!("unsafe archive path: {}", path.display()));
+            }
+        }
+    }
+
+    Ok(sanitized)
 }
 
 impl World for SimpleWorld {
@@ -463,4 +550,107 @@ fn format_diagnostics(diags: &[SourceDiagnostic]) -> String {
         .map(|d| d.message.to_string())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::Compression;
+    use flate2::write::GzEncoder;
+    use tar::{Builder, EntryType, Header};
+
+    #[test]
+    fn extract_tar_gz_bytes_extracts_regular_files() {
+        let archive = build_tar_gz(vec![
+            TarEntry::file("main.typ", b"hello"),
+            TarEntry::file("nested/image.png", &[1, 2, 3]),
+        ]);
+        let dest = make_temp_dir();
+
+        extract_tar_gz_bytes(&archive, &dest).unwrap();
+
+        assert_eq!(std::fs::read_to_string(dest.join("main.typ")).unwrap(), "hello");
+        assert_eq!(std::fs::read(dest.join("nested/image.png")).unwrap(), vec![1, 2, 3]);
+
+        let _ = std::fs::remove_dir_all(dest);
+    }
+
+    #[test]
+    fn extract_tar_gz_bytes_rejects_parent_traversal() {
+        let error = sanitized_archive_path(Path::new("../escape.typ")).unwrap_err();
+
+        assert!(error.contains("unsafe archive path"));
+    }
+
+    #[test]
+    fn extract_tar_gz_bytes_rejects_symlink_entries() {
+        let archive = build_tar_gz(vec![TarEntry::symlink("assets/link", "../outside")]);
+        let dest = make_temp_dir();
+
+        let error = extract_tar_gz_bytes(&archive, &dest).unwrap_err();
+
+        assert!(error.contains("unsupported link entries"));
+        let _ = std::fs::remove_dir_all(dest);
+    }
+
+    #[derive(Clone)]
+    struct TarEntry<'a> {
+        path: &'a str,
+        entry_type: EntryType,
+        data: &'a [u8],
+        link_name: Option<&'a str>,
+    }
+
+    impl<'a> TarEntry<'a> {
+        fn file(path: &'a str, data: &'a [u8]) -> Self {
+            Self {
+                path,
+                entry_type: EntryType::Regular,
+                data,
+                link_name: None,
+            }
+        }
+        fn symlink(path: &'a str, target: &'a str) -> Self {
+            Self {
+                path,
+                entry_type: EntryType::Symlink,
+                data: &[],
+                link_name: Some(target),
+            }
+        }
+    }
+
+    fn build_tar_gz(entries: Vec<TarEntry<'_>>) -> Vec<u8> {
+        let encoder = GzEncoder::new(Vec::new(), Compression::default());
+        let mut builder = Builder::new(encoder);
+
+        for entry in entries {
+            let mut header = Header::new_gnu();
+            header.set_entry_type(entry.entry_type);
+            header.set_mode(if entry.entry_type.is_dir() { 0o755 } else { 0o644 });
+            header.set_size(entry.data.len() as u64);
+            if let Some(link_name) = entry.link_name {
+                header.set_link_name(link_name).unwrap();
+            }
+            header.set_cksum();
+            builder
+                .append_data(&mut header, entry.path, entry.data)
+                .unwrap();
+        }
+
+        builder.into_inner().unwrap().finish().unwrap()
+    }
+
+    fn make_temp_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "typst-ios-tests-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
 }

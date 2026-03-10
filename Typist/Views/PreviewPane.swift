@@ -41,6 +41,7 @@ final class PDFContainerView: UIView {
 
 struct PDFKitView: UIViewRepresentable {
     let document: PDFDocument
+    let focusCoordinator: EditorFocusCoordinator?
 
     func makeUIView(context: Context) -> PDFContainerView {
         let container = PDFContainerView()
@@ -77,7 +78,7 @@ struct PDFKitView: UIViewRepresentable {
 
         // Prevent PDFKit from dismissing the software keyboard while it
         // tears down / rebuilds page views for the new document.
-        TypstTextView.suppressResignFirstResponder = true
+        focusCoordinator?.setResignSuppressed(true)
         pdfView.document = document
         pdfView.backgroundColor = .catppuccinMantle
 
@@ -88,13 +89,13 @@ struct PDFKitView: UIViewRepresentable {
             pdfView.scaleFactor = scale
             DispatchQueue.main.async {
                 pdfView.go(to: PDFDestination(page: newPage, at: CGPoint(x: 0, y: savedPageY)))
-                TypstTextView.suppressResignFirstResponder = false
+                focusCoordinator?.setResignSuppressed(false)
             }
         } else {
             // First load: let PDFView pick the initial scale automatically.
             pdfView.autoScales = true
             DispatchQueue.main.async {
-                TypstTextView.suppressResignFirstResponder = false
+                focusCoordinator?.setResignSuppressed(false)
             }
         }
     }
@@ -108,11 +109,12 @@ struct PreviewPane: View {
     var fontPaths: [String] = []
     var rootDir: String?
     var compileToken: UUID = UUID()
+    var focusCoordinator: EditorFocusCoordinator? = nil
 
     var body: some View {
         ZStack(alignment: .bottom) {
             if let pdf = compiler.pdfDocument {
-                PDFKitView(document: pdf)
+                PDFKitView(document: pdf, focusCoordinator: focusCoordinator)
                     .ignoresSafeArea(edges: .bottom)
             } else {
                 placeholderView
@@ -135,6 +137,7 @@ struct PreviewPane: View {
         .onChange(of: rootDir) { compileIfNeeded() }
         .onChange(of: compileToken) { compileIfNeeded() }
         .onDisappear {
+            focusCoordinator?.setResignSuppressed(false)
             compiler.cancel()
         }
     }
