@@ -14,6 +14,9 @@ struct EditorView: UIViewRepresentable {
     var onPhotoTapped: () -> Void = {}
     var onImagePasted: (Data) -> Void = { _ in }
     var onRichPaste: ([TypstTextView.PasteFragment]) -> Void = { _ in }
+    var fontFamilies: [String] = []
+    var bibEntries: [(key: String, type: String)] = []
+    var externalLabels: [(name: String, kind: String)] = []
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -39,6 +42,9 @@ struct EditorView: UIViewRepresentable {
         textView.onPhotoButtonTapped = onPhotoTapped
         textView.onImagePasted = onImagePasted
         textView.onRichPaste = onRichPaste
+        textView.updateFontFamilies(fontFamilies)
+        textView.updateBibEntries(bibEntries)
+        textView.updateExternalLabels(externalLabels)
 
         // Consume pending find request — defer mutation to avoid writing state during view update.
         if findRequested {
@@ -98,6 +104,12 @@ struct EditorView: UIViewRepresentable {
             guard let typstTextView = textView as? TypstTextView else { return }
             parent.text = textView.text
             typstTextView.scheduleHighlighting(.debounced, textChanged: true)
+            typstTextView.updateCompletion()
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            guard let typstTextView = textView as? TypstTextView else { return }
+            typstTextView.updateCompletion()
         }
     }
 }

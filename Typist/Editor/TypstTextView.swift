@@ -24,6 +24,12 @@ final class TypstTextView: UITextView {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Typist", category: "EditorHighlight")
     private static let signposter = OSSignposter(logger: logger)
 
+    // MARK: - Completion
+    private let completionEngine = CompletionEngine.shared
+    private var completionPopup: CompletionPopupView?
+    /// The `#`-prefixed text that is being completed (e.g. "#se").
+    private var completionPrefix: String?
+
     /// When true, `resignFirstResponder()` is refused for this editor instance.
     /// Set by PDFKitView during document reload to prevent PDFKit from
     /// dismissing the software keyboard on iPadOS.
@@ -118,16 +124,54 @@ final class TypstTextView: UITextView {
         }
     }
 
-    // MARK: - Cmd+F Key Command
+    // MARK: - Key Commands (Cmd+F, Completion navigation)
 
     override var keyCommands: [UIKeyCommand]? {
+        var commands = super.keyCommands ?? []
         let findCommand = UIKeyCommand(input: "f", modifierFlags: .command, action: #selector(showFind))
         findCommand.discoverabilityTitle = L10n.tr("action.find_replace")
-        return (super.keyCommands ?? []) + [findCommand]
+        commands.append(findCommand)
+
+        // Completion keyboard navigation (only when popup is visible)
+        if isCompletionVisible {
+            let up = UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(completionMoveUp))
+            up.wantsPriorityOverSystemBehavior = true
+            let down = UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(completionMoveDown))
+            down.wantsPriorityOverSystemBehavior = true
+            let enter = UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(completionConfirm))
+            enter.wantsPriorityOverSystemBehavior = true
+            let tab = UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(completionConfirm))
+            tab.wantsPriorityOverSystemBehavior = true
+            let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(completionDismiss))
+            escape.wantsPriorityOverSystemBehavior = true
+            commands.append(contentsOf: [up, down, enter, tab, escape])
+        }
+
+        return commands
     }
 
     @objc private func showFind() {
         findInteraction?.presentFindNavigator(showingReplace: false)
+    }
+
+    @objc private func completionMoveUp() {
+        completionPopup?.moveSelectionUp()
+    }
+
+    @objc private func completionMoveDown() {
+        completionPopup?.moveSelectionDown()
+    }
+
+    @objc private func completionConfirm() {
+        completionPopup?.confirmSelection()
+    }
+
+    @objc private func completionDismiss() {
+        dismissCompletion()
+    }
+
+    private var isCompletionVisible: Bool {
+        completionPopup?.isHidden == false
     }
 
     // MARK: - First Responder Guard
@@ -648,5 +692,171 @@ final class TypstTextView: UITextView {
 
     func presentFind(showingReplace: Bool = false) {
         findInteraction?.presentFindNavigator(showingReplace: showingReplace)
+    }
+
+    // MARK: - Completion
+
+    /// Which kind of completion is currently active.
+    private enum ActiveCompletionKind {
+        case hash, parameter, value(isQuoted: Bool), atPrefix, angleBracket
+    }
+    private var activeCompletionKind: ActiveCompletionKind?
+
+    /// Update available font families for value completion.
+    func updateFontFamilies(_ families: [String]) {
+        completionEngine.fontFamilies = families
+    }
+
+    /// Update BibTeX citation keys for reference completion.
+    func updateBibEntries(_ entries: [(key: String, type: String)]) {
+        completionEngine.bibEntries = entries
+    }
+
+    /// Update labels from other project files.
+    func updateExternalLabels(_ labels: [(name: String, kind: String)]) {
+        completionEngine.externalLabels = labels
+    }
+
+    func updateCompletion() {
+        let cursorOffset = selectedRange.location
+        guard selectedRange.length == 0,
+              let result = completionEngine.completions(for: text, cursorOffset: cursorOffset) else {
+            dismissCompletion()
+            return
+        }
+
+        let prefix: String
+        let items: [CompletionItem]
+        let kind: ActiveCompletionKind
+
+        switch result {
+        case .hashPrefix(let p, let i):
+            prefix = p; items = i; kind = .hash
+        case .parameter(let p, let i):
+            prefix = p; items = i; kind = .parameter
+        case .value(let p, let isQuoted, let i):
+            prefix = p; items = i; kind = .value(isQuoted: isQuoted)
+        case .atPrefix(let p, let i):
+            prefix = p; items = i; kind = .atPrefix
+        case .angleBracket(let p, let i):
+            prefix = p; items = i; kind = .angleBracket
+        }
+
+        completionPrefix = prefix
+        activeCompletionKind = kind
+        let popup = ensureCompletionPopup()
+        popup.update(items: items)
+        positionCompletionPopup(popup)
+        popup.isHidden = false
+    }
+
+    func dismissCompletion() {
+        completionPopup?.isHidden = true
+        completionPrefix = nil
+        activeCompletionKind = nil
+    }
+
+    func acceptCompletion(_ item: CompletionItem) {
+        guard let prefix = completionPrefix, let kind = activeCompletionKind else { return }
+        let prefixLen = (prefix as NSString).length
+
+        let insertText: String
+
+        switch kind {
+        case .value(let isQuoted):
+            if isQuoted {
+                insertText = item.insertText
+            } else {
+                insertText = "\"" + item.insertText + "\""
+            }
+        case .parameter:
+            insertText = item.insertText  // e.g. "size: "
+        case .hash:
+            insertText = "#" + item.insertText  // e.g. "#text()"
+        case .atPrefix:
+            insertText = "@" + item.insertText  // e.g. "@fig:diagram"
+        case .angleBracket:
+            insertText = item.insertText  // just the key, `<` already typed
+        }
+
+        let insertLen = (insertText as NSString).length
+
+        let replaceStart = selectedRange.location - prefixLen
+        guard replaceStart >= 0 else { return }
+        let replaceRange = NSRange(location: replaceStart, length: prefixLen)
+
+        // Undo support
+        let originalContent = (textStorage.string as NSString).substring(with: replaceRange)
+        let insertedRange = NSRange(location: replaceStart, length: insertLen)
+        undoManager?.registerUndo(withTarget: self) { tv in
+            tv.textStorage.replaceCharacters(in: insertedRange, with: originalContent)
+            tv.selectedRange = NSRange(location: replaceStart + prefixLen, length: 0)
+            tv.delegate?.textViewDidChange?(tv)
+        }
+        undoManager?.setActionName(L10n.tr("action.typing"))
+
+        textStorage.replaceCharacters(in: replaceRange, with: insertText)
+
+        switch kind {
+        case .value, .parameter, .atPrefix, .angleBracket:
+            selectedRange = NSRange(location: replaceStart + insertLen, length: 0)
+        case .hash:
+            // Place cursor intelligently: inside () or [] or after text
+            var cursorPos = replaceStart + insertLen
+            let insertNS = insertText as NSString
+            for i in 0..<insertNS.length {
+                let ch = insertNS.character(at: i)
+                if ch == 0x28 || ch == 0x5B || ch == 0x22 { // ( [ "
+                    cursorPos = replaceStart + i + 1
+                    break
+                }
+            }
+            selectedRange = NSRange(location: cursorPos, length: 0)
+        }
+
+        dismissCompletion()
+        delegate?.textViewDidChange?(self)
+        scheduleHighlighting(.immediate, textChanged: true)
+    }
+
+    private func ensureCompletionPopup() -> CompletionPopupView {
+        if let popup = completionPopup { return popup }
+        let popup = CompletionPopupView()
+        popup.onSelect = { [weak self] item in
+            self?.acceptCompletion(item)
+        }
+        // Add to superview so it can overflow the text view bounds
+        if let superview {
+            superview.addSubview(popup)
+        } else {
+            addSubview(popup)
+        }
+        completionPopup = popup
+        return popup
+    }
+
+    private func positionCompletionPopup(_ popup: CompletionPopupView) {
+        guard let cursorRange = selectedTextRange else { return }
+        let caretRect = self.caretRect(for: cursorRange.start)
+        let size = popup.intrinsicContentSize
+
+        // Convert caret rect to the popup's superview coordinate space
+        let targetView = popup.superview ?? self
+        let caretInTarget = convert(caretRect, to: targetView)
+
+        let margin: CGFloat = 4
+        var x = caretInTarget.minX
+        var y = caretInTarget.minY - size.height - margin  // prefer above
+
+        // If no room above, show below
+        if y < targetView.safeAreaInsets.top {
+            y = caretInTarget.maxY + margin
+        }
+
+        // Clamp horizontal
+        let maxX = targetView.bounds.width - size.width - 8
+        x = min(max(8, x), maxX)
+
+        popup.frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
     }
 }

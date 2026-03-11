@@ -81,9 +81,29 @@ struct DocumentEditorView: View {
     @State private var showingZipExportWarning = false
     @State private var focusCoordinator = EditorFocusCoordinator()
     @State private var pendingManualCompileFeedback = false
+    @State private var cachedBibEntries: [(key: String, type: String)] = []
+    @State private var cachedExternalLabels: [(name: String, kind: String)] = []
 
     private var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
     private var isEditingEntryFile: Bool { currentFileName == document.entryFileName }
+
+    /// Unique Typst font family names derived from compileFontPaths, for completion.
+    private var completionFontFamilies: [String] {
+        var seen = Set<String>()
+        var families: [String] = []
+        for path in compileFontPaths {
+            if let name = FontManager.typstFamilyName(forBundledPath: path), seen.insert(name).inserted {
+                families.append(name)
+            }
+        }
+        // Also include system font families
+        for family in UIFont.familyNames.sorted() {
+            if seen.insert(family).inserted {
+                families.append(family)
+            }
+        }
+        return families
+    }
 
     init(document: TypistDocument, isSidebarVisible: Bool = false) {
         self.document = document
@@ -106,7 +126,10 @@ struct DocumentEditorView: View {
             },
             onRichPaste: { fragments in
                 handleRichPaste(fragments)
-            }
+            },
+            fontFamilies: completionFontFamilies,
+            bibEntries: cachedBibEntries,
+            externalLabels: cachedExternalLabels
         )
         .onDrop(of: [UTType.image.identifier, UTType.fileURL.identifier],
                 isTargeted: $isImageDropTarget,
@@ -360,6 +383,7 @@ struct DocumentEditorView: View {
             .onAppear {
                 refreshCompileFontPaths()
                 prepareDocumentForEditing()
+                refreshReferenceCompletions()
             }
             .onDisappear {
                 flushPendingSave()
@@ -372,6 +396,9 @@ struct DocumentEditorView: View {
             }
             .onChange(of: document.fontFileNames) { _, _ in
                 handleCompileInputsChanged()
+            }
+            .onChange(of: compileToken) { _, _ in
+                refreshReferenceCompletions()
             }
             .onChange(of: appFontLibrary.items) { _, _ in
                 handleCompileInputsChanged()
@@ -706,6 +733,35 @@ struct DocumentEditorView: View {
         guard refreshCompileFontPaths() else { return }
         guard canTriggerPreviewActions else { return }
         compileToken = UUID()
+    }
+
+    /// Scan project .bib files for citation keys and other .typ files for labels.
+    private func refreshReferenceCompletions() {
+        let projectDir = ProjectFileManager.projectDirectory(for: document)
+        let fm = FileManager.default
+
+        // Parse .bib files
+        var bibEntries: [(key: String, type: String)] = []
+        if let items = try? fm.contentsOfDirectory(atPath: projectDir.path) {
+            for item in items where item.hasSuffix(".bib") {
+                let url = projectDir.appendingPathComponent(item)
+                if let content = try? String(contentsOf: url, encoding: .utf8) {
+                    bibEntries.append(contentsOf: CompletionEngine.parseBibTeX(content))
+                }
+            }
+        }
+        cachedBibEntries = bibEntries
+
+        // Scan labels from other .typ files (not the currently edited one)
+        let engine = CompletionEngine.shared
+        var labels: [(name: String, kind: String)] = []
+        let typFiles = ProjectFileManager.listAllTypFiles(for: document)
+        for file in typFiles where file != currentFileName {
+            if let content = try? ProjectFileManager.readTypFile(named: file, for: document) {
+                labels.append(contentsOf: engine.scanLabels(in: content))
+            }
+        }
+        cachedExternalLabels = labels
     }
 
     private func triggerZipExport() {

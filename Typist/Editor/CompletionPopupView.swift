@@ -1,0 +1,189 @@
+//
+//  CompletionPopupView.swift
+//  Typist
+//
+
+import UIKit
+
+final class CompletionPopupView: UIView {
+    var onSelect: ((CompletionItem) -> Void)?
+
+    private let tableView = UITableView(frame: .zero, style: .plain)
+    private var items: [CompletionItem] = []
+    private var selectedIndex = 0
+
+    private static let cellID = "CompletionCell"
+    private static let maxVisibleRows = 5
+    private static let rowHeight: CGFloat = 36
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupView()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupView() {
+        backgroundColor = .secondarySystemBackground
+        layer.cornerRadius = 8
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.15
+        layer.shadowRadius = 8
+        layer.shadowOffset = CGSize(width: 0, height: 2)
+        layer.borderColor = UIColor.separator.cgColor
+        layer.borderWidth = 0.5
+        clipsToBounds = false
+
+        tableView.translatesAutoresizingMaskIntoConstraints = false
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.rowHeight = Self.rowHeight
+        tableView.separatorStyle = .none
+        tableView.backgroundColor = .clear
+        tableView.showsVerticalScrollIndicator = false
+        tableView.register(CompletionCell.self, forCellReuseIdentifier: Self.cellID)
+        tableView.layer.cornerRadius = 8
+        tableView.clipsToBounds = true
+
+        addSubview(tableView)
+        NSLayoutConstraint.activate([
+            tableView.topAnchor.constraint(equalTo: topAnchor),
+            tableView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            tableView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            tableView.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+    }
+
+    func update(items: [CompletionItem]) {
+        self.items = items
+        self.selectedIndex = 0
+        tableView.reloadData()
+        if !items.isEmpty {
+            tableView.selectRow(at: IndexPath(row: 0, section: 0), animated: false, scrollPosition: .top)
+        }
+        invalidateIntrinsicContentSize()
+    }
+
+    override var intrinsicContentSize: CGSize {
+        let rows = min(items.count, Self.maxVisibleRows)
+        return CGSize(width: 240, height: CGFloat(rows) * Self.rowHeight)
+    }
+
+    func confirmSelection() {
+        guard selectedIndex < items.count else { return }
+        onSelect?(items[selectedIndex])
+    }
+
+    func moveSelectionUp() {
+        guard !items.isEmpty else { return }
+        selectedIndex = max(0, selectedIndex - 1)
+        let indexPath = IndexPath(row: selectedIndex, section: 0)
+        tableView.selectRow(at: indexPath, animated: true, scrollPosition: .middle)
+        InteractionFeedback.selection()
+    }
+
+    func moveSelectionDown() {
+        guard !items.isEmpty else { return }
+        selectedIndex = min(items.count - 1, selectedIndex + 1)
+        let indexPath = IndexPath(row: selectedIndex, section: 0)
+        tableView.selectRow(at: indexPath, animated: true, scrollPosition: .middle)
+        InteractionFeedback.selection()
+    }
+}
+
+// MARK: - UITableViewDataSource & Delegate
+
+extension CompletionPopupView: UITableViewDataSource, UITableViewDelegate {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        items.count
+    }
+
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: Self.cellID, for: indexPath) as! CompletionCell
+        let item = items[indexPath.row]
+        cell.configure(with: item)
+        return cell
+    }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        selectedIndex = indexPath.row
+        InteractionFeedback.selection()
+        onSelect?(items[indexPath.row])
+    }
+}
+
+// MARK: - CompletionCell
+
+private final class CompletionCell: UITableViewCell {
+    private let iconLabel = UILabel()
+    private let nameLabel = UILabel()
+    private let detailLabel = UILabel()
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        backgroundColor = .clear
+        selectionStyle = .none
+
+        let selectedBg = UIView()
+        selectedBg.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.15)
+        selectedBg.layer.cornerRadius = 4
+        selectedBackgroundView = selectedBg
+
+        iconLabel.font = .monospacedSystemFont(ofSize: 12, weight: .bold)
+        iconLabel.textAlignment = .center
+        iconLabel.translatesAutoresizingMaskIntoConstraints = false
+        iconLabel.widthAnchor.constraint(equalToConstant: 22).isActive = true
+
+        nameLabel.font = .monospacedSystemFont(ofSize: 14, weight: .medium)
+        nameLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        detailLabel.font = .systemFont(ofSize: 12)
+        detailLabel.textColor = .secondaryLabel
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        detailLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let stack = UIStackView(arrangedSubviews: [iconLabel, nameLabel, detailLabel])
+        stack.axis = .horizontal
+        stack.spacing = 6
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            stack.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(with item: CompletionItem) {
+        switch item.kind {
+        case .keyword:
+            iconLabel.text = "K"
+            iconLabel.textColor = .systemPurple
+        case .function:
+            iconLabel.text = "F"
+            iconLabel.textColor = .systemBlue
+        case .snippet:
+            iconLabel.text = "S"
+            iconLabel.textColor = .systemOrange
+        case .parameter:
+            iconLabel.text = "P"
+            iconLabel.textColor = .systemTeal
+        case .value:
+            iconLabel.text = "V"
+            iconLabel.textColor = .systemGreen
+        case .reference:
+            iconLabel.text = "@"
+            iconLabel.textColor = .systemIndigo
+        }
+        nameLabel.text = item.label
+        detailLabel.text = item.detail
+    }
+}

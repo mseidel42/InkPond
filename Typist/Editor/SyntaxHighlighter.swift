@@ -37,16 +37,17 @@ final class SyntaxHighlighter {
         let specs: [(String, NSRegularExpression.Options, (EditorTheme) -> UIColor, Bool, Bool)] = [
             // 1. Bold *...* / Italic _..._
             (#"\*[^*\n]+\*|_[^_\n]+_"#,                         [],                   { $0.markup },   false, false),
-            // 2. Numbers with optional units
-            (#"\b\d+(?:\.\d+)?(?:em|pt|cm|mm|in|px|%|fr|deg|rad|sp)?\b"#, [],         { $0.number },   false, false),
+            // 2. Numbers with optional units (% separated to avoid \b mismatch)
+            (#"\b\d+(?:\.\d+)?(?:em|pt|cm|mm|in|px|fr|deg|rad|sp)\b|\b\d+(?:\.\d+)?%|\b\d+(?:\.\d+)?\b"#, [],
+                                                                                       { $0.number },   false, false),
             // 3. Math $...$
             (#"\$[^$\n]+\$"#,                                    [],                   { $0.math },     false, false),
             // 4. Code block ```...```
             (#"```[\s\S]*?```"#,                                 [],                   { $0.code },     false, false),
             // 5. Inline code `...`
             (#"`[^`\n]*`"#,                                      [],                   { $0.code },     false, false),
-            // 6. Label <...> / Ref @...
-            (#"<[a-zA-Z0-9_:-]+>|@[a-zA-Z_][a-zA-Z0-9_]*"#,    [],                   { $0.label },    false, false),
+            // 6. Label <...> / Ref @... (supports fig:my-label, bib.key, etc.)
+            (#"<[a-zA-Z][a-zA-Z0-9_.\-:]*>|@[a-zA-Z_][a-zA-Z0-9_.\-:]*"#, [],        { $0.label },    false, false),
             // 7. Bare keywords (in markup context)
             (#"\b(?:else|in|and|or|not|with|as)\b"#,            [],                   { $0.keyword },  true,  false),
             // 8. Bare bool/none/auto literals
