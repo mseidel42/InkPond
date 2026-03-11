@@ -29,12 +29,15 @@ Package.resolved
 
 # Rust
 target/
+rust-ffi/target/
 Cargo.lock
 !Cargo.lock  # Keep Cargo.lock for binary crates, remove this line if it's a library
 *.rs.bk
 
-# Static libraries generated in Frameworks (build from source locally)
+# Generated Rust FFI output
+Frameworks/typst_ios.xcframework/
 Frameworks/**/*.a
+!Frameworks/.gitkeep
 
 # IDE
 .idea/
@@ -50,4 +53,4 @@ dist/
 # Environment
 .env
 .env.local
-.claude
+.claude/

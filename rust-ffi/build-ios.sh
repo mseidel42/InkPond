@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # build-ios.sh — compile Typst FFI static library for iOS & iOS Simulator,
-# then package into an XCFramework under Typist/Frameworks/.
+# then package into an XCFramework under Frameworks/ at the repo root.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,6 +71,6 @@ echo ""
 echo "Next steps:"
 echo "  1. In Xcode → Typist target → General → Frameworks, Libraries,"
 echo "     and Embedded Content → click + → Add Other → Add Files..."
-echo "     and select Typist/Frameworks/typst_ios.xcframework"
+echo "     and select Frameworks/typst_ios.xcframework"
 echo "  2. Or open Typist.xcodeproj and the xcframework will be"
 echo "     linked automatically if OTHER_LDFLAGS already contains -ltypst_ios"

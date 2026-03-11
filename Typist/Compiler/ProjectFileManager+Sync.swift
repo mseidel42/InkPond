@@ -1,0 +1,75 @@
+//
+//  ProjectFileManager+Sync.swift
+//  Typist
+//
+
+import Foundation
+import os.log
+
+extension ProjectFileManager {
+    static func untrackedFolderNames(knownProjectIDs: Set<String>) -> [String] {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: documentsURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: .skipsHiddenFiles
+        ) else { return [] }
+
+        return contents.compactMap { url -> String? in
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
+            let name = url.lastPathComponent
+            return knownProjectIDs.contains(name) ? nil : name
+        }.sorted()
+    }
+
+    static func trackedFolderNames() -> Set<String> {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: documentsURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: .skipsHiddenFiles
+        ) else { return [] }
+
+        return Set(contents.compactMap { url -> String? in
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
+            return url.lastPathComponent
+        })
+    }
+
+    static func migrateLegacyStructure(documents: [TypistDocument]) {
+        let fm = FileManager.default
+        let legacyRoot = documentsURL.appendingPathComponent("Projects", isDirectory: true)
+        guard fm.fileExists(atPath: legacyRoot.path) else { return }
+
+        for doc in documents {
+            guard UUID(uuidString: doc.projectID) != nil else { continue }
+            let oldDir = legacyRoot.appendingPathComponent(doc.projectID, isDirectory: true)
+            let newFolderName = uniqueFolderName(for: doc.title)
+            let newDir = documentsURL.appendingPathComponent(newFolderName, isDirectory: true)
+            if fm.fileExists(atPath: oldDir.path) {
+                try? fm.moveItem(at: oldDir, to: newDir)
+            }
+            doc.projectID = newFolderName
+            os_log(.info, "ProjectFileManager: migrated %{public}@ → %{public}@", doc.title, newFolderName)
+        }
+
+        if let items = try? fm.contentsOfDirectory(atPath: legacyRoot.path), items.isEmpty {
+            try? fm.removeItem(at: legacyRoot)
+        }
+    }
+
+    static func migrateContentIfNeeded(for document: TypistDocument) {
+        guard !document.requiresInitialEntrySelection else { return }
+
+        let entryURL = entryFileURL(for: document)
+        let fm = FileManager.default
+
+        if fm.fileExists(atPath: entryURL.path) {
+            return
+        }
+
+        let source = document.content
+        guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        try? source.write(to: entryURL, atomically: true, encoding: .utf8)
+        os_log(.info, "ProjectFileManager: migrated content to %{public}@ for %{public}@",
+               document.entryFileName, document.projectID)
+    }
+}
