@@ -15,6 +15,15 @@ struct AppFontItem: Identifiable, Equatable, Sendable {
     var id: String { path }
 }
 
+struct AppFontGroup: Identifiable, Sendable {
+    let familyName: String
+    let isBuiltIn: Bool
+    let fileNames: [String]
+    let count: Int
+
+    var id: String { familyName }
+}
+
 @Observable
 final class AppFontLibrary {
     private let rootURL: URL?
@@ -40,6 +49,23 @@ final class AppFontLibrary {
     /// "Empty" intentionally refers to imported App fonts only.
     var isEmpty: Bool {
         fileNames.isEmpty
+    }
+
+    var groupedItems: [AppFontGroup] {
+        var dict: [String: (isBuiltIn: Bool, fileNames: [String])] = [:]
+        for item in items {
+            let key = item.displayName
+            if var existing = dict[key] {
+                if let fn = item.fileName { existing.fileNames.append(fn) }
+                dict[key] = existing
+            } else {
+                let fns: [String] = item.fileName.map { [$0] } ?? []
+                dict[key] = (isBuiltIn: item.isBuiltIn, fileNames: fns)
+            }
+        }
+        return dict.map { key, value in
+            AppFontGroup(familyName: key, isBuiltIn: value.isBuiltIn, fileNames: value.fileNames, count: max(1, value.fileNames.count))
+        }.sorted { $0.familyName.localizedCaseInsensitiveCompare($1.familyName) == .orderedAscending }
     }
 
     func reload() {

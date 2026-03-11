@@ -117,7 +117,8 @@ enum FontManager {
         let importedItems = appImportedFontPaths(rootURL: rootURL).map { path in
             let fileURL = URL(fileURLWithPath: path)
             return AppFontItem(
-                displayName: fileURL.lastPathComponent,
+                displayName: typstFamilyName(forBundledPath: path)
+                    ?? fileURL.deletingPathExtension().lastPathComponent,
                 path: path,
                 fileName: fileURL.lastPathComponent,
                 isBuiltIn: false

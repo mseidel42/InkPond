@@ -44,8 +44,11 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityIdentifier("settings.done")
+                    Button("Done") {
+                        InteractionFeedback.impact(.light)
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("settings.done")
                 }
             }
             .fileImporter(isPresented: $showingZipImporter, allowedContentTypes: [.zip]) { result in
@@ -261,18 +264,22 @@ private struct AppFontManagementView: View {
 
     private var fontsSection: some View {
         Section(L10n.appFontsTitle) {
-            ForEach(appFontLibrary.items) { item in
-                appFontRow(item)
+            ForEach(appFontLibrary.groupedItems) { group in
+                appFontGroupRow(group)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if let fileName = item.fileName, !item.isBuiltIn {
+                        if !group.isBuiltIn {
                             Button("Delete", role: .destructive) {
-                                appFontLibrary.delete(fileName: fileName)
+                                InteractionFeedback.notify(.warning)
+                                for fileName in group.fileNames {
+                                    appFontLibrary.delete(fileName: fileName)
+                                }
                             }
                         }
                     }
             }
 
             Button {
+                InteractionFeedback.impact(.light)
                 showingFontPicker = true
             } label: {
                 Label("Add Font…", systemImage: "plus.circle")
@@ -281,12 +288,20 @@ private struct AppFontManagementView: View {
         }
     }
 
-    private func appFontRow(_ item: AppFontItem) -> some View {
+    private func appFontGroupRow(_ group: AppFontGroup) -> some View {
         HStack {
-            Label(item.displayName, systemImage: "character.textbox")
-                .foregroundStyle(item.isBuiltIn ? .secondary : .primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Label(group.familyName, systemImage: "character.textbox")
+                    .foregroundStyle(group.isBuiltIn ? .secondary : .primary)
+                if group.count > 1 {
+                    Text(L10n.fontFacesCount(group.count))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 28)
+                }
+            }
             Spacer()
-            Text(item.isBuiltIn ? L10n.fontScopeBuiltIn : L10n.fontScopeApp)
+            Text(group.isBuiltIn ? L10n.fontScopeBuiltIn : L10n.fontScopeApp)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }

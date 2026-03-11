@@ -53,12 +53,12 @@ struct ProjectSettingsSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    ForEach(appFontLibrary.items) { item in
+                    ForEach(appFontLibrary.groupedItems) { group in
                         HStack {
-                            Label(item.displayName, systemImage: "character.textbox")
-                                .foregroundStyle(item.isBuiltIn ? .secondary : .primary)
+                            Label(group.familyName, systemImage: "character.textbox")
+                                .foregroundStyle(group.isBuiltIn ? .secondary : .primary)
                             Spacer()
-                            Text(item.isBuiltIn ? L10n.fontScopeBuiltIn : L10n.fontScopeApp)
+                            Text(group.isBuiltIn ? L10n.fontScopeBuiltIn : L10n.fontScopeApp)
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
@@ -75,7 +75,7 @@ struct ProjectSettingsSheet: View {
 
                     ForEach(document.fontFileNames, id: \.self) { name in
                         HStack {
-                            Label(name, systemImage: "character.textbox")
+                            Label(projectFontDisplayName(for: name), systemImage: "character.textbox")
                             Spacer()
                             Text(L10n.fontScopeProject)
                                 .font(.caption)
@@ -83,6 +83,7 @@ struct ProjectSettingsSheet: View {
                         }
                     }
                     .onDelete { offsets in
+                        InteractionFeedback.notify(.warning)
                         let names = offsets.map { document.fontFileNames[$0] }
                         document.fontFileNames.remove(atOffsets: offsets)
                         for name in names {
@@ -90,7 +91,10 @@ struct ProjectSettingsSheet: View {
                         }
                     }
 
-                    Button { showingFontPicker = true } label: {
+                    Button {
+                        InteractionFeedback.impact(.light)
+                        showingFontPicker = true
+                    } label: {
                         Label("Add Font…", systemImage: "plus.circle")
                     }
                 }
@@ -99,7 +103,10 @@ struct ProjectSettingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        InteractionFeedback.impact(.light)
+                        dismiss()
+                    }
                 }
             }
             .alert("Error", isPresented: Binding(
@@ -142,5 +149,13 @@ struct ProjectSettingsSheet: View {
             typFiles = ProjectFileManager.listAllTypFiles(for: document)
             if typFiles.isEmpty { typFiles = [document.entryFileName] }
         }
+    }
+
+    private func projectFontDisplayName(for fileName: String) -> String {
+        guard let path = FontManager.fontFilePath(for: fileName, in: document) else {
+            return URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
+        }
+        return FontManager.typstFamilyName(forBundledPath: path)
+            ?? URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
     }
 }
