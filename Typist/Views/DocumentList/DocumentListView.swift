@@ -132,7 +132,13 @@ struct DocumentListView: View {
                 Button("Rename") {
                     if let doc = renamingDocument {
                         do {
+                            let oldProjectID = doc.projectID
                             let newFolderName = try ProjectFileManager.renameProjectDirectory(for: doc, to: newTitle)
+                            try? CompiledPreviewCacheStore().moveCache(
+                                from: oldProjectID,
+                                to: newFolderName,
+                                documentTitle: newTitle
+                            )
                             doc.projectID = newFolderName
                             doc.title = newTitle
                             doc.modifiedAt = Date()
@@ -152,6 +158,7 @@ struct DocumentListView: View {
                     if let doc = documentToDelete {
                         do {
                             try ProjectFileManager.deleteProjectDirectory(for: doc)
+                            try? CompiledPreviewCacheStore().remove(projectID: doc.projectID)
                             if selectedDocument == doc { selectedDocument = nil }
                             modelContext.delete(doc)
                         } catch {

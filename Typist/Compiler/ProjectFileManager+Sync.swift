@@ -47,6 +47,11 @@ extension ProjectFileManager {
             if fm.fileExists(atPath: oldDir.path) {
                 try? fm.moveItem(at: oldDir, to: newDir)
             }
+            try? CompiledPreviewCacheStore().moveCache(
+                from: doc.projectID,
+                to: newFolderName,
+                documentTitle: doc.title
+            )
             doc.projectID = newFolderName
             os_log(.info, "ProjectFileManager: migrated %{public}@ → %{public}@", doc.title, newFolderName)
         }

@@ -108,6 +108,15 @@ enum L10n {
     nonisolated static var a11yPreviewValueError: String { tr("a11y.preview.value.error") }
     nonisolated static var a11yPreviewPlaceholderLabel: String { tr("a11y.preview.placeholder.label") }
     nonisolated static var a11yPreviewPlaceholderHint: String { tr("a11y.preview.placeholder.hint") }
+    nonisolated static func previewStatsPages(_ count: Int) -> String { format("preview.stats.pages", count) }
+    nonisolated static func previewStatsWords(_ count: Int) -> String { format("preview.stats.words", count) }
+    nonisolated static func previewStatsTokens(_ count: Int) -> String { format("preview.stats.tokens", count) }
+    nonisolated static func previewStatsCharacters(_ count: Int) -> String { format("preview.stats.characters", count) }
+    nonisolated static func previewStatsExpandedValue(pages: String, words: String, characters: String) -> String {
+        format("preview.stats.a11y.value.expanded", pages, words, characters)
+    }
+    nonisolated static var previewStatsHintCollapsed: String { tr("preview.stats.a11y.hint.collapsed") }
+    nonisolated static var previewStatsHintExpanded: String { tr("preview.stats.a11y.hint.expanded") }
     nonisolated static var a11yCompileSuccess: String { tr("a11y.compile.success") }
     nonisolated static var a11yCompileFailed: String { tr("a11y.compile.failed") }
     nonisolated static var a11yCacheRefreshStarted: String { tr("a11y.cache_refresh.started") }

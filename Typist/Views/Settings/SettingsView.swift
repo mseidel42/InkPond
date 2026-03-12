@@ -186,6 +186,14 @@ extension SettingsView {
     var cacheSection: some View {
         Section("Cache") {
             NavigationLink {
+                CompiledPreviewCacheManagementView()
+            } label: {
+                Label("Manage Compile Cache", systemImage: "doc.text.magnifyingglass")
+                    .foregroundStyle(.primary)
+            }
+            .accessibilityIdentifier("settings.compile-cache")
+
+            NavigationLink {
                 PreviewPackageCacheManagementView()
             } label: {
                 Label("Manage Package Cache", systemImage: "externaldrive.badge.person.crop")

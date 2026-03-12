@@ -18,6 +18,11 @@ final class TypstCompiler {
         case immediate
     }
 
+    enum PreviewCachePolicy: Sendable {
+        case useCacheIfValid
+        case bypassCache
+    }
+
     typealias CompileWorker = @Sendable (String, [String], String?) -> Result<Data, TypstBridgeError>
     typealias DocumentBuilder = @Sendable (Data) -> PDFDocument?
     typealias Sleep = @Sendable (Duration) async throws -> Void
@@ -27,6 +32,8 @@ final class TypstCompiler {
         let fontPaths: [String]
         let rootDir: String?
         let mode: CompileMode
+        let previewCachePolicy: PreviewCachePolicy
+        let previewCacheDescriptor: CompiledPreviewCacheDescriptor?
         let generation: UInt64
     }
 
@@ -35,7 +42,7 @@ final class TypstCompiler {
     }
 
     private enum WorkerResult: Sendable {
-        case success(PDFDocumentBox)
+        case success(PDFDocumentBox, Data)
         case failure(TypstBridgeError)
     }
 
@@ -47,6 +54,7 @@ final class TypstCompiler {
     nonisolated private static let signposter = OSSignposter(logger: logger)
 
     private(set) var pdfDocument: PDFDocument?
+    private(set) var pdfData: Data?
     private(set) var errorMessage: String?
     private(set) var isCompiling: Bool = false
     /// Tracks whether a compiled PDF is currently available.
@@ -55,6 +63,8 @@ final class TypstCompiler {
     private let compileWorker: CompileWorker
     private let documentBuilder: DocumentBuilder
     private let sleep: Sleep
+    private let previewCacheStore: CompiledPreviewCacheStore
+    private let typstVersionProvider: @Sendable () -> String?
 
     private var debounceTask: Task<Void, Never>?
     private var activeTask: Task<Void, Never>?
@@ -65,11 +75,15 @@ final class TypstCompiler {
     init(
         compileWorker: @escaping CompileWorker = TypstBridge.compile,
         documentBuilder: @escaping DocumentBuilder = { PDFDocument(data: $0) },
-        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
+        sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
+        previewCacheStore: CompiledPreviewCacheStore = CompiledPreviewCacheStore(),
+        typstVersionProvider: @escaping @Sendable () -> String? = { TypstBridge.runtimeVersion }
     ) {
         self.compileWorker = compileWorker
         self.documentBuilder = documentBuilder
         self.sleep = sleep
+        self.previewCacheStore = previewCacheStore
+        self.typstVersionProvider = typstVersionProvider
     }
 
     nonisolated static func taskPriority(for mode: CompileMode) -> TaskPriority {
@@ -83,20 +97,42 @@ final class TypstCompiler {
         }
     }
 
-    func compile(source: String, fontPaths: [String], rootDir: String? = nil, mode: CompileMode = .debounced) {
+    func compile(
+        source: String,
+        fontPaths: [String],
+        rootDir: String? = nil,
+        mode: CompileMode = .debounced,
+        previewCachePolicy: PreviewCachePolicy = .bypassCache,
+        previewCacheDescriptor: CompiledPreviewCacheDescriptor? = nil
+    ) {
         compileGeneration &+= 1
         let request = CompileRequest(
             source: source,
             fontPaths: fontPaths,
             rootDir: rootDir,
             mode: mode,
+            previewCachePolicy: previewCachePolicy,
+            previewCacheDescriptor: previewCacheDescriptor,
             generation: compileGeneration
         )
         enqueue(request, mode: mode)
     }
 
-    func compileNow(source: String, fontPaths: [String], rootDir: String? = nil) {
-        compile(source: source, fontPaths: fontPaths, rootDir: rootDir, mode: .immediate)
+    func compileNow(
+        source: String,
+        fontPaths: [String],
+        rootDir: String? = nil,
+        previewCachePolicy: PreviewCachePolicy = .bypassCache,
+        previewCacheDescriptor: CompiledPreviewCacheDescriptor? = nil
+    ) {
+        compile(
+            source: source,
+            fontPaths: fontPaths,
+            rootDir: rootDir,
+            mode: .immediate,
+            previewCachePolicy: previewCachePolicy,
+            previewCacheDescriptor: previewCacheDescriptor
+        )
     }
 
     /// Clear current preview content and cancel any in-flight compilation.
@@ -108,6 +144,7 @@ final class TypstCompiler {
         compileGeneration &+= 1
         isCompiling = false
         pdfDocument = nil
+        pdfData = nil
         errorMessage = nil
         compiledOnce = false
     }
@@ -163,13 +200,17 @@ final class TypstCompiler {
 
         let compileWorker = self.compileWorker
         let documentBuilder = self.documentBuilder
+        let previewCacheStore = self.previewCacheStore
+        let typstVersionProvider = self.typstVersionProvider
         let priority = Self.taskPriority(for: request.mode)
         activeTask = Task { [weak self] in
             let workerResult = await Task.detached(priority: priority) {
                 Self.runCompilation(
                     request: request,
                     compileWorker: compileWorker,
-                    documentBuilder: documentBuilder
+                    documentBuilder: documentBuilder,
+                    previewCacheStore: previewCacheStore,
+                    typstVersionProvider: typstVersionProvider
                 )
             }.value
             self?.finishCompilation(workerResult, generation: request.generation)
@@ -182,8 +223,9 @@ final class TypstCompiler {
         if generation == compileGeneration {
             let applyInterval = Self.signposter.beginInterval("typst.preview_apply")
             switch result {
-            case .success(let box):
+            case .success(let box, let data):
                 pdfDocument = box.document
+                pdfData = data
                 errorMessage = nil
                 compiledOnce = true
             case .failure(let error):
@@ -203,8 +245,34 @@ final class TypstCompiler {
     nonisolated private static func runCompilation(
         request: CompileRequest,
         compileWorker: CompileWorker,
-        documentBuilder: DocumentBuilder
+        documentBuilder: DocumentBuilder,
+        previewCacheStore: CompiledPreviewCacheStore,
+        typstVersionProvider: @escaping @Sendable () -> String?
     ) -> WorkerResult {
+        let cacheInput = request.previewCacheDescriptor.map {
+            CompiledPreviewCacheInput(
+                descriptor: $0,
+                source: request.source,
+                fontPaths: request.fontPaths,
+                rootDir: request.rootDir,
+                typstVersion: typstVersionProvider()
+            )
+        }
+
+        switch request.previewCachePolicy {
+        case .useCacheIfValid:
+            if let cacheInput,
+               let cachedResult = loadCachedPreview(
+                using: previewCacheStore,
+                cacheInput: cacheInput,
+                documentBuilder: documentBuilder
+               ) {
+                return cachedResult
+            }
+        case .bypassCache:
+            break
+        }
+
         let compileInterval = signposter.beginInterval("typst.compile")
         let result = compileWorker(request.source, request.fontPaths, request.rootDir)
         signposter.endInterval("typst.compile", compileInterval)
@@ -217,9 +285,36 @@ final class TypstCompiler {
             guard let document = documentBuilder(pdfData) else {
                 return .failure(.compilationFailed("Failed to decode compiled PDF."))
             }
-            return .success(PDFDocumentBox(document: document))
+            if let cacheInput {
+                do {
+                    try previewCacheStore.save(pdfData: pdfData, for: cacheInput)
+                } catch {
+                    logger.error("Failed to store compiled preview cache: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            return .success(PDFDocumentBox(document: document), pdfData)
         case .failure(let error):
             return .failure(error)
+        }
+    }
+
+    nonisolated private static func loadCachedPreview(
+        using previewCacheStore: CompiledPreviewCacheStore,
+        cacheInput: CompiledPreviewCacheInput,
+        documentBuilder: DocumentBuilder
+    ) -> WorkerResult? {
+        do {
+            guard let cachedPDFData = try previewCacheStore.loadIfValid(for: cacheInput) else {
+                return nil
+            }
+            guard let document = documentBuilder(cachedPDFData) else {
+                logger.error("Failed to decode cached preview PDF for \(cacheInput.descriptor.projectID, privacy: .public)")
+                return nil
+            }
+            return .success(PDFDocumentBox(document: document), cachedPDFData)
+        } catch {
+            logger.error("Failed to load compiled preview cache: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 }

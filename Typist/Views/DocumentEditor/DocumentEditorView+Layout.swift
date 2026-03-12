@@ -25,8 +25,11 @@ extension DocumentEditorView {
             text: $editorText,
             insertionRequest: $insertionRequest,
             findRequested: $findRequested,
+            viewState: $editorViewState,
+            cursorJumpOffset: $pendingCursorJump,
             focusCoordinator: focusCoordinator,
             theme: themeManager.currentTheme,
+            errorLines: compilationErrorLines,
             onPhotoTapped: { showingPhotoPicker = true },
             onImagePasted: { pastedImageData in
                 importImage(from: .rawData(pastedImageData, suggestedFileName: nil))
@@ -60,8 +63,13 @@ extension DocumentEditorView {
             source: entrySource,
             fontPaths: compileFontPaths,
             rootDir: rootDir,
+            previewCacheDescriptor: compiledPreviewCacheDescriptor,
             compileToken: compileToken,
-            focusCoordinator: focusCoordinator
+            focusCoordinator: focusCoordinator,
+            entryFileName: document.entryFileName,
+            onGoToError: { file, line, column in
+                navigateToError(file: file, line: line, column: column)
+            }
         )
         .background(Color(uiColor: .systemGroupedBackground))
     }

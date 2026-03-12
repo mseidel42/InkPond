@@ -61,6 +61,8 @@ struct DocumentEditorView: View {
     @State var showingImportConfiguration = false
     @State var showingZipExportWarning = false
     @State var focusCoordinator = EditorFocusCoordinator()
+    @State var editorViewState = EditorViewState()
+    @State var pendingCursorJump: Int?
     @State var pendingManualCompileFeedback = false
     @State var cachedBibEntries: [(key: String, type: String)] = []
     @State var cachedExternalLabels: [(name: String, kind: String)] = []
@@ -68,6 +70,13 @@ struct DocumentEditorView: View {
 
     var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
     var isEditingEntryFile: Bool { currentFileName == document.entryFileName }
+    var compiledPreviewCacheDescriptor: CompiledPreviewCacheDescriptor {
+        CompiledPreviewCacheDescriptor(
+            projectID: document.projectID,
+            documentTitle: document.title,
+            entryFileName: document.entryFileName
+        )
+    }
 
     var completionFontFamilies: [String] {
         FontManager.completionFamilyNames(from: compileFontPaths)

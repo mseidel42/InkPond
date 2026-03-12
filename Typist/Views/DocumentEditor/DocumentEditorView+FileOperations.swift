@@ -157,7 +157,13 @@ extension DocumentEditorView {
     func compilePreviewNow() {
         flushPendingSave()
         pendingManualCompileFeedback = true
-        compiler.compileNow(source: entrySource, fontPaths: compileFontPaths, rootDir: rootDir)
+        compiler.compileNow(
+            source: entrySource,
+            fontPaths: compileFontPaths,
+            rootDir: rootDir,
+            previewCachePolicy: .bypassCache,
+            previewCacheDescriptor: compiledPreviewCacheDescriptor
+        )
     }
 
     func clearCachesAndRecompile() {
@@ -177,7 +183,13 @@ extension DocumentEditorView {
                     try PreviewPackageCacheStore().clearAll()
                 }.value
                 await MainActor.run {
-                    compiler.compileNow(source: source, fontPaths: fontPaths, rootDir: rootDirectory)
+                    compiler.compileNow(
+                        source: source,
+                        fontPaths: fontPaths,
+                        rootDir: rootDirectory,
+                        previewCachePolicy: .bypassCache,
+                        previewCacheDescriptor: compiledPreviewCacheDescriptor
+                    )
                 }
             } catch {
                 await MainActor.run {
@@ -245,5 +257,74 @@ extension DocumentEditorView {
         } else {
             showingZipExportWarning = true
         }
+    }
+
+    // MARK: - Error Navigation
+
+    /// Map a file path from a Typst error message to the actual project file name.
+    /// Typst FFI internally names the entry source "main.typ" regardless of the
+    /// real file name, so we map it back to the document's entry file.
+    private func resolveErrorFileName(_ path: String) -> String {
+        if path == "main.typ" && document.entryFileName != "main.typ" {
+            return document.entryFileName
+        }
+        return path
+    }
+
+    /// Compute the set of editor lines that have compilation errors (1-based).
+    /// Only returns lines if the error is in the file currently being edited.
+    var compilationErrorLines: Set<Int> {
+        guard let message = compiler.errorMessage else { return [] }
+        var result = Set<Int>()
+        let lines = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines)
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("("), trimmed.hasSuffix(")") else { continue }
+            let candidate = String(trimmed.dropFirst().dropLast())
+            let parts = candidate.split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count >= 3,
+                  let lineNum = Int(parts[parts.count - 2]),
+                  lineNum > 0 else { continue }
+            let path = parts.dropLast(2).joined(separator: ":")
+            guard !path.isEmpty else { continue }
+            let resolved = resolveErrorFileName(path)
+            if resolved == currentFileName {
+                result.insert(lineNum)
+            }
+        }
+        return result
+    }
+
+    /// Navigate the editor to a compilation error location.
+    func navigateToError(file: String, line: Int, column: Int) {
+        let resolvedFile = resolveErrorFileName(file)
+
+        // Switch to editor tab on iPhone
+        if sizeClass != .regular {
+            selectedTab = 0
+        }
+
+        // Open the file if it's not already open
+        if resolvedFile != currentFileName {
+            openFile(named: resolvedFile)
+        }
+
+        // Compute UTF-16 offset from line:column
+        let offset = utf16Offset(forLine: line, column: column, in: editorText)
+        pendingCursorJump = offset
+        InteractionFeedback.impact(.light)
+    }
+
+    private func utf16Offset(forLine line: Int, column: Int, in text: String) -> Int {
+        let lines = text.components(separatedBy: "\n")
+        var offset = 0
+        for i in 0..<min(line - 1, lines.count) {
+            offset += (lines[i] as NSString).length + 1 // +1 for \n
+        }
+        if line - 1 < lines.count {
+            offset += min(max(column - 1, 0), (lines[line - 1] as NSString).length)
+        }
+        return offset
     }
 }

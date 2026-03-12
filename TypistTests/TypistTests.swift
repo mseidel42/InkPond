@@ -426,6 +426,213 @@ struct TypistTests {
         #expect(probe.maxConcurrent == 1)
     }
 
+    @MainActor
+    @Test func typstCompilerUsesCompiledPreviewCacheWhenFingerprintMatches() async throws {
+        let doc = makeDocument(projectID: "compiler-cache-hit")
+        let cacheRoot = makeTempDirectory()
+        let source = "= Cached"
+        defer {
+            try? FileManager.default.removeItem(at: cacheRoot)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+        }
+
+        try ProjectFileManager.createInitialProject(for: doc)
+        try ProjectFileManager.writeTypFile(named: doc.entryFileName, content: source, for: doc)
+
+        let descriptor = CompiledPreviewCacheDescriptor(
+            projectID: doc.projectID,
+            documentTitle: doc.title,
+            entryFileName: doc.entryFileName
+        )
+        let store = CompiledPreviewCacheStore(rootURL: cacheRoot)
+        try store.save(
+            pdfData: Data("cached-pdf".utf8),
+            for: makeCompiledPreviewCacheInput(for: doc, source: source)
+        )
+
+        let compileCounter = LockedCounter()
+        let compiler = TypstCompiler(
+            compileWorker: { _, _, _ in
+                compileCounter.increment()
+                return .success(Data("compiled".utf8))
+            },
+            documentBuilder: { _ in PDFDocument() },
+            sleep: { _ in },
+            previewCacheStore: store,
+            typstVersionProvider: { "1.0" }
+        )
+
+        compiler.compileNow(
+            source: source,
+            fontPaths: [],
+            rootDir: ProjectFileManager.projectDirectory(for: doc).path,
+            previewCachePolicy: .useCacheIfValid,
+            previewCacheDescriptor: descriptor
+        )
+
+        await waitUntil {
+            compiler.compiledOnce && !compiler.isCompiling
+        }
+
+        #expect(compileCounter.value == 0)
+        #expect(compiler.pdfData == Data("cached-pdf".utf8))
+    }
+
+    @MainActor
+    @Test func typstCompilerMissesCacheWhenSourceChanges() async throws {
+        let doc = makeDocument(projectID: "compiler-cache-miss")
+        let cacheRoot = makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: cacheRoot)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+        }
+
+        try ProjectFileManager.createInitialProject(for: doc)
+        try ProjectFileManager.writeTypFile(named: doc.entryFileName, content: "= Original", for: doc)
+
+        let descriptor = CompiledPreviewCacheDescriptor(
+            projectID: doc.projectID,
+            documentTitle: doc.title,
+            entryFileName: doc.entryFileName
+        )
+        let store = CompiledPreviewCacheStore(rootURL: cacheRoot)
+        try store.save(
+            pdfData: Data("cached-pdf".utf8),
+            for: makeCompiledPreviewCacheInput(for: doc, source: "= Original")
+        )
+
+        let compileCounter = LockedCounter()
+        let compiler = TypstCompiler(
+            compileWorker: { source, _, _ in
+                compileCounter.increment()
+                return .success(Data(source.utf8))
+            },
+            documentBuilder: { _ in PDFDocument() },
+            sleep: { _ in },
+            previewCacheStore: store,
+            typstVersionProvider: { "1.0" }
+        )
+
+        compiler.compileNow(
+            source: "= Updated",
+            fontPaths: [],
+            rootDir: ProjectFileManager.projectDirectory(for: doc).path,
+            previewCachePolicy: .useCacheIfValid,
+            previewCacheDescriptor: descriptor
+        )
+
+        await waitUntil {
+            compiler.compiledOnce && !compiler.isCompiling
+        }
+
+        #expect(compileCounter.value == 1)
+        #expect(compiler.pdfData == Data("= Updated".utf8))
+    }
+
+    @MainActor
+    @Test func typstCompilerCompileNowBypassesCacheAndOverwritesStoredPreview() async throws {
+        let doc = makeDocument(projectID: "compiler-bypass")
+        let cacheRoot = makeTempDirectory()
+        let source = "= Fresh"
+        defer {
+            try? FileManager.default.removeItem(at: cacheRoot)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+        }
+
+        try ProjectFileManager.createInitialProject(for: doc)
+        try ProjectFileManager.writeTypFile(named: doc.entryFileName, content: source, for: doc)
+
+        let descriptor = CompiledPreviewCacheDescriptor(
+            projectID: doc.projectID,
+            documentTitle: doc.title,
+            entryFileName: doc.entryFileName
+        )
+        let store = CompiledPreviewCacheStore(rootURL: cacheRoot)
+        try store.save(
+            pdfData: Data("stale".utf8),
+            for: makeCompiledPreviewCacheInput(for: doc, source: source)
+        )
+
+        let compileCounter = LockedCounter()
+        let compiler = TypstCompiler(
+            compileWorker: { source, _, _ in
+                compileCounter.increment()
+                return .success(Data(source.utf8))
+            },
+            documentBuilder: { _ in PDFDocument() },
+            sleep: { _ in },
+            previewCacheStore: store,
+            typstVersionProvider: { "1.0" }
+        )
+
+        compiler.compileNow(
+            source: source,
+            fontPaths: [],
+            rootDir: ProjectFileManager.projectDirectory(for: doc).path,
+            previewCachePolicy: .bypassCache,
+            previewCacheDescriptor: descriptor
+        )
+
+        await waitUntil {
+            compiler.compiledOnce && !compiler.isCompiling
+        }
+
+        #expect(compileCounter.value == 1)
+        #expect(compiler.pdfData == Data(source.utf8))
+        let cachedData = try store.loadIfValid(for: makeCompiledPreviewCacheInput(for: doc, source: source))
+        #expect(cachedData == Data(source.utf8))
+    }
+
+    @MainActor
+    @Test func typstCompilerFailureDoesNotOverwriteExistingCompiledPreviewCache() async throws {
+        let doc = makeDocument(projectID: "compiler-failure")
+        let cacheRoot = makeTempDirectory()
+        let source = "= Stable"
+        defer {
+            try? FileManager.default.removeItem(at: cacheRoot)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+        }
+
+        try ProjectFileManager.createInitialProject(for: doc)
+        try ProjectFileManager.writeTypFile(named: doc.entryFileName, content: source, for: doc)
+
+        let descriptor = CompiledPreviewCacheDescriptor(
+            projectID: doc.projectID,
+            documentTitle: doc.title,
+            entryFileName: doc.entryFileName
+        )
+        let store = CompiledPreviewCacheStore(rootURL: cacheRoot)
+        try store.save(
+            pdfData: Data("stable-cache".utf8),
+            for: makeCompiledPreviewCacheInput(for: doc, source: source)
+        )
+
+        let compiler = TypstCompiler(
+            compileWorker: { _, _, _ in
+                .failure(.compilationFailed("boom"))
+            },
+            documentBuilder: { _ in PDFDocument() },
+            sleep: { _ in },
+            previewCacheStore: store,
+            typstVersionProvider: { "1.0" }
+        )
+
+        compiler.compileNow(
+            source: source,
+            fontPaths: [],
+            rootDir: ProjectFileManager.projectDirectory(for: doc).path,
+            previewCachePolicy: .bypassCache,
+            previewCacheDescriptor: descriptor
+        )
+
+        await waitUntil {
+            !compiler.isCompiling && compiler.errorMessage != nil
+        }
+
+        let cachedData = try store.loadIfValid(for: makeCompiledPreviewCacheInput(for: doc, source: source))
+        #expect(cachedData == Data("stable-cache".utf8))
+    }
+
     @Test func appFontLibraryImportsDeletesAndReloadsCustomFonts() throws {
         let appRoot = makeTempDirectory()
         let sourceRoot = makeTempDirectory()
@@ -650,12 +857,195 @@ struct TypistTests {
         #expect(contents.isEmpty)
     }
 
+    @Test func compiledPreviewCacheSnapshotListsDocumentsAndTotalSize() throws {
+        let root = makeTempDirectory()
+        let docA = makeDocument(projectID: "cached-a")
+        let docB = makeDocument(projectID: "cached-b")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? ProjectFileManager.deleteProjectDirectory(for: docA)
+            try? ProjectFileManager.deleteProjectDirectory(for: docB)
+        }
+
+        try ProjectFileManager.createInitialProject(for: docA)
+        try ProjectFileManager.createInitialProject(for: docB)
+        try ProjectFileManager.writeTypFile(named: docA.entryFileName, content: "= A", for: docA)
+        try ProjectFileManager.writeTypFile(named: docB.entryFileName, content: "= B", for: docB)
+
+        let store = CompiledPreviewCacheStore(rootURL: root)
+        try store.save(
+            pdfData: Data("alpha".utf8),
+            for: makeCompiledPreviewCacheInput(for: docA, source: "= A")
+        )
+        try store.save(
+            pdfData: Data("beta12".utf8),
+            for: makeCompiledPreviewCacheInput(for: docB, source: "= B")
+        )
+
+        let snapshot = try store.snapshot()
+
+        #expect(Set(snapshot.entries.map(\.projectID)) == ["cached-a", "cached-b"])
+        #expect(snapshot.totalSizeInBytes == 11)
+    }
+
+    @Test func compiledPreviewCacheRemoveDeletesSingleDocumentCache() throws {
+        let root = makeTempDirectory()
+        let doc = makeDocument(projectID: "cached-remove")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+        }
+
+        try ProjectFileManager.createInitialProject(for: doc)
+        try ProjectFileManager.writeTypFile(named: doc.entryFileName, content: "= Remove", for: doc)
+
+        let store = CompiledPreviewCacheStore(rootURL: root)
+        try store.save(
+            pdfData: Data("pdf".utf8),
+            for: makeCompiledPreviewCacheInput(for: doc, source: "= Remove")
+        )
+
+        let entry = try #require(store.snapshot().entries.first)
+        try store.remove(entry)
+
+        #expect(try store.snapshot().entries.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent(doc.projectID).path))
+    }
+
+    @Test func compiledPreviewCacheClearAllLeavesEmptyRootDirectory() throws {
+        let root = makeTempDirectory()
+        let doc = makeDocument(projectID: "cached-clear")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+        }
+
+        try ProjectFileManager.createInitialProject(for: doc)
+        try ProjectFileManager.writeTypFile(named: doc.entryFileName, content: "= Clear", for: doc)
+
+        let store = CompiledPreviewCacheStore(rootURL: root)
+        try store.save(
+            pdfData: Data("pdf".utf8),
+            for: makeCompiledPreviewCacheInput(for: doc, source: "= Clear")
+        )
+
+        try store.clearAll()
+
+        #expect(FileManager.default.fileExists(atPath: root.path))
+        let contents = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        #expect(contents.isEmpty)
+    }
+
+    @Test func compiledPreviewCacheMoveUpdatesProjectIDAndTitle() throws {
+        let root = makeTempDirectory()
+        let doc = makeDocument(projectID: "cached-old")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+        }
+
+        try ProjectFileManager.createInitialProject(for: doc)
+        try ProjectFileManager.writeTypFile(named: doc.entryFileName, content: "= Move", for: doc)
+
+        let store = CompiledPreviewCacheStore(rootURL: root)
+        try store.save(
+            pdfData: Data("pdf".utf8),
+            for: makeCompiledPreviewCacheInput(for: doc, source: "= Move")
+        )
+
+        try store.moveCache(from: "cached-old", to: "cached-new", documentTitle: "Renamed")
+
+        let entry = try #require(store.snapshot().entries.first)
+        #expect(entry.projectID == "cached-new")
+        #expect(entry.documentTitle == "Renamed")
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("cached-old").path))
+    }
+
+    @Test func compiledPreviewCacheFingerprintChangesWhenInputsChange() throws {
+        let doc = makeDocument(projectID: "cached-fingerprint")
+        let extraRoot = makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: extraRoot)
+            try? ProjectFileManager.deleteProjectDirectory(for: doc)
+        }
+
+        try ProjectFileManager.createInitialProject(for: doc)
+        try ProjectFileManager.writeTypFile(named: doc.entryFileName, content: "= Fingerprint", for: doc)
+
+        let fontURL = extraRoot.appendingPathComponent("Font.otf")
+        try Data("font-data".utf8).write(to: fontURL)
+        let assetURL = ProjectFileManager.projectDirectory(for: doc).appendingPathComponent("images/cover.png")
+        try Data([0x01]).write(to: assetURL)
+
+        let store = CompiledPreviewCacheStore(rootURL: makeTempDirectory())
+        defer { try? FileManager.default.removeItem(at: store.rootURL!) }
+
+        let base = try store.inputFingerprint(for: makeCompiledPreviewCacheInput(
+            for: doc,
+            source: "= Fingerprint",
+            fontPaths: [fontURL.path],
+            typstVersion: "1.0"
+        ))
+
+        let sourceChanged = try store.inputFingerprint(for: makeCompiledPreviewCacheInput(
+            for: doc,
+            source: "= Fingerprint changed",
+            fontPaths: [fontURL.path],
+            typstVersion: "1.0"
+        ))
+        #expect(sourceChanged != base)
+
+        try Data([0x01, 0x02]).write(to: assetURL, options: .atomic)
+        let projectChanged = try store.inputFingerprint(for: makeCompiledPreviewCacheInput(
+            for: doc,
+            source: "= Fingerprint",
+            fontPaths: [fontURL.path],
+            typstVersion: "1.0"
+        ))
+        #expect(projectChanged != base)
+
+        let fontChanged = try store.inputFingerprint(for: makeCompiledPreviewCacheInput(
+            for: doc,
+            source: "= Fingerprint",
+            fontPaths: [],
+            typstVersion: "1.0"
+        ))
+        #expect(fontChanged != projectChanged)
+
+        let versionChanged = try store.inputFingerprint(for: makeCompiledPreviewCacheInput(
+            for: doc,
+            source: "= Fingerprint",
+            fontPaths: [fontURL.path],
+            typstVersion: "2.0"
+        ))
+        #expect(versionChanged != projectChanged)
+    }
+
     private func makeDocument(projectID: String) -> TypistDocument {
         let doc = TypistDocument(title: "Test", content: "")
         doc.projectID = projectID
         doc.entryFileName = "main.typ"
         doc.imageDirectoryName = "images"
         return doc
+    }
+
+    private func makeCompiledPreviewCacheInput(
+        for document: TypistDocument,
+        source: String,
+        fontPaths: [String] = [],
+        typstVersion: String? = "1.0"
+    ) -> CompiledPreviewCacheInput {
+        CompiledPreviewCacheInput(
+            descriptor: CompiledPreviewCacheDescriptor(
+                projectID: document.projectID,
+                documentTitle: document.title,
+                entryFileName: document.entryFileName
+            ),
+            source: source,
+            fontPaths: fontPaths,
+            rootDir: ProjectFileManager.projectDirectory(for: document).path,
+            typstVersion: typstVersion
+        )
     }
 
     private func makeTempDirectory() -> URL {

@@ -316,6 +316,14 @@ final class TypstTextView: UITextView {
         scheduleHighlighting(.immediate)
     }
 
+    // MARK: - Error Lines
+
+    func setErrorLines(_ lines: Set<Int>) {
+        guard lines != highlighter.errorLines else { return }
+        highlighter.errorLines = lines
+        scheduleHighlighting(.immediate)
+    }
+
     // MARK: - Highlighting
 
     func scheduleHighlighting(_ mode: HighlightMode, textChanged: Bool = false) {

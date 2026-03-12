@@ -56,6 +56,7 @@ extension DocumentListView {
         let existingFolders = ProjectFileManager.trackedFolderNames()
 
         for document in documents where !existingFolders.contains(document.projectID) {
+            try? CompiledPreviewCacheStore().remove(projectID: document.projectID)
             if selectedDocument == document {
                 selectedDocument = nil
             }

@@ -8,11 +8,52 @@
 
 import SwiftUI
 import PDFKit
+import NaturalLanguage
 
 private struct CompilationErrorPresentation {
     let summary: String
     let detail: String
     let location: String?
+}
+
+private struct PreviewStatistics {
+    let pageCount: Int
+    let wordCount: Int
+    let characterCount: Int
+}
+
+private struct PreviewStatisticItem: Identifiable {
+    let title: String
+    let value: String
+
+    var id: String { title }
+}
+
+private extension Unicode.Scalar {
+    var isCJKUnifiedIdeograph: Bool {
+        switch value {
+        case 0x3400...0x4DBF,
+             0x4E00...0x9FFF,
+             0xF900...0xFAFF,
+             0x20000...0x2A6DF,
+             0x2A700...0x2B73F,
+             0x2B740...0x2B81F,
+             0x2B820...0x2CEAF,
+             0x2CEB0...0x2EBEF,
+             0x30000...0x3134F:
+            true
+        default:
+            false
+        }
+    }
+}
+
+private extension Character {
+    var countsTowardPreviewCharacter: Bool {
+        !unicodeScalars.allSatisfy { scalar in
+            CharacterSet.whitespacesAndNewlines.contains(scalar)
+        }
+    }
 }
 
 private extension View {
@@ -192,9 +233,31 @@ struct PreviewPane: View {
     var source: String
     var fontPaths: [String] = []
     var rootDir: String?
+    var previewCacheDescriptor: CompiledPreviewCacheDescriptor? = nil
     var compileToken: UUID = UUID()
     var focusCoordinator: EditorFocusCoordinator? = nil
+    /// The actual entry file name — Typst FFI internally reports it as "main.typ".
+    var entryFileName: String = "main.typ"
+    var onGoToError: ((_ file: String, _ line: Int, _ column: Int) -> Void)? = nil
+    @ScaledMetric(relativeTo: .caption2) private var previewStatsCardWidth = 126
+    @ScaledMetric(relativeTo: .caption2) private var previewStatsMinHeight = 34
+    @ScaledMetric(relativeTo: .caption2) private var previewStatsHorizontalPadding = 8
+    @ScaledMetric(relativeTo: .caption2) private var previewStatsVerticalPadding = 7
     @State private var isShowingErrorDetails = false
+    @State private var isShowingStatsDetails = false
+
+    private var previewStatistics: PreviewStatistics? {
+        guard let pdf = compiler.pdfDocument else { return nil }
+        return PreviewStatistics(
+            pageCount: max(pdf.pageCount, 0),
+            wordCount: source.previewWordCount,
+            characterCount: source.previewCharacterCount
+        )
+    }
+
+    private var prefersChineseStatistics: Bool {
+        source.containsCJKIdeographs
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -225,11 +288,23 @@ struct PreviewPane: View {
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
+
+            if let stats = previewStatistics {
+                previewStatisticsButton(stats)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .onChange(of: source, initial: true) { compileIfNeeded() }
         .onChange(of: fontPaths) { compileIfNeeded() }
         .onChange(of: rootDir) { compileIfNeeded() }
         .onChange(of: compileToken) { compileIfNeeded() }
+        .onChange(of: compiler.pdfDocument != nil) { _, hasPreview in
+            guard !hasPreview else { return }
+            isShowingStatsDetails = false
+        }
         .onChange(of: compiler.errorMessage, initial: true) { _, newValue in
             let shouldExpand = (newValue != nil) && (compiler.pdfDocument == nil)
             guard shouldExpand != isShowingErrorDetails else { return }
@@ -251,7 +326,13 @@ struct PreviewPane: View {
             compiler.clearPreview()
             return
         }
-        compiler.compile(source: source, fontPaths: fontPaths, rootDir: rootDir)
+        compiler.compile(
+            source: source,
+            fontPaths: fontPaths,
+            rootDir: rootDir,
+            previewCachePolicy: .useCacheIfValid,
+            previewCacheDescriptor: previewCacheDescriptor
+        )
     }
 
     // MARK: Sub-views
@@ -280,6 +361,101 @@ struct PreviewPane: View {
         .accessibilityIdentifier("editor.preview.placeholder")
     }
 
+    private func previewStatisticsButton(_ stats: PreviewStatistics) -> some View {
+        let pageText = L10n.previewStatsPages(stats.pageCount)
+        let cardCornerRadius: CGFloat = 18
+        let expandedItems: [PreviewStatisticItem]
+
+        if prefersChineseStatistics {
+            expandedItems = [
+                PreviewStatisticItem(title: L10n.tr("preview.stats.characters.label"), value: "\(stats.characterCount)"),
+                PreviewStatisticItem(title: L10n.tr("preview.stats.tokens.label"), value: "\(stats.wordCount)")
+            ]
+        } else {
+            expandedItems = [
+                PreviewStatisticItem(title: L10n.tr("preview.stats.words.label"), value: "\(stats.wordCount)"),
+                PreviewStatisticItem(title: L10n.tr("preview.stats.characters.label"), value: "\(stats.characterCount)")
+            ]
+        }
+
+        let accessibilitySecondaryText = prefersChineseStatistics
+            ? L10n.previewStatsTokens(stats.wordCount)
+            : L10n.previewStatsWords(stats.wordCount)
+        let accessibilityCharacterText = L10n.previewStatsCharacters(stats.characterCount)
+
+        return Button {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                isShowingStatsDetails.toggle()
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: isShowingStatsDetails ? 6 : 0) {
+                HStack(spacing: 6) {
+                    Label(pageText, systemImage: "doc.text")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: isShowingStatsDetails ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                if isShowingStatsDetails {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(expandedItems) { item in
+                            HStack(spacing: 8) {
+                                Text(item.title)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.95)
+
+                                Spacer(minLength: 6)
+
+                                Text(item.value)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .offset(y: 6).combined(with: .opacity),
+                            removal: .opacity
+                        )
+                    )
+                }
+            }
+            .frame(minHeight: previewStatsMinHeight, alignment: .leading)
+            .frame(width: previewStatsCardWidth, alignment: .leading)
+            .padding(.horizontal, previewStatsHorizontalPadding)
+            .padding(.vertical, previewStatsVerticalPadding)
+            .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .systemFloatingSurface(cornerRadius: cardCornerRadius)
+        .shadow(color: Color.black.opacity(0.05), radius: 6, y: 2)
+        .contentShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.a11yPreviewLabel)
+        .accessibilityValue(
+            isShowingStatsDetails
+                ? L10n.previewStatsExpandedValue(
+                    pages: pageText,
+                    words: accessibilitySecondaryText,
+                    characters: accessibilityCharacterText
+                )
+                : pageText
+        )
+        .accessibilityHint(isShowingStatsDetails ? L10n.previewStatsHintExpanded : L10n.previewStatsHintCollapsed)
+        .accessibilityIdentifier("editor.preview.stats")
+    }
+
     private func errorToast(_ message: String) -> some View {
         let presentation = errorPresentation(from: message)
         let showsDetailToggle =
@@ -304,18 +480,31 @@ struct PreviewPane: View {
                         .lineLimit(isShowingErrorDetails ? nil : 2)
 
                     if let location = presentation.location {
-                        HStack(spacing: 6) {
-                            Image(systemName: "scope")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text(location)
-                                .font(.system(.caption, design: .monospaced))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                        Button {
+                            if let parsed = firstErrorLocation(from: message) {
+                                onGoToError?(parsed.file, parsed.line, parsed.column)
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "scope")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text(location)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                if onGoToError != nil {
+                                    Image(systemName: "arrow.right.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.red.opacity(0.7))
+                                }
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
                         }
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
+                        .buttonStyle(.plain)
+                        .disabled(onGoToError == nil)
                     }
                 }
 
@@ -379,20 +568,69 @@ struct PreviewPane: View {
         )
     }
 
+    private struct ParsedErrorLocation {
+        let file: String
+        let line: Int
+        let column: Int
+        var displayText: String { "\(file):\(line):\(column)" }
+    }
+
     private func parsedLocation(from line: String) -> String? {
+        parseErrorLocation(from: line)?.displayText
+    }
+
+    private func parseErrorLocation(from line: String) -> ParsedErrorLocation? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("("), trimmed.hasSuffix(")") else { return nil }
         let candidate = String(trimmed.dropFirst().dropLast())
         let parts = candidate.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count >= 3,
-              let line = Int(parts[parts.count - 2]),
+              let lineNum = Int(parts[parts.count - 2]),
               let column = Int(parts[parts.count - 1]),
-              line > 0,
+              lineNum > 0,
               column > 0 else {
             return nil
         }
 
-        let path = parts.dropLast(2).joined(separator: ":")
-        return path.isEmpty ? nil : candidate
+        var path = parts.dropLast(2).joined(separator: ":")
+        guard !path.isEmpty else { return nil }
+        // Typst FFI names the entry source "main.typ" internally — map to actual name.
+        if path == "main.typ" && entryFileName != "main.typ" {
+            path = entryFileName
+        }
+        return ParsedErrorLocation(file: path, line: lineNum, column: column)
+    }
+
+    private func firstErrorLocation(from message: String) -> ParsedErrorLocation? {
+        let lines = normalizedErrorMessage(message).components(separatedBy: .newlines)
+        return lines.lazy.compactMap(parseErrorLocation(from:)).first
+    }
+}
+
+private extension String {
+    var containsCJKIdeographs: Bool {
+        unicodeScalars.contains { $0.isCJKUnifiedIdeograph }
+    }
+
+    var previewWordCount: Int {
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = self
+
+        var count = 0
+        tokenizer.enumerateTokens(in: startIndex..<endIndex) { range, _ in
+            if self[range].contains(where: { !$0.isWhitespace }) {
+                count += 1
+            }
+            return true
+        }
+        return count
+    }
+
+    var previewCharacterCount: Int {
+        reduce(into: 0) { count, character in
+            if character.countsTowardPreviewCharacter {
+                count += 1
+            }
+        }
     }
 }
