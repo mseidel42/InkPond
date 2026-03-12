@@ -316,7 +316,7 @@ extension DocumentEditorView {
         InteractionFeedback.impact(.light)
     }
 
-    private func utf16Offset(forLine line: Int, column: Int, in text: String) -> Int {
+    func utf16Offset(forLine line: Int, column: Int, in text: String) -> Int {
         let lines = text.components(separatedBy: "\n")
         var offset = 0
         for i in 0..<min(line - 1, lines.count) {

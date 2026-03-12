@@ -7,10 +7,17 @@
 //
 
 import Foundation
+import Observation
 
 struct PreviewScrollTarget: Equatable, Sendable {
     let page: Int
     let yPoints: Float
+    let xPoints: Float
+}
+
+struct EditorScrollTarget: Equatable, Sendable {
+    let line: Int
+    let column: Int
 }
 
 @MainActor @Observable
@@ -29,17 +36,18 @@ final class SyncCoordinator {
     var previewScrollTarget: PreviewScrollTarget?
 
     /// Set by preview → editor sync; consumed by DocumentEditorView.
-    /// 1-based line number.
-    var editorScrollTarget: Int?
+    var editorScrollTarget: EditorScrollTarget?
 
     var isSyncEnabled: Bool = true
+    /// Temporary kill switch for editor-driven preview jumps.
+    var isEditorToPreviewSyncEnabled: Bool = false
 
     /// Attempt to begin a sync in the given direction.
     /// Returns `true` if sync is allowed, `false` if blocked by cooldown or opposite direction.
     func beginSync(_ direction: Direction) -> Bool {
         guard isSyncEnabled else { return false }
 
-        let now = ContinuousClock.now
+        let now = ContinuousClock().now
         if activeDirection != .none && activeDirection != direction {
             if now - lastSyncTime < cooldown {
                 return false

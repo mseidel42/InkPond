@@ -7,8 +7,9 @@
 
 import Foundation
 import PDFKit
-import Testing
 import SwiftUI
+import Testing
+import UIKit
 @testable import Typist
 
 struct TypistTests {
@@ -366,6 +367,70 @@ struct TypistTests {
             counter.value == 1
         }
         #expect(counter.value == 1)
+    }
+
+    @Test func jumpHighlightTimelineFadesInAndOut() {
+        #expect(JumpHighlightTimeline.opacity(at: -0.01) == 0)
+        #expect(JumpHighlightTimeline.opacity(at: 0) == 0)
+
+        let midFadeIn = JumpHighlightTimeline.opacity(at: JumpHighlightTimeline.fadeInDuration / 2)
+        #expect(midFadeIn > 0)
+        #expect(midFadeIn < 1)
+
+        let holdSample = JumpHighlightTimeline.opacity(
+            at: JumpHighlightTimeline.fadeInDuration + JumpHighlightTimeline.holdDuration / 2
+        )
+        #expect(holdSample == 1)
+
+        let midFadeOut = JumpHighlightTimeline.opacity(
+            at: JumpHighlightTimeline.fadeInDuration
+                + JumpHighlightTimeline.holdDuration
+                + JumpHighlightTimeline.fadeOutDuration / 2
+        )
+        #expect(midFadeOut > 0)
+        #expect(midFadeOut < 1)
+
+        #expect(JumpHighlightTimeline.opacity(at: JumpHighlightTimeline.totalDuration + 0.01) == 0)
+    }
+
+    @Test func syntaxHighlighterRefreshJumpHighlightRestoresErrorBackground() {
+        let textStorage = NSTextStorage(string: "ok\n  broken\n")
+        let highlighter = SyntaxHighlighter()
+        highlighter.errorLines = [2]
+        highlighter.highlight(textStorage)
+
+        let nsText = textStorage.string as NSString
+        let firstLineRange = nsText.range(of: "ok")
+        let errorRange = nsText.range(of: "broken")
+        let errorColorBefore = textStorage.attribute(.backgroundColor, at: errorRange.location, effectiveRange: nil) as? UIColor
+
+        #expect(abs((errorColorBefore?.cgColor.alpha ?? 0) - 0.08) < 0.001)
+
+        highlighter.refreshJumpHighlight(
+            in: textStorage,
+            previousLine: nil,
+            line: 1,
+            opacity: 1
+        )
+
+        let jumpColor = textStorage.attribute(.backgroundColor, at: firstLineRange.location, effectiveRange: nil) as? UIColor
+        let errorColorDuringJump = textStorage.attribute(.backgroundColor, at: errorRange.location, effectiveRange: nil) as? UIColor
+
+        #expect(abs((jumpColor?.cgColor.alpha ?? 0) - 0.14) < 0.001)
+        #expect(abs((errorColorDuringJump?.cgColor.alpha ?? 0) - 0.08) < 0.001)
+
+        highlighter.refreshJumpHighlight(
+            in: textStorage,
+            previousLine: 1,
+            line: nil,
+            opacity: 0
+        )
+
+        let clearedJumpColor = textStorage.attribute(.backgroundColor, at: firstLineRange.location, effectiveRange: nil) as? UIColor
+        let restoredErrorColor = textStorage.attribute(.backgroundColor, at: errorRange.location, effectiveRange: nil) as? UIColor
+
+        #expect(clearedJumpColor == nil)
+        #expect(abs((restoredErrorColor?.cgColor.alpha ?? 0) - 0.08) < 0.001)
     }
 
     @MainActor

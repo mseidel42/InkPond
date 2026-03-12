@@ -83,17 +83,24 @@ private struct PDFPreviewScrollState {
 
 final class PDFContainerView: UIView {
     fileprivate let pdfView = PassivePDFView()
+    private let syncMarkerView = PreviewSyncMarkerView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
 
         addSubview(pdfView)
+        addSubview(syncMarkerView)
         pdfView.translatesAutoresizingMaskIntoConstraints = false
+        syncMarkerView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             pdfView.leadingAnchor.constraint(equalTo: leadingAnchor),
             pdfView.trailingAnchor.constraint(equalTo: trailingAnchor),
             pdfView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
-            pdfView.bottomAnchor.constraint(equalTo: bottomAnchor)
+            pdfView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            syncMarkerView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            syncMarkerView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            syncMarkerView.topAnchor.constraint(equalTo: topAnchor),
+            syncMarkerView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
 
@@ -198,6 +205,60 @@ final class PDFContainerView: UIView {
     }
 }
 
+private final class PreviewSyncMarkerView: UIView {
+    private let barView = UIView()
+    private let dotView = UIView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        alpha = 0
+
+        barView.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.3)
+        barView.layer.cornerRadius = 1.5
+        addSubview(barView)
+
+        dotView.backgroundColor = UIColor.systemBlue
+        dotView.layer.cornerRadius = 6
+        dotView.layer.shadowColor = UIColor.systemBlue.cgColor
+        dotView.layer.shadowOpacity = 0.25
+        dotView.layer.shadowRadius = 8
+        dotView.layer.shadowOffset = .zero
+        addSubview(dotView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func show(at point: CGPoint) {
+        let clampedY = min(max(point.y, 24), bounds.height - 24)
+        let clampedX = min(max(point.x, 24), bounds.width - 24)
+
+        barView.frame = CGRect(x: 16, y: clampedY - 1.5, width: max(bounds.width - 32, 0), height: 3)
+        dotView.frame = CGRect(x: clampedX - 6, y: clampedY - 6, width: 12, height: 12)
+
+        layer.removeAllAnimations()
+        barView.layer.removeAllAnimations()
+        dotView.layer.removeAllAnimations()
+        alpha = 1
+        barView.transform = .identity
+        dotView.transform = .identity
+
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut]) {
+            self.barView.transform = CGAffineTransform(scaleX: 1, y: 1.35)
+            self.dotView.transform = CGAffineTransform(scaleX: 1.35, y: 1.35)
+        } completion: { _ in
+            UIView.animate(withDuration: 0.55, delay: 0.55, options: [.curveEaseIn]) {
+                self.alpha = 0
+                self.barView.transform = .identity
+                self.dotView.transform = .identity
+            }
+        }
+    }
+}
+
 struct PDFKitView: UIViewRepresentable {
     let document: PDFDocument
     let focusCoordinator: EditorFocusCoordinator?
@@ -223,7 +284,7 @@ struct PDFKitView: UIViewRepresentable {
         container.accessibilityValue = L10n.a11yPreviewValueReady
 
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
-        tapGesture.numberOfTapsRequired = 2
+        tapGesture.numberOfTapsRequired = 1
         pdfView.addGestureRecognizer(tapGesture)
         context.coordinator.pdfView = pdfView
 
@@ -238,13 +299,21 @@ struct PDFKitView: UIViewRepresentable {
         container.accessibilityValue = L10n.a11yPreviewValueReady
         container.reloadDocument(document, focusCoordinator: focusCoordinator)
 
-        if let target = scrollTarget {
-            container.scrollToPosition(page: target.page, yPoints: target.yPoints)
+        if context.coordinator.lastDocument !== document {
+            context.coordinator.lastDocument = document
+            context.coordinator.lastAppliedScrollTarget = nil
+        }
+
+        if let target = scrollTarget, context.coordinator.lastAppliedScrollTarget != target {
+            container.scrollToPosition(page: target.page, yPoints: target.yPoints, xPoints: target.xPoints)
+            context.coordinator.lastAppliedScrollTarget = target
         }
     }
 
     final class Coordinator: NSObject {
         weak var pdfView: PDFView?
+        weak var lastDocument: PDFDocument?
+        var lastAppliedScrollTarget: PreviewScrollTarget?
         var onTapLocation: ((_ page: Int, _ yPoints: Float) -> Void)?
 
         init(onTapLocation: ((_ page: Int, _ yPoints: Float) -> Void)?) {
@@ -269,7 +338,7 @@ struct PDFKitView: UIViewRepresentable {
 }
 
 extension PDFContainerView {
-    func scrollToPosition(page: Int, yPoints: Float) {
+    func scrollToPosition(page: Int, yPoints: Float, xPoints: Float) {
         guard let document = pdfView.document,
               page < document.pageCount,
               let pdfPage = document.page(at: page) else { return }
@@ -277,8 +346,30 @@ extension PDFContainerView {
         // Convert top-down Y to PDFKit bottom-up coordinate.
         let pageBounds = pdfPage.bounds(for: .mediaBox)
         let pdfY = pageBounds.height - CGFloat(yPoints)
-        let destination = PDFDestination(page: pdfPage, at: CGPoint(x: 0, y: pdfY))
+        let pdfX = CGFloat(xPoints)
+        let destination = PDFDestination(page: pdfPage, at: CGPoint(x: pdfX, y: pdfY))
         pdfView.go(to: destination)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.layoutIfNeeded()
+            self.pdfView.layoutIfNeeded()
+
+            let pointInPDFView = self.pdfView.convert(CGPoint(x: pdfX, y: pdfY), from: pdfPage)
+            let pointInContainer = self.convert(pointInPDFView, from: self.pdfView)
+            self.syncMarkerView.show(at: pointInContainer)
+
+            guard let scrollView = self.findScrollView(in: self.pdfView) else { return }
+            let anchorRatio: CGFloat = 0.33
+            let desiredOffset = CGPoint(
+                x: scrollView.contentOffset.x,
+                y: pointInPDFView.y - scrollView.bounds.height * anchorRatio - scrollView.adjustedContentInset.top
+            )
+            let clampedOffset = self.clampedContentOffset(desiredOffset, in: scrollView)
+            if scrollView.contentOffset != clampedOffset {
+                scrollView.setContentOffset(clampedOffset, animated: true)
+            }
+        }
     }
 }
 
@@ -292,6 +383,8 @@ struct PreviewPane: View {
     var previewCacheDescriptor: CompiledPreviewCacheDescriptor? = nil
     var compileToken: UUID = UUID()
     var focusCoordinator: EditorFocusCoordinator? = nil
+    var sourceMap: SourceMap? = nil
+    var syncCoordinator: SyncCoordinator? = nil
     /// The actual entry file name — Typst FFI internally reports it as "main.typ".
     var entryFileName: String = "main.typ"
     var onGoToError: ((_ file: String, _ line: Int, _ column: Int) -> Void)? = nil
@@ -318,7 +411,24 @@ struct PreviewPane: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             if let pdf = compiler.pdfDocument {
-                PDFKitView(document: pdf, focusCoordinator: focusCoordinator)
+                PDFKitView(
+                    document: pdf,
+                    focusCoordinator: focusCoordinator,
+                    scrollTarget: syncCoordinator?.previewScrollTarget,
+                    onTapLocation: { page, yPoints in
+                        guard let syncCoordinator,
+                              let sourceMap,
+                              let location = sourceMap.sourceLocation(forPage: page, yPoints: yPoints),
+                              syncCoordinator.beginSync(.previewToEditor) else {
+                            return
+                        }
+
+                        syncCoordinator.editorScrollTarget = EditorScrollTarget(
+                            line: location.line,
+                            column: location.column
+                        )
+                    }
+                )
                     .ignoresSafeArea(edges: .bottom)
                     .accessibilityLabel(L10n.a11yPreviewLabel)
                     .accessibilityHint(L10n.a11yPreviewHint)

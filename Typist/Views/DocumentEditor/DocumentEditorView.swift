@@ -61,6 +61,7 @@ struct DocumentEditorView: View {
     @State var showingImportConfiguration = false
     @State var showingZipExportWarning = false
     @State var focusCoordinator = EditorFocusCoordinator()
+    @State var syncCoordinator = SyncCoordinator()
     @State var editorViewState = EditorViewState()
     @State var pendingCursorJump: Int?
     @State var pendingManualCompileFeedback = false

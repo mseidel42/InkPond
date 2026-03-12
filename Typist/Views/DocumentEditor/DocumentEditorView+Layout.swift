@@ -28,6 +28,8 @@ extension DocumentEditorView {
             viewState: $editorViewState,
             cursorJumpOffset: $pendingCursorJump,
             focusCoordinator: focusCoordinator,
+            sourceMap: isEditingEntryFile ? compiler.sourceMap : nil,
+            syncCoordinator: syncCoordinator,
             theme: themeManager.currentTheme,
             errorLines: compilationErrorLines,
             onPhotoTapped: { showingPhotoPicker = true },
@@ -66,6 +68,8 @@ extension DocumentEditorView {
             previewCacheDescriptor: compiledPreviewCacheDescriptor,
             compileToken: compileToken,
             focusCoordinator: focusCoordinator,
+            sourceMap: compiler.sourceMap,
+            syncCoordinator: syncCoordinator,
             entryFileName: document.entryFileName,
             onGoToError: { file, line, column in
                 navigateToError(file: file, line: line, column: column)
@@ -312,6 +316,18 @@ extension DocumentEditorView {
             }
             .onChange(of: compileToken) { _, _ in
                 refreshReferenceCompletions()
+            }
+            .onChange(of: syncCoordinator.editorScrollTarget) { _, target in
+                guard let target else { return }
+                if sizeClass != .regular {
+                    selectedTab = 0
+                }
+                if currentFileName != document.entryFileName {
+                    openFile(named: document.entryFileName)
+                }
+                pendingCursorJump = utf16Offset(forLine: target.line, column: target.column, in: editorText)
+                syncCoordinator.editorScrollTarget = nil
+                InteractionFeedback.impact(.light)
             }
             .onChange(of: appFontLibrary.items) { _, _ in
                 handleCompileInputsChanged()

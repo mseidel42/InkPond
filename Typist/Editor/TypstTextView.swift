@@ -7,6 +7,38 @@ import os
 import UIKit
 import UniformTypeIdentifiers
 
+enum JumpHighlightTimeline {
+    static let fadeInDuration: CFTimeInterval = 0.18
+    static let holdDuration: CFTimeInterval = 0.18
+    static let fadeOutDuration: CFTimeInterval = 0.82
+
+    static var totalDuration: CFTimeInterval {
+        fadeInDuration + holdDuration + fadeOutDuration
+    }
+
+    static func opacity(at elapsed: CFTimeInterval) -> CGFloat {
+        switch elapsed {
+        case ..<0:
+            return 0
+        case 0..<fadeInDuration:
+            let progress = elapsed / fadeInDuration
+            return CGFloat(eased(progress))
+        case fadeInDuration..<(fadeInDuration + holdDuration):
+            return 1
+        case (fadeInDuration + holdDuration)...totalDuration:
+            let progress = (elapsed - fadeInDuration - holdDuration) / fadeOutDuration
+            return CGFloat(1 - eased(progress))
+        default:
+            return 0
+        }
+    }
+
+    private static func eased(_ progress: Double) -> Double {
+        let clamped = max(0, min(progress, 1))
+        return clamped * clamped * (3 - 2 * clamped)
+    }
+}
+
 final class TypstTextView: UITextView {
     enum PasteFragment {
         case text(String)
@@ -21,6 +53,8 @@ final class TypstTextView: UITextView {
     private(set) var gutterView: LineNumberGutterView!
     private var storedTheme: EditorTheme = .system
     private var appearanceRegistration: (any UITraitChangeRegistration)?
+    private var jumpHighlightDisplayLink: CADisplayLink?
+    private var jumpHighlightAnimationStartTime: CFTimeInterval?
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Typist", category: "EditorHighlight")
     private static let signposter = OSSignposter(logger: logger)
 
@@ -78,6 +112,7 @@ final class TypstTextView: UITextView {
     }
 
     deinit {
+        jumpHighlightDisplayLink?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -324,6 +359,13 @@ final class TypstTextView: UITextView {
         scheduleHighlighting(.immediate)
     }
 
+    func flashJumpHighlight(atLine line: Int) {
+        jumpHighlightAnimationStartTime = CACurrentMediaTime()
+        applyJumpHighlight(line: line, opacity: 0)
+        startJumpHighlightDisplayLinkIfNeeded()
+        advanceJumpHighlightAnimation(to: CACurrentMediaTime())
+    }
+
     // MARK: - Highlighting
 
     func scheduleHighlighting(_ mode: HighlightMode, textChanged: Bool = false) {
@@ -379,6 +421,76 @@ final class TypstTextView: UITextView {
         guard let range = selectedTextRange else { return }
         let rect = caretRect(for: range.end).insetBy(dx: 0, dy: -8)
         scrollRectToVisible(rect, animated: true)
+    }
+
+    func scrollSelectionToUpperThird(animated: Bool) {
+        guard let range = selectedTextRange else { return }
+        let caret = caretRect(for: range.end)
+        let anchorRatio: CGFloat = 0.33
+        let visibleHeight = bounds.height - adjustedContentInset.top - adjustedContentInset.bottom
+        guard visibleHeight > 0 else {
+            scrollRectToVisible(caret.insetBy(dx: 0, dy: -8), animated: animated)
+            return
+        }
+
+        let desiredOffsetY = caret.minY - visibleHeight * anchorRatio - textContainerInset.top
+        let minOffsetY = -adjustedContentInset.top
+        let maxOffsetY = max(minOffsetY, contentSize.height - bounds.height + adjustedContentInset.bottom)
+        setContentOffset(
+            CGPoint(x: contentOffset.x, y: min(max(desiredOffsetY, minOffsetY), maxOffsetY)),
+            animated: animated
+        )
+    }
+
+    private func startJumpHighlightDisplayLinkIfNeeded() {
+        jumpHighlightDisplayLink?.invalidate()
+
+        let displayLink = CADisplayLink(target: self, selector: #selector(handleJumpHighlightDisplayLink(_:)))
+        if #available(iOS 15.0, *) {
+            displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 20, maximum: 60, preferred: 30)
+        } else {
+            displayLink.preferredFramesPerSecond = 30
+        }
+        displayLink.add(to: .main, forMode: .common)
+        jumpHighlightDisplayLink = displayLink
+    }
+
+    @objc private func handleJumpHighlightDisplayLink(_ displayLink: CADisplayLink) {
+        advanceJumpHighlightAnimation(to: displayLink.timestamp)
+    }
+
+    private func advanceJumpHighlightAnimation(to timestamp: CFTimeInterval) {
+        guard let startTime = jumpHighlightAnimationStartTime,
+              let line = highlighter.jumpHighlightLine else {
+            clearJumpHighlight()
+            return
+        }
+
+        let elapsed = timestamp - startTime
+        let opacity = JumpHighlightTimeline.opacity(at: elapsed)
+        applyJumpHighlight(line: line, opacity: opacity)
+
+        if elapsed >= JumpHighlightTimeline.totalDuration {
+            clearJumpHighlight()
+        }
+    }
+
+    private func applyJumpHighlight(line: Int?, opacity: CGFloat) {
+        let previousLine = highlighter.jumpHighlightLine
+        highlighter.refreshJumpHighlight(
+            in: textStorage,
+            previousLine: previousLine,
+            line: line,
+            opacity: opacity
+        )
+        gutterView.setJumpHighlight(line: line, opacity: opacity)
+    }
+
+    private func clearJumpHighlight() {
+        jumpHighlightAnimationStartTime = nil
+        jumpHighlightDisplayLink?.invalidate()
+        jumpHighlightDisplayLink = nil
+        applyJumpHighlight(line: nil, opacity: 0)
     }
 
     private func pasteFragmentsFromPasteboard() -> [PasteFragment] {

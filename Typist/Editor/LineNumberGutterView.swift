@@ -16,6 +16,8 @@ final class LineNumberGutterView: UIView {
     private var lineStartOffsets: [Int] = [0]
     private var cachedGutterWidth: CGFloat = LineNumberGutterView.minGutterWidth
     private var needsLineMetricsRefresh = true
+    var jumpHighlightLine: Int?
+    var jumpHighlightOpacity: CGFloat = 0
 
     init(textView: UITextView) {
         self.textView = textView
@@ -39,6 +41,16 @@ final class LineNumberGutterView: UIView {
         setNeedsDisplay()
     }
 
+    func setJumpHighlight(line: Int?, opacity: CGFloat) {
+        let clampedOpacity = max(0, min(opacity, 1))
+        guard jumpHighlightLine != line || abs(jumpHighlightOpacity - clampedOpacity) > 0.001 else {
+            return
+        }
+        jumpHighlightLine = line
+        jumpHighlightOpacity = clampedOpacity
+        setNeedsDisplay()
+    }
+
     var gutterWidth: CGFloat {
         refreshLineMetricsIfNeeded()
         return cachedGutterWidth
@@ -51,6 +63,11 @@ final class LineNumberGutterView: UIView {
         // Resolve dynamic UIColors against the current trait collection before converting to CGColor.
         let resolvedBg = gutterBgColor.resolvedColor(with: traitCollection)
         let resolvedFg = gutterFgColor.resolvedColor(with: traitCollection)
+        let jumpAccent = UIColor.systemBlue.resolvedColor(with: traitCollection)
+        let highlightOpacity = max(0, min(jumpHighlightOpacity, 1))
+        let jumpFill = jumpAccent.withAlphaComponent(0.14 * highlightOpacity)
+        let jumpStroke = jumpAccent.withAlphaComponent(0.8 * highlightOpacity)
+        let highlightedNumberColor = blendedColor(from: resolvedFg, to: jumpAccent, progress: highlightOpacity)
 
         let context = UIGraphicsGetCurrentContext()
         context?.setFillColor(resolvedBg.cgColor)
@@ -89,13 +106,41 @@ final class LineNumberGutterView: UIView {
                 break
             }
 
+            if jumpHighlightLine == lineIndex + 1, highlightOpacity > 0 {
+                let highlightRect = CGRect(
+                    x: 4,
+                    y: startCaretRect.minY + 1,
+                    width: gutterWidth - 8,
+                    height: max(startCaretRect.height - 2, Self.gutterFont.lineHeight + 2)
+                )
+                let path = UIBezierPath(roundedRect: highlightRect, cornerRadius: 8)
+                jumpFill.setFill()
+                path.fill()
+
+                let markerRect = CGRect(
+                    x: 6,
+                    y: highlightRect.minY + 2,
+                    width: 3,
+                    height: highlightRect.height - 4
+                )
+                let markerPath = UIBezierPath(roundedRect: markerRect, cornerRadius: 1.5)
+                jumpStroke.setFill()
+                markerPath.fill()
+            }
+
             let numberString = "\(lineIndex + 1)" as NSString
-            let stringSize = numberString.size(withAttributes: attributes)
+            let effectiveAttributes: [NSAttributedString.Key: Any] = jumpHighlightLine == lineIndex + 1
+                ? [
+                    .font: Self.gutterFont,
+                    .foregroundColor: highlightedNumberColor,
+                ]
+                : attributes
+            let stringSize = numberString.size(withAttributes: effectiveAttributes)
             let drawPoint = CGPoint(
                 x: gutterWidth - stringSize.width - 8,
                 y: startCaretRect.minY + (max(startCaretRect.height, Self.gutterFont.lineHeight) - stringSize.height) / 2
             )
-            numberString.draw(at: drawPoint, withAttributes: attributes)
+            numberString.draw(at: drawPoint, withAttributes: effectiveAttributes)
 
             lineIndex += 1
         }
@@ -147,5 +192,29 @@ final class LineNumberGutterView: UIView {
         }
 
         return max(0, lowerBound - 1)
+    }
+
+    private func blendedColor(from source: UIColor, to target: UIColor, progress: CGFloat) -> UIColor {
+        let clampedProgress = max(0, min(progress, 1))
+        var sourceRed: CGFloat = 0
+        var sourceGreen: CGFloat = 0
+        var sourceBlue: CGFloat = 0
+        var sourceAlpha: CGFloat = 0
+        var targetRed: CGFloat = 0
+        var targetGreen: CGFloat = 0
+        var targetBlue: CGFloat = 0
+        var targetAlpha: CGFloat = 0
+
+        guard source.getRed(&sourceRed, green: &sourceGreen, blue: &sourceBlue, alpha: &sourceAlpha),
+              target.getRed(&targetRed, green: &targetGreen, blue: &targetBlue, alpha: &targetAlpha) else {
+            return target.withAlphaComponent(clampedProgress)
+        }
+
+        return UIColor(
+            red: sourceRed + (targetRed - sourceRed) * clampedProgress,
+            green: sourceGreen + (targetGreen - sourceGreen) * clampedProgress,
+            blue: sourceBlue + (targetBlue - sourceBlue) * clampedProgress,
+            alpha: sourceAlpha + (targetAlpha - sourceAlpha) * clampedProgress
+        )
     }
 }

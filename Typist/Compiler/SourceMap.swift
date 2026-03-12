@@ -83,17 +83,23 @@ struct SourceMap: Sendable {
 
         guard pageStart < pageEnd else { return nil }
 
-        // Within this page's entries, find the closest Y.
-        var bestIndex = pageStart
-        var bestDist = abs(byPosition[pageStart].yPoints - yPoints)
-        for i in (pageStart + 1)..<pageEnd {
-            let dist = abs(byPosition[i].yPoints - yPoints)
-            if dist < bestDist {
-                bestDist = dist
-                bestIndex = i
+        // Within this page's entries, find the closest entry at or before the tap.
+        lo = pageStart
+        hi = pageEnd
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if byPosition[mid].yPoints < yPoints {
+                lo = mid + 1
+            } else {
+                hi = mid
             }
         }
 
-        return byPosition[bestIndex]
+        if lo < pageEnd, byPosition[lo].yPoints == yPoints {
+            return byPosition[lo]
+        } else if lo > pageStart {
+            return byPosition[lo - 1]
+        }
+        return byPosition[pageStart]
     }
 }

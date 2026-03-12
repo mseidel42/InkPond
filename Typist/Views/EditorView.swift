@@ -48,6 +48,7 @@ struct EditorView: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: TypstTextView, context: Context) {
+        context.coordinator.parent = self
         focusCoordinator?.register(textView)
         textView.applyTheme(theme)
         textView.setErrorLines(errorLines)
@@ -79,12 +80,14 @@ struct EditorView: UIViewRepresentable {
                 let safeOffset = min(max(0, jumpOffset), maxOffset)
                 textView.selectedRange = NSRange(location: safeOffset, length: 0)
                 coordinator.captureViewState(from: textView)
+                let line = coordinator.lineNumber(forUTF16Offset: safeOffset, in: textView.text)
+                textView.flashJumpHighlight(atLine: line)
+                if self.syncCoordinator?.activeDirection == .previewToEditor {
+                    self.syncCoordinator?.endSync()
+                }
                 // Scroll to reveal cursor after layout
                 DispatchQueue.main.async {
-                    if let range = textView.selectedTextRange {
-                        let rect = textView.caretRect(for: range.end).insetBy(dx: 0, dy: -40)
-                        textView.scrollRectToVisible(rect, animated: true)
-                    }
+                    textView.scrollSelectionToUpperThird(animated: true)
                 }
             }
         }
@@ -156,7 +159,9 @@ struct EditorView: UIViewRepresentable {
             // After a tap-to-dismiss, skip re-triggering completion for this selection change
             if typstTextView.consumeSelectionSuppression() { return }
             typstTextView.updateCompletion()
-            syncCursorToPreview(textView)
+            if parent.syncCoordinator?.isEditorToPreviewSyncEnabled == true {
+                syncCursorToPreview(textView)
+            }
         }
 
         private func syncCursorToPreview(_ textView: UITextView) {
@@ -176,7 +181,8 @@ struct EditorView: UIViewRepresentable {
             if let target = sourceMap.pdfPosition(forLine: line) {
                 syncCoordinator.previewScrollTarget = PreviewScrollTarget(
                     page: target.page,
-                    yPoints: target.yPoints
+                    yPoints: target.yPoints,
+                    xPoints: target.xPoints
                 )
             }
             syncCoordinator.endSync()
@@ -217,6 +223,13 @@ struct EditorView: UIViewRepresentable {
             }
 
             lastAppliedViewState = parent.viewState
+        }
+
+        func lineNumber(forUTF16Offset offset: Int, in text: String) -> Int {
+            let nsText = text as NSString
+            let clampedOffset = min(max(offset, 0), nsText.length)
+            let prefix = nsText.substring(to: clampedOffset)
+            return prefix.components(separatedBy: "\n").count
         }
     }
 }
