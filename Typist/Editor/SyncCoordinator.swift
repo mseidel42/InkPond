@@ -39,8 +39,8 @@ final class SyncCoordinator {
     var editorScrollTarget: EditorScrollTarget?
 
     var isSyncEnabled: Bool = true
-    /// Temporary kill switch for editor-driven preview jumps.
-    var isEditorToPreviewSyncEnabled: Bool = false
+    /// Kill switch for editor-driven preview jumps.
+    var isEditorToPreviewSyncEnabled: Bool = true
 
     /// Attempt to begin a sync in the given direction.
     /// Returns `true` if sync is allowed, `false` if blocked by cooldown or opposite direction.

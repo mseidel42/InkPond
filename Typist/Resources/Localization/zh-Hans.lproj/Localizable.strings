@@ -258,3 +258,9 @@
 "a11y.keyboard.symbol.right_angle" = "插入大于号";
 "a11y.keyboard.symbol.at_sign" = "插入 @ 符号";
 "a11y.keyboard.symbol.slash" = "插入斜杠";
+
+"resume.alert.title" = "继续编辑？";
+"resume.alert.message" = "返回上次离开的位置？";
+"resume.alert.message_with_file" = "返回上次在 %@ 中离开的位置？";
+"resume.alert.action.resume" = "继续";
+"resume.alert.action.start_from_top" = "从头开始";

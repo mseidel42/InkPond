@@ -68,6 +68,8 @@ struct DocumentEditorView: View {
     @State var cachedBibEntries: [(key: String, type: String)] = []
     @State var cachedExternalLabels: [(name: String, kind: String)] = []
     @State var cachedImageFiles: [String] = []
+    @State var showingPositionRestore = false
+    @State var pendingPreviewSync = false
 
     var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
     var isEditingEntryFile: Bool { currentFileName == document.entryFileName }

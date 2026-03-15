@@ -218,8 +218,15 @@ struct EditorView: UIViewRepresentable {
                 textView.selectedRange = restoredRange
             }
 
-            if textView.contentOffset != parent.viewState.contentOffset {
-                textView.setContentOffset(parent.viewState.contentOffset, animated: false)
+            let targetOffset = parent.viewState.contentOffset
+            if textView.contentOffset != targetOffset {
+                // Defer content offset restoration until after layout computes content size.
+                // Setting contentOffset before layout has no effect because the text view
+                // hasn't measured its content yet after a text change.
+                textView.setContentOffset(targetOffset, animated: false)
+                DispatchQueue.main.async {
+                    textView.setContentOffset(targetOffset, animated: false)
+                }
             }
 
             lastAppliedViewState = parent.viewState

@@ -148,6 +148,48 @@ extension DocumentEditorView {
         }
     }
 
+    func persistEditorPosition() {
+        document.lastEditedFileName = currentFileName
+        document.lastCursorLocation = editorViewState.selectedLocation
+    }
+
+    func hasSavedPosition() -> Bool {
+        document.lastCursorLocation > 0
+    }
+
+    func restoreSavedPosition() {
+        let savedFileName = document.lastEditedFileName
+        if !savedFileName.isEmpty, savedFileName != currentFileName {
+            openFile(named: savedFileName)
+        }
+        pendingCursorJump = document.lastCursorLocation
+        pendingPreviewSync = true
+    }
+
+    func syncCursorToPreviewIfPending() {
+        guard pendingPreviewSync else { return }
+        pendingPreviewSync = false
+
+        guard let sourceMap = compiler.sourceMap, !sourceMap.isEmpty else { return }
+        guard syncCoordinator.beginSync(.editorToPreview) else { return }
+
+        let cursorLocation = editorViewState.selectedLocation
+        let text = editorText as NSString
+        let prefix = cursorLocation <= text.length
+            ? text.substring(to: cursorLocation)
+            : editorText
+        let line = prefix.components(separatedBy: "\n").count
+
+        if let target = sourceMap.pdfPosition(forLine: line) {
+            syncCoordinator.previewScrollTarget = PreviewScrollTarget(
+                page: target.page,
+                yPoints: target.yPoints,
+                xPoints: target.xPoints
+            )
+        }
+        syncCoordinator.endSync()
+    }
+
     func openFile(named name: String) {
         flushPendingSave()
         loadFile(named: name)

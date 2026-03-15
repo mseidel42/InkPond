@@ -84,6 +84,9 @@ private struct PDFPreviewScrollState {
 final class PDFContainerView: UIView {
     fileprivate let pdfView = PassivePDFView()
     private let syncMarkerView = PreviewSyncMarkerView()
+    /// When true, `reloadDocument` skips scroll restoration so that
+    /// a pending `scrollToPosition` call can take priority.
+    var suppressScrollRestoration = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -144,16 +147,21 @@ final class PDFContainerView: UIView {
             self.pdfView.layoutIfNeeded()
             self.pdfView.scaleFactor = self.clampedScaleFactor(savedState.scaleFactor)
 
-            if let scrollView = self.findScrollView(in: self.pdfView) {
-                scrollView.layoutIfNeeded()
-                let clampedOffset = self.clampedContentOffset(
-                    savedState.contentOffset,
-                    in: scrollView
-                )
-                if scrollView.contentOffset != clampedOffset {
-                    scrollView.setContentOffset(clampedOffset, animated: false)
+            // Skip scroll restoration when a sync-driven scroll is pending —
+            // scrollToPosition will handle positioning instead.
+            if !self.suppressScrollRestoration {
+                if let scrollView = self.findScrollView(in: self.pdfView) {
+                    scrollView.layoutIfNeeded()
+                    let clampedOffset = self.clampedContentOffset(
+                        savedState.contentOffset,
+                        in: scrollView
+                    )
+                    if scrollView.contentOffset != clampedOffset {
+                        scrollView.setContentOffset(clampedOffset, animated: false)
+                    }
                 }
             }
+            self.suppressScrollRestoration = false
 
             focusCoordinator?.setResignSuppressed(false)
         }
@@ -206,25 +214,16 @@ final class PDFContainerView: UIView {
 }
 
 private final class PreviewSyncMarkerView: UIView {
-    private let barView = UIView()
-    private let dotView = UIView()
+    private let pillView = UIView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
         alpha = 0
 
-        barView.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.3)
-        barView.layer.cornerRadius = 1.5
-        addSubview(barView)
-
-        dotView.backgroundColor = UIColor.systemBlue
-        dotView.layer.cornerRadius = 6
-        dotView.layer.shadowColor = UIColor.systemBlue.cgColor
-        dotView.layer.shadowOpacity = 0.25
-        dotView.layer.shadowRadius = 8
-        dotView.layer.shadowOffset = .zero
-        addSubview(dotView)
+        pillView.backgroundColor = UIColor.tintColor.withAlphaComponent(0.8)
+        pillView.layer.cornerRadius = 1.5
+        addSubview(pillView)
     }
 
     @available(*, unavailable)
@@ -233,28 +232,30 @@ private final class PreviewSyncMarkerView: UIView {
     }
 
     func show(at point: CGPoint) {
-        let clampedY = min(max(point.y, 24), bounds.height - 24)
-        let clampedX = min(max(point.x, 24), bounds.width - 24)
+        let clampedY = min(max(point.y, 12), bounds.height - 12)
+        let pillHeight: CGFloat = 24
+        let pillWidth: CGFloat = 4
 
-        barView.frame = CGRect(x: 16, y: clampedY - 1.5, width: max(bounds.width - 32, 0), height: 3)
-        dotView.frame = CGRect(x: clampedX - 6, y: clampedY - 6, width: 12, height: 12)
+        pillView.frame = CGRect(
+            x: 3,
+            y: clampedY - pillHeight / 2,
+            width: pillWidth,
+            height: pillHeight
+        )
 
         layer.removeAllAnimations()
-        barView.layer.removeAllAnimations()
-        dotView.layer.removeAllAnimations()
-        alpha = 1
-        barView.transform = .identity
-        dotView.transform = .identity
+        pillView.layer.removeAllAnimations()
 
-        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut]) {
-            self.barView.transform = CGAffineTransform(scaleX: 1, y: 1.35)
-            self.dotView.transform = CGAffineTransform(scaleX: 1.35, y: 1.35)
-        } completion: { _ in
-            UIView.animate(withDuration: 0.55, delay: 0.55, options: [.curveEaseIn]) {
-                self.alpha = 0
-                self.barView.transform = .identity
-                self.dotView.transform = .identity
-            }
+        // Brief scale-in entrance
+        pillView.transform = CGAffineTransform(scaleX: 1, y: 0.4)
+        alpha = 1
+
+        UIView.animate(withDuration: 0.2, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: []) {
+            self.pillView.transform = .identity
+        }
+
+        UIView.animate(withDuration: 0.5, delay: 1.2, options: [.curveEaseIn]) {
+            self.alpha = 0
         }
     }
 }
@@ -297,12 +298,22 @@ struct PDFKitView: UIViewRepresentable {
         container.accessibilityLabel = L10n.a11yPreviewLabel
         container.accessibilityHint = L10n.a11yPreviewHint
         container.accessibilityValue = L10n.a11yPreviewValueReady
-        container.reloadDocument(document, focusCoordinator: focusCoordinator)
 
-        if context.coordinator.lastDocument !== document {
+        let documentChanged = context.coordinator.lastDocument !== document
+        if documentChanged {
             context.coordinator.lastDocument = document
             context.coordinator.lastAppliedScrollTarget = nil
         }
+
+        let hasScrollTarget = scrollTarget != nil
+            && context.coordinator.lastAppliedScrollTarget != scrollTarget
+
+        // Tell reloadDocument to skip scroll restoration when we'll scroll via sync target.
+        if documentChanged && hasScrollTarget {
+            container.suppressScrollRestoration = true
+        }
+
+        container.reloadDocument(document, focusCoordinator: focusCoordinator)
 
         if let target = scrollTarget, context.coordinator.lastAppliedScrollTarget != target {
             container.scrollToPosition(page: target.page, yPoints: target.yPoints, xPoints: target.xPoints)
@@ -347,27 +358,48 @@ extension PDFContainerView {
         let pageBounds = pdfPage.bounds(for: .mediaBox)
         let pdfY = pageBounds.height - CGFloat(yPoints)
         let pdfX = CGFloat(xPoints)
+
+        // Use go(to:) to ensure the target page is visible and laid out,
+        // then refine the scroll position after PDFKit has settled.
         let destination = PDFDestination(page: pdfPage, at: CGPoint(x: pdfX, y: pdfY))
         pdfView.go(to: destination)
 
+        // Defer the precise positioning to let PDFKit finish its internal layout.
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.pdfView.document === document else { return }
             self.layoutIfNeeded()
             self.pdfView.layoutIfNeeded()
 
-            let pointInPDFView = self.pdfView.convert(CGPoint(x: pdfX, y: pdfY), from: pdfPage)
-            let pointInContainer = self.convert(pointInPDFView, from: self.pdfView)
-            self.syncMarkerView.show(at: pointInContainer)
-
             guard let scrollView = self.findScrollView(in: self.pdfView) else { return }
+
+            // Convert page-space point through scroll view to get content coordinates.
+            let pointInPDFView = self.pdfView.convert(CGPoint(x: pdfX, y: pdfY), from: pdfPage)
+            let pointInScrollContent = scrollView.convert(pointInPDFView, from: self.pdfView)
+
+            // Position the target at ~1/3 from the top of the visible area.
             let anchorRatio: CGFloat = 0.33
             let desiredOffset = CGPoint(
                 x: scrollView.contentOffset.x,
-                y: pointInPDFView.y - scrollView.bounds.height * anchorRatio - scrollView.adjustedContentInset.top
+                y: pointInScrollContent.y - scrollView.bounds.height * anchorRatio
             )
             let clampedOffset = self.clampedContentOffset(desiredOffset, in: scrollView)
-            if scrollView.contentOffset != clampedOffset {
-                scrollView.setContentOffset(clampedOffset, animated: true)
+            let needsScroll = abs(scrollView.contentOffset.y - clampedOffset.y) > 2
+
+            let showMarker = { [weak self] in
+                guard let self else { return }
+                let updatedPoint = self.pdfView.convert(CGPoint(x: pdfX, y: pdfY), from: pdfPage)
+                let markerPoint = self.convert(updatedPoint, from: self.pdfView)
+                self.syncMarkerView.show(at: markerPoint)
+            }
+
+            if needsScroll {
+                UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut]) {
+                    scrollView.contentOffset = clampedOffset
+                } completion: { _ in
+                    showMarker()
+                }
+            } else {
+                showMarker()
             }
         }
     }

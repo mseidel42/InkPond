@@ -258,3 +258,9 @@
 "a11y.keyboard.symbol.right_angle" = "Insert greater-than sign";
 "a11y.keyboard.symbol.at_sign" = "Insert at sign";
 "a11y.keyboard.symbol.slash" = "Insert slash";
+
+"resume.alert.title" = "Resume Editing?";
+"resume.alert.message" = "Return to where you left off last time?";
+"resume.alert.message_with_file" = "Return to %@ where you left off last time?";
+"resume.alert.action.resume" = "Resume";
+"resume.alert.action.start_from_top" = "Start from Top";

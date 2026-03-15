@@ -301,9 +301,13 @@ extension DocumentEditorView {
                 refreshCompileFontPaths()
                 prepareDocumentForEditing()
                 refreshReferenceCompletions()
+                if hasSavedPosition() {
+                    showingPositionRestore = true
+                }
             }
             .onDisappear {
                 flushPendingSave()
+                persistEditorPosition()
                 focusCoordinator.setResignSuppressed(false)
                 compiler.cancel()
             }
@@ -366,6 +370,9 @@ extension DocumentEditorView {
                 AccessibilitySupport.announce(newValue)
             }
             .onChange(of: compiler.pdfDocument) { _, newValue in
+                if newValue != nil {
+                    syncCursorToPreviewIfPending()
+                }
                 guard pendingManualCompileFeedback, newValue != nil, compiler.errorMessage == nil else { return }
                 pendingManualCompileFeedback = false
                 InteractionFeedback.notify(.success)
@@ -453,6 +460,18 @@ extension DocumentEditorView {
                 Button("OK") { previewActionError = nil }
             } message: {
                 Text(previewActionError ?? "")
+            }
+            .alert(L10n.tr("resume.alert.title"), isPresented: $showingPositionRestore) {
+                Button(L10n.tr("resume.alert.action.resume")) {
+                    restoreSavedPosition()
+                }
+                Button(L10n.tr("resume.alert.action.start_from_top"), role: .cancel) {}
+            } message: {
+                if document.lastEditedFileName.isEmpty || document.lastEditedFileName == document.entryFileName {
+                    Text(L10n.tr("resume.alert.message"))
+                } else {
+                    Text(L10n.format("resume.alert.message_with_file", document.lastEditedFileName))
+                }
             }
     }
 

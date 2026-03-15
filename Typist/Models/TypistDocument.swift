@@ -24,6 +24,10 @@ final class TypistDocument {
     var importImageDirectoryOptions: [String] = []
     var importFontDirectoryOptions: [String] = []
 
+    /// Last editing position — persisted for cross-launch resume.
+    var lastEditedFileName: String = ""
+    var lastCursorLocation: Int = 0
+
     init(title: String = L10n.untitledBase, content: String = "") {
         self.title = title
         self.content = content
