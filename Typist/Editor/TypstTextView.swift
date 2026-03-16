@@ -113,6 +113,7 @@ final class TypstTextView: UITextView {
 
     deinit {
         jumpHighlightDisplayLink?.invalidate()
+        completionPopup?.removeFromSuperview()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -1017,9 +1018,14 @@ final class TypstTextView: UITextView {
             y = caretInTarget.maxY + margin
         }
 
-        // Clamp horizontal
+        // Clamp horizontal — guard against popup wider than available space
         let maxX = targetView.bounds.width - size.width - 8
-        x = min(max(8, x), maxX)
+        if maxX >= 8 {
+            x = min(max(8, x), maxX)
+        } else {
+            // Popup wider than view: pin to leading edge
+            x = 8
+        }
 
         popup.frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
     }

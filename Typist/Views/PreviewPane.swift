@@ -30,7 +30,7 @@ private struct PreviewStatisticItem: Identifiable {
 }
 
 private extension Unicode.Scalar {
-    var isCJKUnifiedIdeograph: Bool {
+    nonisolated var isCJKUnifiedIdeograph: Bool {
         switch value {
         case 0x3400...0x4DBF,
              0x4E00...0x9FFF,
@@ -49,7 +49,7 @@ private extension Unicode.Scalar {
 }
 
 private extension Character {
-    var countsTowardPreviewCharacter: Bool {
+    nonisolated var countsTowardPreviewCharacter: Bool {
         !unicodeScalars.allSatisfy { scalar in
             CharacterSet.whitespacesAndNewlines.contains(scalar)
         }
@@ -426,18 +426,21 @@ struct PreviewPane: View {
     @ScaledMetric(relativeTo: .caption2) private var previewStatsVerticalPadding = 7
     @State private var isShowingErrorDetails = false
     @State private var isShowingStatsDetails = false
+    @State private var cachedWordCount: Int = 0
+    @State private var cachedCharacterCount: Int = 0
+    @State private var cachedIsCJK: Bool = false
 
     private var previewStatistics: PreviewStatistics? {
         guard let pdf = compiler.pdfDocument else { return nil }
         return PreviewStatistics(
             pageCount: max(pdf.pageCount, 0),
-            wordCount: source.previewWordCount,
-            characterCount: source.previewCharacterCount
+            wordCount: cachedWordCount,
+            characterCount: cachedCharacterCount
         )
     }
 
     private var prefersChineseStatistics: Bool {
-        source.containsCJKIdeographs
+        cachedIsCJK
     }
 
     var body: some View {
@@ -495,7 +498,10 @@ struct PreviewPane: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .onChange(of: source, initial: true) { compileIfNeeded() }
+        .onChange(of: source, initial: true) {
+            compileIfNeeded()
+            recomputeTextStatistics()
+        }
         .onChange(of: fontPaths) { compileIfNeeded() }
         .onChange(of: rootDir) { compileIfNeeded() }
         .onChange(of: compileToken) { compileIfNeeded() }
@@ -516,6 +522,20 @@ struct PreviewPane: View {
         }
         .animation(.easeInOut(duration: 0.2), value: compiler.errorMessage)
         .animation(.easeInOut(duration: 0.2), value: isShowingErrorDetails)
+    }
+
+    private func recomputeTextStatistics() {
+        let text = source
+        Task.detached(priority: .utility) {
+            let wordCount = text.previewWordCount
+            let charCount = text.previewCharacterCount
+            let isCJK = text.containsCJKIdeographs
+            await MainActor.run {
+                cachedWordCount = wordCount
+                cachedCharacterCount = charCount
+                cachedIsCJK = isCJK
+            }
+        }
     }
 
     /// Only compile when the source contains meaningful content.
@@ -806,11 +826,11 @@ struct PreviewPane: View {
 }
 
 private extension String {
-    var containsCJKIdeographs: Bool {
+    nonisolated var containsCJKIdeographs: Bool {
         unicodeScalars.contains { $0.isCJKUnifiedIdeograph }
     }
 
-    var previewWordCount: Int {
+    nonisolated var previewWordCount: Int {
         let tokenizer = NLTokenizer(unit: .word)
         tokenizer.string = self
 
@@ -824,7 +844,7 @@ private extension String {
         return count
     }
 
-    var previewCharacterCount: Int {
+    nonisolated var previewCharacterCount: Int {
         reduce(into: 0) { count, character in
             if character.countsTowardPreviewCharacter {
                 count += 1

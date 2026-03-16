@@ -54,6 +54,7 @@ extension DocumentEditorView {
         if name == document.entryFileName {
             entrySource = text
         }
+        compilationErrorLines = recomputeCompilationErrorLines()
     }
 
     func handleEditorTextChange(_ content: String) {
@@ -313,9 +314,9 @@ extension DocumentEditorView {
         return path
     }
 
-    /// Compute the set of editor lines that have compilation errors (1-based).
-    /// Only returns lines if the error is in the file currently being edited.
-    var compilationErrorLines: Set<Int> {
+    /// Recompute error lines from the current compiler error message.
+    /// Call whenever `compiler.errorMessage` or `currentFileName` changes.
+    func recomputeCompilationErrorLines() -> Set<Int> {
         guard let message = compiler.errorMessage else { return [] }
         var result = Set<Int>()
         let lines = message.trimmingCharacters(in: .whitespacesAndNewlines)

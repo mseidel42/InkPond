@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import os.log
 
 /// Watches a directory for filesystem changes (files/folders added or removed)
 /// using a DispatchSource. Callbacks are delivered on the main queue.
@@ -15,7 +16,10 @@ final class DirectoryMonitor {
     func start(url: URL) {
         stop()
         let fd = open(url.path, O_EVTONLY)
-        guard fd >= 0 else { return }
+        guard fd >= 0 else {
+            os_log(.error, "DirectoryMonitor: failed to open %{public}@ (errno %d)", url.path, errno)
+            return
+        }
 
         let src = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,

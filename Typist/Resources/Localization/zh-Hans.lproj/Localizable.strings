@@ -60,6 +60,8 @@
 "error.typst.unknown_compilation" = "未知编译错误";
 "error.image.load_data_failed" = "加载图片数据失败。";
 "error.image.process_failed" = "图片处理失败。";
+"error.datastore.title" = "无法打开数据存储";
+"error.datastore.message" = "Typist 无法打开数据存储，请尝试重新启动应用。如果问题持续存在，重新安装可能会有帮助。";
 "toast.image_inserted.single" = "已插入 %@";
 "toast.image_inserted.multiple" = "已插入 %d 张图片";
 

@@ -47,6 +47,7 @@ final class TypstCompiler {
     }
 
     private static let compileDelay = Duration.milliseconds(350)
+    private static let compileTimeout = Duration.seconds(30)
     nonisolated private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "Typist",
         category: "TypstCompiler"
@@ -111,6 +112,9 @@ final class TypstCompiler {
         previewCacheDescriptor: CompiledPreviewCacheDescriptor? = nil
     ) {
         compileGeneration &+= 1
+        // Invalidate the source map immediately so stale mappings are not used
+        // while the new compilation is in flight.
+        sourceMap = nil
         let request = CompileRequest(
             source: source,
             fontPaths: fontPaths,
@@ -209,8 +213,9 @@ final class TypstCompiler {
         let previewCacheStore = self.previewCacheStore
         let typstVersionProvider = self.typstVersionProvider
         let priority = Self.taskPriority(for: request.mode)
+        let timeout = Self.compileTimeout
         activeTask = Task { [weak self] in
-            let workerResult = await Task.detached(priority: priority) {
+            let compilationTask = Task.detached(priority: priority) {
                 Self.runCompilation(
                     request: request,
                     compileWorker: compileWorker,
@@ -218,7 +223,24 @@ final class TypstCompiler {
                     previewCacheStore: previewCacheStore,
                     typstVersionProvider: typstVersionProvider
                 )
-            }.value
+            }
+
+            let workerResult: WorkerResult
+            do {
+                workerResult = try await withThrowingTaskGroup(of: WorkerResult.self) { group in
+                    group.addTask { await compilationTask.value }
+                    group.addTask {
+                        try await Task.sleep(for: timeout)
+                        throw CancellationError()
+                    }
+                    let result = try await group.next()!
+                    group.cancelAll()
+                    return result
+                }
+            } catch {
+                Self.logger.error("Compilation timed out after \(timeout)")
+                workerResult = .failure(.compilationFailed("Compilation timed out."))
+            }
             self?.finishCompilation(workerResult, generation: request.generation)
         }
     }

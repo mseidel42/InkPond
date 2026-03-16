@@ -45,13 +45,24 @@ extension ProjectFileManager {
             let newFolderName = uniqueFolderName(for: doc.title)
             let newDir = documentsURL.appendingPathComponent(newFolderName, isDirectory: true)
             if fm.fileExists(atPath: oldDir.path) {
-                try? fm.moveItem(at: oldDir, to: newDir)
+                do {
+                    try fm.moveItem(at: oldDir, to: newDir)
+                } catch {
+                    os_log(.error, "ProjectFileManager: failed to migrate directory %{public}@ → %{public}@: %{public}@",
+                           doc.projectID, newFolderName, error.localizedDescription)
+                    continue
+                }
             }
-            try? CompiledPreviewCacheStore().moveCache(
-                from: doc.projectID,
-                to: newFolderName,
-                documentTitle: doc.title
-            )
+            do {
+                try CompiledPreviewCacheStore().moveCache(
+                    from: doc.projectID,
+                    to: newFolderName,
+                    documentTitle: doc.title
+                )
+            } catch {
+                os_log(.error, "ProjectFileManager: failed to migrate cache for %{public}@: %{public}@",
+                       doc.title, error.localizedDescription)
+            }
             doc.projectID = newFolderName
             os_log(.info, "ProjectFileManager: migrated %{public}@ → %{public}@", doc.title, newFolderName)
         }
@@ -73,8 +84,13 @@ extension ProjectFileManager {
 
         let source = document.content
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        try? source.write(to: entryURL, atomically: true, encoding: .utf8)
-        os_log(.info, "ProjectFileManager: migrated content to %{public}@ for %{public}@",
-               document.entryFileName, document.projectID)
+        do {
+            try source.write(to: entryURL, atomically: true, encoding: .utf8)
+            os_log(.info, "ProjectFileManager: migrated content to %{public}@ for %{public}@",
+                   document.entryFileName, document.projectID)
+        } catch {
+            os_log(.error, "ProjectFileManager: failed to migrate content for %{public}@: %{public}@",
+                   document.projectID, error.localizedDescription)
+        }
     }
 }

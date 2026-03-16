@@ -19,6 +19,11 @@ final class SyntaxHighlighter {
     }
 
     private var rules: [Rule] = []
+    private lazy var boldFont = UIFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .semibold)
+    private lazy var italicFont: UIFont = {
+        let descriptor = baseFont.fontDescriptor.withSymbolicTraits(.traitItalic)
+        return descriptor.map { UIFont(descriptor: $0, size: baseFont.pointSize) } ?? baseFont
+    }()
 
     /// Lines (1-based) with compilation errors — set externally.
     var errorLines: Set<Int> = []
@@ -88,10 +93,6 @@ final class SyntaxHighlighter {
 
     func highlight(_ textStorage: NSTextStorage) {
         let fullRange = NSRange(location: 0, length: textStorage.length)
-
-        let boldFont = UIFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .semibold)
-        let italicDescriptor = baseFont.fontDescriptor.withSymbolicTraits(.traitItalic)
-        let italicFont = italicDescriptor.map { UIFont(descriptor: $0, size: baseFont.pointSize) } ?? baseFont
 
         textStorage.beginEditing()
 
@@ -200,49 +201,30 @@ final class SyntaxHighlighter {
 
     private func applyErrorLineUnderlines(_ textStorage: NSTextStorage) {
         guard !errorLines.isEmpty else { return }
-        let text = textStorage.string
-        let lines = text.components(separatedBy: "\n")
-        var offset = 0
         let errorUnderline: [NSAttributedString.Key: Any] = [
             .underlineStyle: NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue,
             .underlineColor: UIColor.systemRed,
             .backgroundColor: errorHighlightColor,
         ]
 
-        for (index, line) in lines.enumerated() {
-            let lineInfo = lineInfo(
-                forLineNumber: index + 1,
-                line: line,
-                offset: offset
-            )
-            if errorLines.contains(lineInfo.lineNumber), lineInfo.trimmedRange.length > 0 {
-                textStorage.addAttributes(errorUnderline, range: lineInfo.trimmedRange)
+        enumerateLines(in: textStorage, targeting: errorLines) { info in
+            if info.trimmedRange.length > 0 {
+                textStorage.addAttributes(errorUnderline, range: info.trimmedRange)
             }
-            offset += lineInfo.range.length + 1 // +1 for \n
         }
     }
 
     private func applyJumpLineHighlight(_ textStorage: NSTextStorage) {
         guard let jumpHighlightLine, jumpHighlightOpacity > 0 else { return }
 
-        let lines = textStorage.string.components(separatedBy: "\n")
-        var offset = 0
-
-        for (index, line) in lines.enumerated() {
-            let lineInfo = lineInfo(
-                forLineNumber: index + 1,
-                line: line,
-                offset: offset
-            )
-            if lineInfo.lineNumber == jumpHighlightLine, lineInfo.range.length > 0 {
+        enumerateLines(in: textStorage, targeting: [jumpHighlightLine]) { info in
+            if info.range.length > 0 {
                 textStorage.addAttribute(
                     .backgroundColor,
                     value: jumpHighlightColor(opacity: jumpHighlightOpacity),
-                    range: lineInfo.range
+                    range: info.range
                 )
-                return
             }
-            offset += lineInfo.range.length + 1
         }
     }
 
@@ -259,42 +241,28 @@ final class SyntaxHighlighter {
 
         guard !affectedLines.isEmpty else { return }
 
-        let lines = textStorage.string.components(separatedBy: "\n")
         textStorage.beginEditing()
 
-        var offset = 0
-        for (index, lineText) in lines.enumerated() {
-            let lineInfo = lineInfo(
-                forLineNumber: index + 1,
-                line: lineText,
-                offset: offset
-            )
-            guard affectedLines.contains(lineInfo.lineNumber) else {
-                offset += lineInfo.range.length + 1
-                continue
+        enumerateLines(in: textStorage, targeting: affectedLines) { info in
+            if info.range.length > 0 {
+                textStorage.removeAttribute(.backgroundColor, range: info.range)
             }
-
-            if lineInfo.range.length > 0 {
-                textStorage.removeAttribute(.backgroundColor, range: lineInfo.range)
-            }
-            if errorLines.contains(lineInfo.lineNumber), lineInfo.trimmedRange.length > 0 {
+            if errorLines.contains(info.lineNumber), info.trimmedRange.length > 0 {
                 textStorage.addAttribute(
                     .backgroundColor,
                     value: errorHighlightColor,
-                    range: lineInfo.trimmedRange
+                    range: info.trimmedRange
                 )
             }
-            if lineInfo.lineNumber == line,
+            if info.lineNumber == line,
                clampedOpacity > 0,
-               lineInfo.range.length > 0 {
+               info.range.length > 0 {
                 textStorage.addAttribute(
                     .backgroundColor,
                     value: jumpHighlightColor(opacity: clampedOpacity),
-                    range: lineInfo.range
+                    range: info.range
                 )
             }
-
-            offset += lineInfo.range.length + 1
         }
 
         textStorage.endEditing()
@@ -308,17 +276,60 @@ final class SyntaxHighlighter {
         UIColor.systemBlue.withAlphaComponent(0.14 * opacity)
     }
 
-    private func lineInfo(forLineNumber lineNumber: Int, line: String, offset: Int) -> LineInfo {
-        let nsLine = line as NSString
-        let lineLength = nsLine.length
-        let firstContentOffset = nsLine.rangeOfCharacter(from: CharacterSet.whitespaces.inverted).location
-        let trimmedStart = firstContentOffset == NSNotFound ? lineLength : firstContentOffset
+    /// Iterate lines of `textStorage` using `NSString.lineRange`,
+    /// calling `body` only for lines whose 1-based number is in `targetLines`.
+    /// Stops early once all target lines have been visited.
+    private func enumerateLines(
+        in textStorage: NSTextStorage,
+        targeting targetLines: Set<Int>,
+        body: (LineInfo) -> Void
+    ) {
+        let nsText = textStorage.string as NSString
+        let length = nsText.length
+        var index = 0
+        var lineNumber = 1
+        var remaining = targetLines
 
-        return LineInfo(
-            lineNumber: lineNumber,
-            range: NSRange(location: offset, length: lineLength),
-            trimmedRange: NSRange(location: offset + trimmedStart, length: max(0, lineLength - trimmedStart))
-        )
+        while index <= length, !remaining.isEmpty {
+            let lineRange: NSRange
+            if index < length {
+                lineRange = nsText.lineRange(for: NSRange(location: index, length: 0))
+            } else {
+                // Handle trailing newline (empty last line)
+                lineRange = NSRange(location: index, length: 0)
+            }
+            // Exclude the line terminator from the content range
+            var contentEnd = NSMaxRange(lineRange)
+            while contentEnd > lineRange.location,
+                  contentEnd - 1 < length,
+                  nsText.character(at: contentEnd - 1) == 10 /* \n */ || nsText.character(at: contentEnd - 1) == 13 /* \r */ {
+                contentEnd -= 1
+            }
+            let contentRange = NSRange(location: lineRange.location, length: contentEnd - lineRange.location)
+
+            if remaining.contains(lineNumber) {
+                let firstNonWS = nsText.rangeOfCharacter(
+                    from: CharacterSet.whitespaces.inverted,
+                    range: contentRange
+                ).location
+                let trimmedStart = firstNonWS == NSNotFound ? contentRange.length : firstNonWS - contentRange.location
+
+                body(LineInfo(
+                    lineNumber: lineNumber,
+                    range: contentRange,
+                    trimmedRange: NSRange(
+                        location: contentRange.location + trimmedStart,
+                        length: max(0, contentRange.length - trimmedStart)
+                    )
+                ))
+                remaining.remove(lineNumber)
+            }
+
+            let nextIndex = NSMaxRange(lineRange)
+            if nextIndex <= index { break }
+            index = nextIndex
+            lineNumber += 1
+        }
     }
 
     private struct LineInfo {

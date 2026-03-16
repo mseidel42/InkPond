@@ -60,6 +60,8 @@
 "error.typst.unknown_compilation" = "Unknown compilation error";
 "error.image.load_data_failed" = "Failed to load image data.";
 "error.image.process_failed" = "Could not process image.";
+"error.datastore.title" = "Unable to Open Data Store";
+"error.datastore.message" = "Typist could not open its data store. Try restarting the app. If the problem persists, reinstalling may help.";
 "toast.image_inserted.single" = "Inserted %@";
 "toast.image_inserted.multiple" = "Inserted %d images";
 

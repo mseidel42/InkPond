@@ -8,6 +8,27 @@ import UIKit
 
 enum ExportManager {
 
+    /// Remove stale exported files from the temporary directory.
+    /// Call periodically (e.g. at app launch) to reclaim disk space.
+    static func cleanupTemporaryExports() {
+        let fm = FileManager.default
+        let tmpDir = fm.temporaryDirectory
+        let exportExtensions: Set<String> = ["pdf", "typ", "zip"]
+        guard let items = try? fm.contentsOfDirectory(
+            at: tmpDir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        let cutoff = Date().addingTimeInterval(-3600) // older than 1 hour
+        for url in items {
+            guard exportExtensions.contains(url.pathExtension.lowercased()) else { continue }
+            guard let modDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                  modDate < cutoff else { continue }
+            try? fm.removeItem(at: url)
+        }
+    }
+
     /// Compile document to PDF data on a background thread.
     /// Reads source from the entry file on disk.
     static func compilePDF(for document: TypistDocument) async -> Result<Data, TypstBridgeError> {

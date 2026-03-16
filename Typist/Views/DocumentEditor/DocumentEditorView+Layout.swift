@@ -20,6 +20,9 @@ private extension View {
 }
 
 extension DocumentEditorView {
+    /// Sync is only useful on iPad where both panes are visible simultaneously.
+    private var isSyncEnabled: Bool { sizeClass == .regular }
+
     var editorPane: some View {
         EditorView(
             text: $editorText,
@@ -28,8 +31,8 @@ extension DocumentEditorView {
             viewState: $editorViewState,
             cursorJumpOffset: $pendingCursorJump,
             focusCoordinator: focusCoordinator,
-            sourceMap: isEditingEntryFile ? compiler.sourceMap : nil,
-            syncCoordinator: syncCoordinator,
+            sourceMap: isSyncEnabled && isEditingEntryFile ? compiler.sourceMap : nil,
+            syncCoordinator: isSyncEnabled ? syncCoordinator : nil,
             theme: themeManager.currentTheme,
             errorLines: compilationErrorLines,
             onPhotoTapped: { showingPhotoPicker = true },
@@ -68,8 +71,8 @@ extension DocumentEditorView {
             previewCacheDescriptor: compiledPreviewCacheDescriptor,
             compileToken: compileToken,
             focusCoordinator: focusCoordinator,
-            sourceMap: compiler.sourceMap,
-            syncCoordinator: syncCoordinator,
+            sourceMap: isSyncEnabled ? compiler.sourceMap : nil,
+            syncCoordinator: isSyncEnabled ? syncCoordinator : nil,
             entryFileName: document.entryFileName,
             onGoToError: { file, line, column in
                 navigateToError(file: file, line: line, column: column)
@@ -151,7 +154,14 @@ extension DocumentEditorView {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
 
-                if selectedTab == 0 { editorPane } else { previewPane }
+                ZStack {
+                    editorPane
+                        .opacity(selectedTab == 0 ? 1 : 0)
+                        .accessibilityHidden(selectedTab != 0)
+                    previewPane
+                        .opacity(selectedTab == 1 ? 1 : 0)
+                        .accessibilityHidden(selectedTab != 1)
+                }
             }
             .background(Color(uiColor: .systemGroupedBackground))
         }
@@ -341,8 +351,11 @@ extension DocumentEditorView {
                     pumpPendingInsertionsIfNeeded()
                 }
             }
-            .onChange(of: selectedTab) { _, _ in
+            .onChange(of: selectedTab) { _, newTab in
                 InteractionFeedback.selection()
+                if newTab != 0 {
+                    focusCoordinator.dismissKeyboard()
+                }
             }
             .onChange(of: exporter.exportURL) { _, newValue in
                 guard newValue != nil else { return }
@@ -379,6 +392,7 @@ extension DocumentEditorView {
                 AccessibilitySupport.announce(L10n.a11yCompileSuccess)
             }
             .onChange(of: compiler.errorMessage) { _, newValue in
+                compilationErrorLines = recomputeCompilationErrorLines()
                 guard pendingManualCompileFeedback, newValue != nil else { return }
                 pendingManualCompileFeedback = false
                 InteractionFeedback.notify(.error)

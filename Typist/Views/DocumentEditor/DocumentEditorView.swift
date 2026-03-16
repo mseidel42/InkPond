@@ -70,6 +70,7 @@ struct DocumentEditorView: View {
     @State var cachedImageFiles: [String] = []
     @State var showingPositionRestore = false
     @State var pendingPreviewSync = false
+    @State var compilationErrorLines: Set<Int> = []
 
     var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
     var isEditingEntryFile: Bool { currentFileName == document.entryFileName }

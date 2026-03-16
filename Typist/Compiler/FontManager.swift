@@ -110,6 +110,16 @@ enum FontManager {
         return code == CTFontManagerError.alreadyRegistered.rawValue
     }
 
+    /// Remove entries from the registration cache whose files no longer exist on disk.
+    static func pruneRegistrationCache() {
+        let stale = registeredPreviewFontPaths.filter { !FileManager.default.fileExists(atPath: $0) }
+        for path in stale {
+            let url = URL(fileURLWithPath: path) as CFURL
+            CTFontManagerUnregisterFontsForURL(url, .process, nil)
+            registeredPreviewFontPaths.remove(path)
+        }
+    }
+
     private static func postScriptName(forFontAtPath path: String) -> String? {
         if let record = fontNameRecords(forFontAtPath: path)
             .first(where: { $0.platformID == 3 && $0.encodingID == 1 && $0.nameID == 6 })?
@@ -219,8 +229,12 @@ enum FontManager {
     static func deleteAppFont(fileName: String, rootURL: URL? = nil) {
         let url = appFontsDirectory(rootURL: rootURL)
             .appendingPathComponent(fileName)
-        try? FileManager.default.removeItem(at: url)
-        os_log(.info, "FontManager: deleted %{public}@ from App font library", fileName)
+        do {
+            try FileManager.default.removeItem(at: url)
+            os_log(.info, "FontManager: deleted %{public}@ from App font library", fileName)
+        } catch {
+            os_log(.error, "FontManager: failed to delete %{public}@: %{public}@", fileName, error.localizedDescription)
+        }
     }
 
     // MARK: - Import / Delete (per-project)
@@ -256,8 +270,13 @@ enum FontManager {
     static func deleteFont(fileName: String, from document: TypistDocument) {
         let url = ProjectFileManager.fontsDirectory(for: document)
             .appendingPathComponent(fileName)
-        try? FileManager.default.removeItem(at: url)
-        os_log(.info, "FontManager: deleted %{public}@ from project %{public}@", fileName, document.projectID)
+        do {
+            try FileManager.default.removeItem(at: url)
+            os_log(.info, "FontManager: deleted %{public}@ from project %{public}@", fileName, document.projectID)
+        } catch {
+            os_log(.error, "FontManager: failed to delete %{public}@ from project %{public}@: %{public}@",
+                   fileName, document.projectID, error.localizedDescription)
+        }
     }
 
     // MARK: - Resolve paths for compilation
