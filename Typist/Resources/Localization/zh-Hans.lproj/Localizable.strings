@@ -285,3 +285,32 @@
 "resume.alert.message_with_file" = "返回上次在 %@ 中离开的位置？";
 "resume.alert.action.resume" = "继续";
 "resume.alert.action.start_from_top" = "从头开始";
+
+"snippet.title" = "代码片段";
+"snippet.search.prompt" = "搜索代码片段";
+"snippet.action.new" = "新建片段";
+"snippet.action.edit" = "编辑";
+"snippet.badge.custom" = "自定义";
+"snippet.editor.title.new" = "新建片段";
+"snippet.editor.title.edit" = "编辑片段";
+"snippet.editor.section.details" = "详情";
+"snippet.editor.section.body" = "内容";
+"snippet.editor.field.title" = "标题";
+"snippet.editor.field.category" = "分类";
+"snippet.editor.action.save" = "保存";
+"snippet.editor.action.custom_category" = "自定义分类…";
+"snippet.editor.action.pick_category" = "选择已有分类";
+"snippet.editor.body.hint" = "使用 $0 标记插入后的光标位置。";
+"action.insert_snippet" = "插入片段";
+"a11y.keyboard.snippet.label" = "插入代码片段";
+"a11y.keyboard.snippet.hint" = "浏览并插入代码片段。";
+
+"onboarding.welcome.title" = "欢迎使用 Typist";
+"onboarding.welcome.subtitle" = "一款原生的 Typst 编辑器，\n适用于 iPad 和 iPhone。\n在你的设备上\n轻松编写精美排版的文档。";
+"onboarding.editor.title" = "强大的编辑器";
+"onboarding.editor.subtitle" = "语法高亮、自动补全\n和 Typst 专用键盘工具栏，\n让写作得心应手。";
+"onboarding.preview.title" = "实时预览";
+"onboarding.preview.subtitle" = "实时查看文档效果。\n一边编辑，\n一边预览排版结果。";
+"onboarding.projects.title" = "多文件项目";
+"onboarding.projects.subtitle" = "在独立的项目目录中\n管理源文件、图片和字体。\n支持 ZIP 导入导出。";
+"onboarding.action.get_started" = "开始使用";

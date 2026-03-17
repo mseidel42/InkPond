@@ -23,6 +23,7 @@ struct EditorView: UIViewRepresentable {
     var theme: EditorTheme = .system
     var errorLines: Set<Int> = []
     var onPhotoTapped: () -> Void = {}
+    var onSnippetTapped: () -> Void = {}
     var onImagePasted: (Data) -> Void = { _ in }
     var onRichPaste: ([TypstTextView.PasteFragment]) -> Void = { _ in }
     var fontFamilies: [String] = []
@@ -55,6 +56,7 @@ struct EditorView: UIViewRepresentable {
         textView.accessibilityLabel = L10n.a11yEditorLabel
         textView.accessibilityHint = L10n.a11yEditorHint
         textView.onPhotoButtonTapped = onPhotoTapped
+        textView.onSnippetButtonTapped = onSnippetTapped
         textView.onImagePasted = onImagePasted
         textView.onRichPaste = onRichPaste
         textView.updateFontFamilies(fontFamilies)

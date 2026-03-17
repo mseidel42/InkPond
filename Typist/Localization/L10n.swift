@@ -127,6 +127,8 @@ enum L10n {
     nonisolated static var a11yKeyboardUndoHint: String { tr("a11y.keyboard.undo.hint") }
     nonisolated static var a11yKeyboardRedoLabel: String { tr("a11y.keyboard.redo.label") }
     nonisolated static var a11yKeyboardRedoHint: String { tr("a11y.keyboard.redo.hint") }
+    nonisolated static var a11yKeyboardSnippetLabel: String { tr("a11y.keyboard.snippet.label") }
+    nonisolated static var a11yKeyboardSnippetHint: String { tr("a11y.keyboard.snippet.hint") }
     nonisolated static var a11ySettingsHeaderLabel: String { tr("a11y.settings.header.label") }
     nonisolated static func a11ySettingsHeaderValue(version: String, typstVersion: String?) -> String {
         if let typstVersion {

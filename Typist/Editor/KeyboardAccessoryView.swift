@@ -13,6 +13,7 @@ final class KeyboardAccessoryView: UIInputView {
 
     private weak var textView: UITextView?
     var onPhotoButtonTapped: (() -> Void)?
+    var onSnippetButtonTapped: (() -> Void)?
 
     private let symbols: [SymbolItem] = [
         SymbolItem(label: "⇥", insert: "  "),
@@ -160,6 +161,10 @@ final class KeyboardAccessoryView: UIInputView {
         separator.backgroundColor = .separator.withAlphaComponent(0.3)
         separator.translatesAutoresizingMaskIntoConstraints = false
 
+        let snippetButton = makeButton(systemImage: "text.badge.plus") { [weak self] in
+            InteractionFeedback.impact(.light)
+            self?.onSnippetButtonTapped?()
+        }
         let photoButton = makeButton(systemImage: "photo") { [weak self] in
             InteractionFeedback.impact(.light)
             self?.onPhotoButtonTapped?()
@@ -172,6 +177,8 @@ final class KeyboardAccessoryView: UIInputView {
             InteractionFeedback.impact(.light)
             self?.textView?.undoManager?.redo()
         }
+        snippetButton.accessibilityLabel = L10n.a11yKeyboardSnippetLabel
+        snippetButton.accessibilityHint = L10n.a11yKeyboardSnippetHint
         photoButton.accessibilityLabel = L10n.a11yKeyboardPhotoLabel
         photoButton.accessibilityHint = L10n.a11yKeyboardPhotoHint
         undoButton.accessibilityLabel = L10n.a11yKeyboardUndoLabel
@@ -179,7 +186,7 @@ final class KeyboardAccessoryView: UIInputView {
         redoButton.accessibilityLabel = L10n.a11yKeyboardRedoLabel
         redoButton.accessibilityHint = L10n.a11yKeyboardRedoHint
 
-        let rightStack = UIStackView(arrangedSubviews: [photoButton, undoButton, redoButton])
+        let rightStack = UIStackView(arrangedSubviews: [snippetButton, photoButton, undoButton, redoButton])
         rightStack.axis = .horizontal
         rightStack.spacing = 2
         rightStack.translatesAutoresizingMaskIntoConstraints = false

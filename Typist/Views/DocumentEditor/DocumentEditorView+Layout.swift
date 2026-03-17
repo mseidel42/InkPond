@@ -36,6 +36,7 @@ extension DocumentEditorView {
             theme: themeManager.currentTheme,
             errorLines: compilationErrorLines,
             onPhotoTapped: { showingPhotoPicker = true },
+            onSnippetTapped: { showingSnippetBrowser = true },
             onImagePasted: { pastedImageData in
                 importImage(from: .rawData(pastedImageData, suggestedFileName: nil))
             },
@@ -460,6 +461,16 @@ extension DocumentEditorView {
             .sheet(isPresented: $showingOutline) {
                 OutlineView(editorText: editorText) { offset in
                     pendingCursorJump = offset
+                }
+            }
+            .sheet(isPresented: $showingSnippetBrowser) {
+                SnippetBrowserSheet { snippet in
+                    let (text, cursorOffset) = snippet.bodyWithCursorOffset()
+                    let insertionStart = editorViewState.selectedLocation
+                    insertionRequest = text
+                    if let cursorOffset {
+                        pendingCursorJump = insertionStart + cursorOffset
+                    }
                 }
             }
             .fullScreenCover(isPresented: $showingSlideshow) {

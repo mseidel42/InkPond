@@ -285,3 +285,32 @@
 "resume.alert.message_with_file" = "Return to %@ where you left off last time?";
 "resume.alert.action.resume" = "Resume";
 "resume.alert.action.start_from_top" = "Start from Top";
+
+"snippet.title" = "Snippets";
+"snippet.search.prompt" = "Search snippets";
+"snippet.action.new" = "New Snippet";
+"snippet.action.edit" = "Edit";
+"snippet.badge.custom" = "Custom";
+"snippet.editor.title.new" = "New Snippet";
+"snippet.editor.title.edit" = "Edit Snippet";
+"snippet.editor.section.details" = "Details";
+"snippet.editor.section.body" = "Body";
+"snippet.editor.field.title" = "Title";
+"snippet.editor.field.category" = "Category";
+"snippet.editor.action.save" = "Save";
+"snippet.editor.action.custom_category" = "Custom Category…";
+"snippet.editor.action.pick_category" = "Pick Existing Category";
+"snippet.editor.body.hint" = "Use $0 to mark cursor position after insertion.";
+"action.insert_snippet" = "Insert Snippet";
+"a11y.keyboard.snippet.label" = "Insert snippet";
+"a11y.keyboard.snippet.hint" = "Browse and insert code snippets.";
+
+"onboarding.welcome.title" = "Welcome to Typist";
+"onboarding.welcome.subtitle" = "A native Typst editor\nfor iPad and iPhone.\nWrite beautifully typeset documents,\nright from your device.";
+"onboarding.editor.title" = "Powerful Editor";
+"onboarding.editor.subtitle" = "Syntax highlighting, auto-completion,\nand a Typst-optimized keyboard bar\nmake writing effortless.";
+"onboarding.preview.title" = "Live Preview";
+"onboarding.preview.subtitle" = "See your document come to life\nin real time.\nEdit on one side,\npreview the result on the other.";
+"onboarding.projects.title" = "Multi-File Projects";
+"onboarding.projects.subtitle" = "Organize source files, images, and fonts\nin per-project directories.\nImport and export as ZIP.";
+"onboarding.action.get_started" = "Get Started";

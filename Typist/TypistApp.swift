@@ -19,11 +19,14 @@ struct TypistApp: App {
         return try? ModelContainer(for: schema, configurations: [modelConfiguration])
     }()
 
+    @State private var snippetStore = SnippetStore()
+
     var body: some Scene {
         WindowGroup {
             if let container = sharedModelContainer {
                 ContentView()
                     .modelContainer(container)
+                    .environment(snippetStore)
                     .task {
                         ExportManager.cleanupTemporaryExports()
                         FontManager.pruneRegistrationCache()

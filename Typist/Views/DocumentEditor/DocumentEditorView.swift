@@ -73,6 +73,7 @@ struct DocumentEditorView: View {
     @State var compilationErrorLines: Set<Int> = []
     @State var showingKeyboardShortcuts = false
     @State var showingOutline = false
+    @State var showingSnippetBrowser = false
 
     var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
     var isEditingEntryFile: Bool { currentFileName == document.entryFileName }

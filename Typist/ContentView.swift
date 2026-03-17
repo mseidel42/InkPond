@@ -36,10 +36,24 @@ struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var searchText: String = ""
     @State private var didSeedUITestDocument = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
+        if hasCompletedOnboarding {
+            mainContent
+        } else {
+            OnboardingView {
+                withAnimation { hasCompletedOnboarding = true }
+            }
+            .preferredColorScheme(appAppearanceManager.colorScheme)
+            .environment(appAppearanceManager)
+        }
+    }
+
+    private var mainContent: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             DocumentListView(selectedDocument: $selectedDocument, searchText: $searchText)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 340)
         } detail: {
             if let document = selectedDocument {
                 DocumentEditorView(document: document, isSidebarVisible: columnVisibility != .detailOnly)

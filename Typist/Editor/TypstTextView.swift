@@ -75,6 +75,9 @@ final class TypstTextView: UITextView {
     var onPhotoButtonTapped: (() -> Void)? {
         didSet { (inputAccessoryView as? KeyboardAccessoryView)?.onPhotoButtonTapped = onPhotoButtonTapped }
     }
+    var onSnippetButtonTapped: (() -> Void)? {
+        didSet { (inputAccessoryView as? KeyboardAccessoryView)?.onSnippetButtonTapped = onSnippetButtonTapped }
+    }
     var onImagePasted: ((Data) -> Void)?
     var onRichPaste: (([PasteFragment]) -> Void)?
     private let pasteImageTypes: [UTType] = [.png, .jpeg, .heic, .heif, .tiff, .gif, .webP]

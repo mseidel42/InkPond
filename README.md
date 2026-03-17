@@ -29,11 +29,38 @@ Typist is a native iOS/iPadOS editor for [Typst](https://typst.app/), with live 
 
 ## Features
 
-- Native Typst editing with syntax highlighting
-- Live PDF preview while typing
-- SwiftData-based document management
-- PDF and source export
-- iPhone and iPad adaptive UI
+**Editor**
+- Syntax highlighting with 15 rules, rainbow bracket coloring, and bracket mismatch detection
+- Auto-pairing for `{}[]()""$$` with smart type-over, auto-delete, and auto-indent
+- Code completion for Typst functions (~150), keywords, font families, labels, references, and image paths
+- Snippets library with custom templates and `$0` cursor placeholders
+- Find and replace (system `UIFindInteraction`)
+- Line number gutter with error line highlighting
+- Keyboard accessory bar with quick-insert buttons
+
+**Preview**
+- Live PDF preview with debounced recompilation (350ms)
+- Bidirectional editor-to-preview sync via source maps
+- Document statistics (pages, words/tokens, characters; CJK-aware)
+- Error banner with source location links
+- Full-screen slideshow mode
+- Outline view for heading navigation
+
+**Project Management**
+- Multi-file projects with customizable entry file
+- Project file browser with .typ, image, and font sections
+- Image import from Photos, clipboard (including HTML paste), and remote URLs
+- Per-project and app-wide font management (bundled CJK fallback included)
+- ZIP project import and export
+- PDF and source (.typ) export
+
+**UI/UX**
+- Adaptive layout: split view on iPad, tabbed on iPhone
+- Three editor themes: Mocha (dark), Latte (light), System (adaptive) — based on Catppuccin
+- Onboarding flow for new users
+- Editor position resumption across launches
+- Full VoiceOver and accessibility support
+- Localized in English, Simplified Chinese, Traditional Chinese (HK/TW)
 - iOS 26 enhancements where available, with iOS 17-compatible fallbacks
 
 ## Requirements
@@ -108,24 +135,56 @@ After upload, wait for processing, then distribute build to TestFlight groups.
 ```text
 Typist/
 ├── Typist/
-│   ├── Views/
-│   │   ├── DocumentList/
-│   │   ├── DocumentEditor/
-│   │   └── Settings/
-│   ├── Editor/
-│   ├── Compiler/
+│   ├── TypistApp.swift                 # @main entry point, SwiftData ModelContainer
+│   ├── ContentView.swift               # NavigationSplitView shell, environment setup
 │   ├── Models/
-│   ├── Localization/
-│   ├── Resources/
-│   ├── Shared/
-│   │   └── UI/
-│   └── Bridging/
+│   │   └── TypistDocument.swift        # @Model: document data + project config
+│   ├── Editor/
+│   │   ├── TypstTextView.swift         # UITextView subclass (TextKit 1)
+│   │   ├── SyntaxHighlighter.swift     # 15-rule highlighting + rainbow brackets
+│   │   ├── CompletionEngine.swift      # Context-aware code completion
+│   │   ├── AutoPairEngine.swift        # Bracket/quote auto-pairing
+│   │   ├── SyncCoordinator.swift       # Bidirectional editor↔preview sync
+│   │   ├── EditorTheme.swift           # Mocha/Latte/System theme definitions
+│   │   ├── ThemeManager.swift          # Theme persistence (UserDefaults)
+│   │   ├── Snippet*.swift              # Snippet model, library, and store
+│   │   ├── HighlightScheduler.swift    # Debounced highlighting
+│   │   ├── LineNumberGutterView.swift  # Gutter with error markers
+│   │   └── KeyboardAccessoryView.swift # Accessory bar (photo/snippet buttons)
+│   ├── Compiler/
+│   │   ├── TypstBridge.swift           # Rust FFI wrapper (compile + source map)
+│   │   ├── TypstCompiler.swift         # Debounced compilation pipeline + cache
+│   │   ├── SourceMap.swift             # Line↔page bidirectional mapping
+│   │   ├── ProjectFileManager.swift    # Per-project file CRUD + validation
+│   │   ├── FontManager.swift           # Bundled CJK + project + app font resolution
+│   │   ├── ExportManager.swift         # PDF/source/ZIP export (custom ZIP writer)
+│   │   ├── ExportController.swift      # Export UI state machine
+│   │   ├── ZipImporter.swift           # ZIP project import
+│   │   ├── DirectoryMonitor.swift      # DispatchSource file system watcher
+│   │   └── *CacheStore.swift           # Compiled preview + package caches
+│   ├── Views/
+│   │   ├── DocumentList/               # Document library, search, sort, rename
+│   │   ├── DocumentEditor/             # Editor/preview split, file ops, images
+│   │   │   └── OutlineView.swift       # Heading outline navigation
+│   │   ├── EditorView.swift            # UIViewRepresentable for TypstTextView
+│   │   ├── PreviewPane.swift           # PDFKit live preview + stats + sync marker
+│   │   ├── SlideshowView.swift         # Full-screen PDF presentation
+│   │   ├── OnboardingView.swift        # First-launch onboarding
+│   │   ├── SnippetBrowserSheet.swift   # Snippet library browser
+│   │   ├── ProjectFileBrowserSheet.swift
+│   │   ├── ProjectSettingsSheet.swift
+│   │   └── Settings/                   # App settings, fonts, cache, shortcuts
+│   ├── Localization/                   # L10n.swift + .strings (en, zh-Hans, zh-Hant)
+│   ├── Storage/
+│   │   └── AppFontLibrary.swift        # App-wide font import tracking
+│   ├── Shared/UI/                      # UIKit/SwiftUI bridges, haptics, a11y
+│   └── Bridging/                       # typst_ffi.h bridging header
 ├── rust-ffi/
-│   ├── src/lib.rs
-│   ├── Cargo.toml
-│   └── build-ios.sh
+│   ├── src/lib.rs                      # Rust Typst wrapper
+│   ├── Cargo.toml                      # Rust dependencies (Typst engine)
+│   └── build-ios.sh                    # XCFramework build (device + sim)
 ├── Frameworks/
-│   └── typst_ios.xcframework/
+│   └── typst_ios.xcframework/          # Generated build artifact (not committed)
 ├── release/
 │   └── ExportOptions.plist
 └── Typist.xcodeproj
