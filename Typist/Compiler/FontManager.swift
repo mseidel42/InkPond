@@ -138,23 +138,43 @@ enum FontManager {
 
     // MARK: - App-level fonts
 
-    private static var applicationSupportURL: URL {
+    private nonisolated static var applicationSupportURL: URL {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             fatalError("ApplicationSupportDirectory unavailable — this should never happen in a sandboxed app")
         }
         return appSupport
     }
 
-    static func appFontsDirectory(rootURL: URL? = nil) -> URL {
-        (rootURL ?? applicationSupportURL)
+    nonisolated static var localAppFontsRootURL: URL {
+        applicationSupportURL
+    }
+
+    private nonisolated static var defaultAppFontsRootURL: URL {
+        let storedMode = UserDefaults.standard.string(forKey: "storageMode")
+        guard storedMode == StorageMode.iCloud.rawValue,
+              let ubiquityDocumentsURL = FileManager.default
+                .url(forUbiquityContainerIdentifier: "iCloud.P0int.Typist")?
+                .appendingPathComponent("Documents", isDirectory: true) else {
+            return localAppFontsRootURL
+        }
+        return ubiquityDocumentsURL
+    }
+
+    nonisolated static func appFontsDirectory(rootURL: URL? = nil) -> URL {
+        (rootURL ?? defaultAppFontsRootURL)
             .appendingPathComponent("AppFonts", isDirectory: true)
     }
 
     static func createAppFontsDirectory(rootURL: URL? = nil) throws {
-        try FileManager.default.createDirectory(
-            at: appFontsDirectory(rootURL: rootURL),
-            withIntermediateDirectories: true
-        )
+        let directoryURL = appFontsDirectory(rootURL: rootURL)
+        if ProjectFileManager.useCoordination {
+            try CloudFileCoordinator.createDirectory(at: directoryURL)
+        } else {
+            try FileManager.default.createDirectory(
+                at: directoryURL,
+                withIntermediateDirectories: true
+            )
+        }
     }
 
     static func ensureAppFontsDirectory(rootURL: URL? = nil) {
@@ -227,7 +247,11 @@ enum FontManager {
         let url = appFontsDirectory(rootURL: rootURL)
             .appendingPathComponent(fileName)
         do {
-            try FileManager.default.removeItem(at: url)
+            if ProjectFileManager.useCoordination {
+                try CloudFileCoordinator.removeItem(at: url)
+            } else {
+                try FileManager.default.removeItem(at: url)
+            }
             os_log(.info, "FontManager: deleted %{public}@ from App font library", fileName)
         } catch {
             os_log(.error, "FontManager: failed to delete %{public}@: %{public}@", fileName, error.localizedDescription)

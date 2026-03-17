@@ -38,6 +38,8 @@ struct AppFontGroup: Identifiable, Sendable {
 @Observable
 final class AppFontLibrary {
     private let rootURL: URL?
+    @ObservationIgnored private var monitor = DirectoryMonitor()
+    @ObservationIgnored private var monitoredDirectoryURL: URL?
 
     private(set) var items: [AppFontItem] = []
 
@@ -102,6 +104,29 @@ final class AppFontLibrary {
 
     func reload() {
         items = FontManager.appFontItems(rootURL: rootURL)
+    }
+
+    @MainActor
+    func startMonitoring() {
+        let directoryURL = FontManager.appFontsDirectory(rootURL: rootURL)
+        FontManager.ensureAppFontsDirectory(rootURL: rootURL)
+
+        if monitoredDirectoryURL?.standardizedFileURL == directoryURL.standardizedFileURL {
+            return
+        }
+
+        monitor.stop()
+        monitor.onChange = { [weak self] in
+            self?.reload()
+        }
+        monitor.start(url: directoryURL)
+        monitoredDirectoryURL = directoryURL
+    }
+
+    @MainActor
+    func stopMonitoring() {
+        monitor.stop()
+        monitoredDirectoryURL = nil
     }
 
     func importFonts(from urls: [URL]) throws {

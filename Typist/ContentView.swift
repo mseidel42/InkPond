@@ -29,6 +29,7 @@ private struct SceneTitleSetter: UIViewRepresentable {
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(StorageManager.self) private var storageManager
     @State private var selectedDocument: TypistDocument?
     @State private var themeManager = ThemeManager()
     @State private var appAppearanceManager = AppAppearanceManager()
@@ -80,7 +81,17 @@ struct ContentView: View {
         .environment(themeManager)
         .environment(appFontLibrary)
         .task {
+            appFontLibrary.reload()
+            appFontLibrary.startMonitoring()
             seedUITestDocumentIfNeeded()
+        }
+        .onChange(of: storageManager.mode) { _, _ in
+            appFontLibrary.stopMonitoring()
+            appFontLibrary.reload()
+            appFontLibrary.startMonitoring()
+        }
+        .onDisappear {
+            appFontLibrary.stopMonitoring()
         }
     }
 

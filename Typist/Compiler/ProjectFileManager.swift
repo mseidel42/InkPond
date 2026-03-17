@@ -71,7 +71,14 @@ enum ProjectFileManager {
     ]
     static let fontFileExtensions: Set<String> = ["otf", "ttf", "woff", "woff2"]
 
+    /// Shared StorageManager reference — set at app launch from TypistApp.
+    nonisolated(unsafe) static var storageManager: StorageManager?
+
     static var documentsURL: URL {
+        if let manager = storageManager {
+            return manager.activeDocumentsURL
+        }
+        // Fallback to local Documents if StorageManager not yet initialized
         guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
             fatalError("DocumentDirectory unavailable — this should never happen in a sandboxed app")
         }
@@ -104,6 +111,13 @@ enum ProjectFileManager {
         return "\(base) \(i)"
     }
 
+    /// Whether file operations should use NSFileCoordinator (iCloud mode).
+    /// Nonisolated because it reads from the nonisolated(unsafe) storageManager
+    /// and must be callable from any actor context (e.g. BackgroundDocumentFileWriter).
+    nonisolated static var useCoordination: Bool {
+        storageManager?.isUsingiCloud ?? false
+    }
+
     @discardableResult
     static func renameProjectDirectory(for document: TypistDocument, to newTitle: String) throws -> String {
         let desiredFolderName = sanitizeFolderName(newTitle)
@@ -116,7 +130,11 @@ enum ProjectFileManager {
         guard FileManager.default.fileExists(atPath: oldDir.path) else {
             throw TypistFileError.fileNotFound(document.projectID)
         }
-        try FileManager.default.moveItem(at: oldDir, to: newDir)
+        if useCoordination {
+            try CloudFileCoordinator.moveItem(from: oldDir, to: newDir)
+        } else {
+            try FileManager.default.moveItem(at: oldDir, to: newDir)
+        }
         return newFolderName
     }
 
@@ -135,20 +153,34 @@ enum ProjectFileManager {
     }
 
     static func createProjectRoot(for document: TypistDocument) throws {
-        try FileManager.default.createDirectory(at: projectDirectory(for: document), withIntermediateDirectories: true)
+        let url = projectDirectory(for: document)
+        if useCoordination {
+            try CloudFileCoordinator.createDirectory(at: url)
+        } else {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
     }
 
     static func createImageDirectory(for document: TypistDocument) throws {
         try createProjectRoot(for: document)
         let imageDirectory = imagesDirectory(for: document)
         if imageDirectory.standardizedFileURL != projectDirectory(for: document).standardizedFileURL {
-            try FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true)
+            if useCoordination {
+                try CloudFileCoordinator.createDirectory(at: imageDirectory)
+            } else {
+                try FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true)
+            }
         }
     }
 
     static func createFontsDirectory(for document: TypistDocument) throws {
         try createProjectRoot(for: document)
-        try FileManager.default.createDirectory(at: fontsDirectory(for: document), withIntermediateDirectories: true)
+        let url = fontsDirectory(for: document)
+        if useCoordination {
+            try CloudFileCoordinator.createDirectory(at: url)
+        } else {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
     }
 
     static func createDefaultAssetDirectories(for document: TypistDocument) throws {
@@ -187,7 +219,11 @@ enum ProjectFileManager {
     static func deleteProjectDirectory(for document: TypistDocument) throws {
         let dir = projectDirectory(for: document)
         if FileManager.default.fileExists(atPath: dir.path) {
-            try FileManager.default.removeItem(at: dir)
+            if useCoordination {
+                try CloudFileCoordinator.removeItem(at: dir)
+            } else {
+                try FileManager.default.removeItem(at: dir)
+            }
         }
         os_log(.info, "ProjectFileManager: deleted project dir for %{public}@", document.projectID)
     }

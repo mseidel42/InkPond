@@ -8,10 +8,10 @@ import SwiftData
 
 @Model
 final class TypistDocument {
-    var title: String
-    var content: String
-    var createdAt: Date
-    var modifiedAt: Date
+    var title: String = L10n.untitledBase
+    var content: String = ""
+    var createdAt: Date = Date()
+    var modifiedAt: Date = Date()
     // Property-level defaults serve as SwiftData schema-migration fallbacks.
     var fontFileNames: [String] = []
     var projectID: String = UUID().uuidString

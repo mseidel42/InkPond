@@ -10,7 +10,11 @@ import PhotosUI
 
 actor BackgroundDocumentFileWriter {
     func write(_ content: String, to url: URL) throws {
-        try content.write(to: url, atomically: true, encoding: .utf8)
+        if ProjectFileManager.useCoordination {
+            try CloudFileCoordinator.writeString(content, to: url)
+        } else {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 }
 
@@ -27,6 +31,7 @@ struct DocumentEditorView: View {
 
     @Environment(AppFontLibrary.self) var appFontLibrary
     @Environment(\.horizontalSizeClass) var sizeClass
+    @Environment(\.modelContext) var modelContext
     @Environment(ThemeManager.self) var themeManager
 
     @State var compiler = TypstCompiler()
@@ -74,6 +79,7 @@ struct DocumentEditorView: View {
     @State var showingKeyboardShortcuts = false
     @State var showingOutline = false
     @State var showingSnippetBrowser = false
+    @State var positionSyncTask: Task<Void, Never>?
 
     var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
     var isEditingEntryFile: Bool { currentFileName == document.entryFileName }

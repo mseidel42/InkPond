@@ -63,6 +63,28 @@
 "error.image.process_failed" = "Could not process image.";
 "error.datastore.title" = "Unable to Open Data Store";
 "error.datastore.message" = "Typist could not open its data store. Try restarting the app. If the problem persists, reinstalling may help.";
+
+"icloud.title" = "iCloud";
+"icloud.sync_toggle" = "iCloud Sync";
+"icloud.sync_footer.on" = "Documents and project files are synced across your devices via iCloud.";
+"icloud.sync_footer.off" = "Documents and project files are stored locally on this device only.";
+"icloud.error.unavailable" = "iCloud is not available. Please sign in to iCloud in Settings.";
+"icloud.migrating" = "Migrating files…";
+"icloud.restart_title" = "Restart Required";
+"icloud.restart_message" = "Changing iCloud sync requires restarting Typist for the change to take full effect.";
+"icloud.restart_action" = "Quit Typist";
+"icloud.keep_downloaded_tip" = "For the best experience, open the Files app, navigate to iCloud Drive, long press the Typist folder, and select \"Keep Downloaded\" to ensure files are always available offline.";
+"icloud.download_all" = "Download All Files";
+"icloud.error.verification_failed" = "Migration verification failed for project \"%@\". The copy may be incomplete.";
+"icloud.error.download_timeout" = "Some files could not be downloaded from iCloud in time. Please check your network connection and try again.";
+"icloud.status.checking" = "Checking sync status…";
+"icloud.status.no_files" = "No files in iCloud";
+"icloud.status.synced" = "All %d files synced";
+"icloud.status.downloading" = "Downloading %d files…";
+"icloud.status.uploading" = "Uploading %d files…";
+"icloud.status.syncing" = "Syncing %d files…";
+"icloud.status.not_downloaded" = "%d files not downloaded";
+"icloud.status.error" = "%d files with sync errors";
 "toast.image_inserted.single" = "Inserted %@";
 "toast.image_inserted.multiple" = "Inserted %d images";
 

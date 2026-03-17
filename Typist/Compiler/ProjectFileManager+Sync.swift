@@ -7,6 +7,10 @@ import Foundation
 import os.log
 
 extension ProjectFileManager {
+    private static let reservedDocumentDirectoryNames: Set<String> = [
+        "AppFonts"
+    ]
+
     static func untrackedFolderNames(knownProjectIDs: Set<String>) -> [String] {
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: documentsURL,
@@ -17,6 +21,7 @@ extension ProjectFileManager {
         return contents.compactMap { url -> String? in
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
             let name = url.lastPathComponent
+            guard !reservedDocumentDirectoryNames.contains(name) else { return nil }
             return knownProjectIDs.contains(name) ? nil : name
         }.sorted()
     }
@@ -30,7 +35,8 @@ extension ProjectFileManager {
 
         return Set(contents.compactMap { url -> String? in
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
-            return url.lastPathComponent
+            let name = url.lastPathComponent
+            return reservedDocumentDirectoryNames.contains(name) ? nil : name
         })
     }
 
@@ -85,7 +91,11 @@ extension ProjectFileManager {
         let source = document.content
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         do {
-            try source.write(to: entryURL, atomically: true, encoding: .utf8)
+            if useCoordination {
+                try CloudFileCoordinator.writeString(source, to: entryURL)
+            } else {
+                try source.write(to: entryURL, atomically: true, encoding: .utf8)
+            }
             os_log(.info, "ProjectFileManager: migrated content to %{public}@ for %{public}@",
                    document.entryFileName, document.projectID)
         } catch {

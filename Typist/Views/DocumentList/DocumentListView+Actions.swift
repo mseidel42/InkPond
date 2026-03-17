@@ -53,6 +53,7 @@ extension DocumentListView {
     }
 
     func syncWithFilesystem() {
+        deduplicateDocumentsByProjectID()
         let existingFolders = ProjectFileManager.trackedFolderNames()
 
         for document in documents where !existingFolders.contains(document.projectID) {
@@ -73,6 +74,103 @@ extension DocumentListView {
             configureImportedDocument(doc, relativePaths: allFiles)
             modelContext.insert(doc)
         }
+    }
+
+    func deduplicateDocumentsByProjectID() {
+        let groupedDocuments = Dictionary(grouping: documents, by: \.projectID)
+
+        for (_, duplicates) in groupedDocuments where duplicates.count > 1 {
+            let survivor = preferredDocumentForDuplicateGroup(duplicates)
+
+            for duplicate in duplicates where duplicate != survivor {
+                mergeDuplicateDocument(duplicate, into: survivor)
+                if selectedDocument == duplicate {
+                    selectedDocument = survivor
+                }
+                modelContext.delete(duplicate)
+            }
+        }
+    }
+
+    func preferredDocumentForDuplicateGroup(_ duplicates: [TypistDocument]) -> TypistDocument {
+        duplicates.max { lhs, rhs in
+            let lhsScore = duplicateRetentionScore(for: lhs)
+            let rhsScore = duplicateRetentionScore(for: rhs)
+            if lhsScore != rhsScore {
+                return lhsScore < rhsScore
+            }
+            if lhs.modifiedAt != rhs.modifiedAt {
+                return lhs.modifiedAt < rhs.modifiedAt
+            }
+            return lhs.createdAt > rhs.createdAt
+        } ?? duplicates[0]
+    }
+
+    func duplicateRetentionScore(for document: TypistDocument) -> Int {
+        var score = 0
+        if document.entryFileName != "main.typ" { score += 5 }
+        if !document.entryFileName.isEmpty { score += 2 }
+        if document.imageInsertMode != "image" { score += 4 }
+        if document.imageDirectoryName != "images" { score += 4 }
+        if !document.lastEditedFileName.isEmpty { score += 3 }
+        if !document.fontFileNames.isEmpty { score += 2 }
+        if !document.importEntryFileOptions.isEmpty { score += 1 }
+        if !document.importImageDirectoryOptions.isEmpty { score += 1 }
+        if !document.importFontDirectoryOptions.isEmpty { score += 1 }
+        if !document.content.isEmpty { score += 1 }
+        return score
+    }
+
+    func mergeDuplicateDocument(_ duplicate: TypistDocument, into survivor: TypistDocument) {
+        if survivor.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !duplicate.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            survivor.title = duplicate.title
+        }
+        if survivor.content.isEmpty && !duplicate.content.isEmpty {
+            survivor.content = duplicate.content
+        }
+        if shouldPreferEntryFileName(duplicate.entryFileName, over: survivor.entryFileName) {
+            survivor.entryFileName = duplicate.entryFileName
+        }
+        if survivor.imageInsertMode == "image", duplicate.imageInsertMode != "image" {
+            survivor.imageInsertMode = duplicate.imageInsertMode
+        }
+        if survivor.imageDirectoryName == "images", duplicate.imageDirectoryName != "images" {
+            survivor.imageDirectoryName = duplicate.imageDirectoryName
+        }
+        if survivor.lastEditedFileName.isEmpty && !duplicate.lastEditedFileName.isEmpty {
+            survivor.lastEditedFileName = duplicate.lastEditedFileName
+        }
+        if survivor.lastCursorLocation == 0 && duplicate.lastCursorLocation > 0 {
+            survivor.lastCursorLocation = duplicate.lastCursorLocation
+        }
+
+        if duplicate.modifiedAt > survivor.modifiedAt {
+            survivor.modifiedAt = duplicate.modifiedAt
+        }
+        if duplicate.createdAt < survivor.createdAt {
+            survivor.createdAt = duplicate.createdAt
+        }
+
+        survivor.fontFileNames = Array(Set(survivor.fontFileNames + duplicate.fontFileNames)).sorted()
+        survivor.requiresInitialEntrySelection = survivor.requiresInitialEntrySelection || duplicate.requiresInitialEntrySelection
+        survivor.requiresImportConfiguration = survivor.requiresImportConfiguration || duplicate.requiresImportConfiguration
+        survivor.importEntryFileOptions = Array(
+            Set(survivor.importEntryFileOptions + duplicate.importEntryFileOptions)
+        ).sorted()
+        survivor.importImageDirectoryOptions = Array(
+            Set(survivor.importImageDirectoryOptions + duplicate.importImageDirectoryOptions)
+        ).sorted()
+        survivor.importFontDirectoryOptions = Array(
+            Set(survivor.importFontDirectoryOptions + duplicate.importFontDirectoryOptions)
+        ).sorted()
+    }
+
+    func shouldPreferEntryFileName(_ candidate: String, over current: String) -> Bool {
+        guard !candidate.isEmpty else { return false }
+        if current.isEmpty { return true }
+        if current == "main.typ", candidate != "main.typ" { return true }
+        return false
     }
 
     func configureImportedDocument(_ document: TypistDocument, relativePaths: [String]) {

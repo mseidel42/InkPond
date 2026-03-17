@@ -347,8 +347,10 @@ extension DocumentEditorView {
                 }
             }
             .onDisappear {
+                positionSyncTask?.cancel()
+                positionSyncTask = nil
                 flushPendingSave()
-                persistEditorPosition()
+                persistEditorPositionIfNeeded()
                 focusCoordinator.setResignSuppressed(false)
                 compiler.cancel()
             }
@@ -376,6 +378,13 @@ extension DocumentEditorView {
             }
             .onChange(of: appFontLibrary.items) { _, _ in
                 handleCompileInputsChanged()
+            }
+            .onChange(of: currentFileName) { _, newValue in
+                guard !newValue.isEmpty else { return }
+                scheduleEditorPositionSync(delay: .milliseconds(150))
+            }
+            .onChange(of: editorViewState.selectedLocation) { _, _ in
+                scheduleEditorPositionSync()
             }
     }
 

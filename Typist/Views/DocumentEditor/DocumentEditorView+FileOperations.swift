@@ -5,6 +5,7 @@
 
 import Foundation
 import SwiftUI
+import SwiftData
 
 extension DocumentEditorView {
     func prepareDocumentForEditing() {
@@ -45,6 +46,13 @@ extension DocumentEditorView {
     func loadFile(named name: String) {
         saveTask?.cancel()
         saveTask = nil
+
+        // If the file is in iCloud and not yet downloaded, trigger download
+        let fileURL = ProjectFileManager.typFileURL(named: name, for: document)
+        if ProjectFileManager.useCoordination {
+            try? FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
+        }
+
         let text = (try? ProjectFileManager.readTypFile(named: name, for: document)) ?? ""
         insertionRequest = nil
         pendingCursorJump = nil
@@ -126,7 +134,11 @@ extension DocumentEditorView {
         let fileURL = ProjectFileManager.typFileURL(named: currentFileName, for: document)
 
         do {
-            try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            if ProjectFileManager.useCoordination {
+                try CloudFileCoordinator.writeString(content, to: fileURL)
+            } else {
+                try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            }
             lastPersistedText = content
             document.modifiedAt = Date()
             if shouldRefreshPreviewAfterSave {
@@ -156,6 +168,34 @@ extension DocumentEditorView {
     func persistEditorPosition() {
         document.lastEditedFileName = currentFileName
         document.lastCursorLocation = editorViewState.selectedLocation
+    }
+
+    func scheduleEditorPositionSync(delay: Duration = .milliseconds(700)) {
+        positionSyncTask?.cancel()
+        positionSyncTask = Task {
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                persistEditorPositionIfNeeded()
+            }
+        }
+    }
+
+    func persistEditorPositionIfNeeded() {
+        guard !currentFileName.isEmpty else { return }
+        let nextFileName = currentFileName
+        let nextLocation = editorViewState.selectedLocation
+        guard document.lastEditedFileName != nextFileName || document.lastCursorLocation != nextLocation else {
+            return
+        }
+
+        persistEditorPosition()
+        try? modelContext.save()
     }
 
     func hasSavedPosition() -> Bool {
