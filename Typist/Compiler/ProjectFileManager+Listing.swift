@@ -117,9 +117,8 @@ extension ProjectFileManager {
             let fileName = sourceURL.lastPathComponent
             let destination = fontsDir.appendingPathComponent(fileName)
             if sourceURL.standardizedFileURL != destination.standardizedFileURL {
-                try? FileManager.default.removeItem(at: destination)
                 do {
-                    try FileManager.default.copyItem(at: sourceURL, to: destination)
+                    try copyItemReplacingSafely(from: sourceURL, to: destination)
                 } catch {
                     return nil
                 }

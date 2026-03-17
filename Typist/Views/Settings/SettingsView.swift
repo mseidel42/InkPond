@@ -123,7 +123,7 @@ extension SettingsView {
 
     var appearanceSection: some View {
         Section("Appearance") {
-            Picker("App Appearance", selection: Binding(
+            Picker(selection: Binding(
                 get: { appAppearanceManager.mode },
                 set: { newMode in
                     withTransaction(Transaction(animation: nil)) {
@@ -134,9 +134,11 @@ extension SettingsView {
                 Text("Follow System").tag(AppAppearanceMode.system.rawValue)
                 Text("Light").tag(AppAppearanceMode.light.rawValue)
                 Text("Dark").tag(AppAppearanceMode.dark.rawValue)
+            } label: {
+                Label("App Appearance", systemImage: "circle.lefthalf.filled")
             }
 
-            Picker("Editor Theme", selection: Binding(
+            Picker(selection: Binding(
                 get: { themeManager.themeID },
                 set: { newID in
                     withTransaction(Transaction(animation: nil)) {
@@ -147,6 +149,8 @@ extension SettingsView {
                 Text("Auto").tag("system")
                 Text("Mocha · Dark").tag("mocha")
                 Text("Latte · Light").tag("latte")
+            } label: {
+                Label("Editor Theme", systemImage: "paintpalette")
             }
         }
     }
@@ -221,7 +225,8 @@ extension SettingsView {
             NavigationLink {
                 AcknowledgementsView()
             } label: {
-                Text("Acknowledgements")
+                Label("Acknowledgements", systemImage: "heart")
+                    .foregroundStyle(.primary)
             }
             .accessibilityIdentifier("settings.acknowledgements")
         }

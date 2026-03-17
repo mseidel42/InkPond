@@ -74,7 +74,11 @@ struct OutlineView: View {
             let equalsRange = match.range(at: 1)
             let titleRange = match.range(at: 2)
             let level = equalsRange.length
-            let title = nsString.substring(with: titleRange).trimmingCharacters(in: .whitespaces)
+            var title = nsString.substring(with: titleRange).trimmingCharacters(in: .whitespaces)
+            // Strip trailing Typst bookmark labels like <intro>
+            if let labelRange = title.range(of: #"\s*<[^>]+>\s*$"#, options: .regularExpression) {
+                title = String(title[title.startIndex..<labelRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+            }
             guard !title.isEmpty else { return nil }
             let characterOffset = match.range.location
             return OutlineItem(level: level, title: title, characterOffset: characterOffset)

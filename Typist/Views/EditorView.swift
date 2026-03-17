@@ -3,6 +3,7 @@
 //  Typist
 //
 
+import Foundation
 import SwiftUI
 
 struct EditorViewState: Equatable {
@@ -11,9 +12,16 @@ struct EditorViewState: Equatable {
     var contentOffset: CGPoint = .zero
 }
 
+struct EditorInsertionRequest: Equatable, Identifiable {
+    let id = UUID()
+    let text: String
+    let targetRange: NSRange
+    let targetFileName: String
+}
+
 struct EditorView: UIViewRepresentable {
     @Binding var text: String
-    @Binding var insertionRequest: String?
+    @Binding var insertionRequest: EditorInsertionRequest?
     @Binding var findRequested: Bool
     @Binding var viewState: EditorViewState
     @Binding var cursorJumpOffset: Int?
@@ -24,8 +32,8 @@ struct EditorView: UIViewRepresentable {
     var errorLines: Set<Int> = []
     var onPhotoTapped: () -> Void = {}
     var onSnippetTapped: () -> Void = {}
-    var onImagePasted: (Data) -> Void = { _ in }
-    var onRichPaste: ([TypstTextView.PasteFragment]) -> Void = { _ in }
+    var onImagePasted: (Data, NSRange) -> Void = { _, _ in }
+    var onRichPaste: ([TypstTextView.PasteFragment], NSRange) -> Void = { _, _ in }
     var fontFamilies: [String] = []
     var bibEntries: [(key: String, type: String)] = []
     var externalLabels: [(name: String, kind: String)] = []
@@ -72,6 +80,17 @@ struct EditorView: UIViewRepresentable {
             }
         }
 
+        // Apply insertions before cursor jumps so post-insert jumps run against the new buffer.
+        if let request = insertionRequest {
+            let coordinator = context.coordinator
+            Task { @MainActor in
+                guard self.insertionRequest?.id == request.id else { return }
+                self.insertionRequest = nil
+                coordinator.insertText(request)
+            }
+            return
+        }
+
         // Consume pending cursor jump request
         if let jumpOffset = cursorJumpOffset {
             let coordinator = context.coordinator
@@ -94,17 +113,6 @@ struct EditorView: UIViewRepresentable {
                     textView.scrollSelectionToUpperThird(animated: true)
                 }
             }
-        }
-
-        // Consume pending insertion request
-        if let insertion = insertionRequest {
-            let coordinator = context.coordinator
-            Task { @MainActor in
-                guard self.insertionRequest == insertion else { return }
-                self.insertionRequest = nil
-                coordinator.insertText(insertion)
-            }
-            return
         }
         // Never push text back into the view while the user is actively editing.
         // Doing so can dismiss the software keyboard on iPadOS.
@@ -131,12 +139,17 @@ struct EditorView: UIViewRepresentable {
             self.parent = parent
         }
 
-        func insertText(_ text: String) {
+        func insertText(_ request: EditorInsertionRequest) {
             guard let textView else { return }
-            let selectedRange = textView.selectedRange
             let nsString = textView.text as NSString
+            let safeLocation = min(max(0, request.targetRange.location), nsString.length)
+            let safeLength = min(max(0, request.targetRange.length), nsString.length - safeLocation)
+            let selectedRange = NSRange(location: safeLocation, length: safeLength)
             let originalContent = nsString.substring(with: selectedRange)
-            let insertedRange = NSRange(location: selectedRange.location, length: (text as NSString).length)
+            let insertedRange = NSRange(
+                location: selectedRange.location,
+                length: (request.text as NSString).length
+            )
 
             textView.undoManager?.registerUndo(withTarget: textView) { tv in
                 tv.textStorage.replaceCharacters(in: insertedRange, with: originalContent)
@@ -145,11 +158,14 @@ struct EditorView: UIViewRepresentable {
             }
             textView.undoManager?.setActionName(L10n.tr("action.insert_image"))
 
-            textView.textStorage.replaceCharacters(in: selectedRange, with: text)
+            textView.textStorage.replaceCharacters(in: selectedRange, with: request.text)
             textView.selectedRange = NSRange(location: selectedRange.location + insertedRange.length, length: 0)
             parent.text = textView.text
             captureViewState(from: textView)
             textView.scheduleHighlighting(.immediate, textChanged: true)
+            DispatchQueue.main.async {
+                textView.scrollSelectionToUpperThird(animated: true)
+            }
         }
 
         func textViewDidChange(_ textView: UITextView) {

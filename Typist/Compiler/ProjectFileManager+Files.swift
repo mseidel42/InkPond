@@ -7,6 +7,28 @@ import Foundation
 import os.log
 
 extension ProjectFileManager {
+    static func copyItemReplacingSafely(from sourceURL: URL, to destinationURL: URL) throws {
+        let fm = FileManager.default
+        guard sourceURL.standardizedFileURL != destinationURL.standardizedFileURL else { return }
+
+        let tempURL = destinationURL.deletingLastPathComponent().appendingPathComponent(
+            ".replace-\(UUID().uuidString)-\(destinationURL.lastPathComponent)"
+        )
+        defer { try? fm.removeItem(at: tempURL) }
+
+        try fm.copyItem(at: sourceURL, to: tempURL)
+        if fm.fileExists(atPath: destinationURL.path) {
+            _ = try fm.replaceItemAt(
+                destinationURL,
+                withItemAt: tempURL,
+                backupItemName: nil,
+                options: [.usingNewMetadataOnly]
+            )
+        } else {
+            try fm.moveItem(at: tempURL, to: destinationURL)
+        }
+    }
+
     static func readTypFile(named name: String, for document: TypistDocument) throws -> String {
         let url = try validatedProjectPath(relativePath: name, for: document)
         return try String(contentsOf: url, encoding: .utf8)
@@ -52,10 +74,7 @@ extension ProjectFileManager {
         try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
         let fileName = sourceURL.lastPathComponent
         let dest = destDir.appendingPathComponent(fileName)
-        if FileManager.default.fileExists(atPath: dest.path) {
-            try FileManager.default.removeItem(at: dest)
-        }
-        try FileManager.default.copyItem(at: sourceURL, to: dest)
+        try copyItemReplacingSafely(from: sourceURL, to: dest)
         os_log(.info, "ProjectFileManager: imported %{public}@ into %{public}@/%{public}@", fileName, document.projectID, subdir)
         return subdir.isEmpty ? fileName : "\(subdir)/\(fileName)"
     }

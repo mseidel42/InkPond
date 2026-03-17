@@ -948,7 +948,13 @@ final class CompletionEngine {
         }
         guard colonScan > utf16.startIndex else { return nil }
         let charBeforeValue = text[utf16.index(before: colonScan)]
-        guard charBeforeValue == ":" else { return nil }
+        // Direct `param: value` — proceed below.
+        // Array context: `param: ("v1", "partial` — walk back past array elements to find `:`.
+        if charBeforeValue != ":" {
+            colonScan = scanBackPastArrayElements(in: text, from: colonScan)
+            guard colonScan > utf16.startIndex else { return nil }
+            guard text[utf16.index(before: colonScan)] == ":" else { return nil }
+        }
 
         // Get parameter name before `:`
         let colonPos = utf16.index(before: colonScan)
@@ -987,6 +993,55 @@ final class CompletionEngine {
         if filtered.count == 1, filtered[0].label.caseInsensitiveCompare(typedValue) == .orderedSame { return nil }
 
         return .value(prefix: typedValue, isQuoted: isQuoted, items: filtered)
+    }
+
+    /// Walk backwards past array elements like `("val1", "val2",` to find the opening `(` and then `:`.
+    /// Returns scan position just after any whitespace following the `(`, or `from` if not an array context.
+    private func scanBackPastArrayElements(in text: String, from: String.UTF16View.Index) -> String.UTF16View.Index {
+        let utf16 = text.utf16
+        var pos = from
+
+        // Walk past commas, quoted strings, identifiers, and whitespace
+        while pos > utf16.startIndex {
+            // Skip whitespace
+            while pos > utf16.startIndex {
+                let prev = utf16.index(before: pos)
+                let ch = text[prev]
+                if ch == " " || ch == "\t" { pos = prev } else { break }
+            }
+            guard pos > utf16.startIndex else { break }
+
+            let ch = text[utf16.index(before: pos)]
+            if ch == "(" {
+                // Found opening paren — skip it and any whitespace, then return for `:` check
+                pos = utf16.index(before: pos)
+                while pos > utf16.startIndex {
+                    let prev = utf16.index(before: pos)
+                    if text[prev] == " " || text[prev] == "\t" { pos = prev } else { break }
+                }
+                return pos
+            } else if ch == "," {
+                pos = utf16.index(before: pos)
+            } else if ch == "\"" {
+                // Skip backwards over a quoted string
+                pos = utf16.index(before: pos) // skip closing quote
+                while pos > utf16.startIndex {
+                    let prev = utf16.index(before: pos)
+                    if text[prev] == "\"" { pos = prev; break }
+                    pos = prev
+                }
+            } else if ch.isLetter || ch == "-" || ch == "_" || ch.isNumber {
+                // Skip an unquoted value
+                while pos > utf16.startIndex {
+                    let prev = utf16.index(before: pos)
+                    let c = text[prev]
+                    if c.isLetter || c == "-" || c == "_" || c.isNumber { pos = prev } else { break }
+                }
+            } else {
+                break
+            }
+        }
+        return from // not an array context
     }
 
     private func valueSuggestionsForParam(_ paramName: String, in functionName: String?) -> [CompletionItem] {

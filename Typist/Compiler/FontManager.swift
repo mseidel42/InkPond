@@ -217,10 +217,7 @@ enum FontManager {
         let destination = appFontsDirectory(rootURL: rootURL)
             .appendingPathComponent(fileName)
 
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.copyItem(at: sourceURL, to: destination)
+        try ProjectFileManager.copyItemReplacingSafely(from: sourceURL, to: destination)
         os_log(.info, "FontManager: imported %{public}@ into App font library", fileName)
         return fileName
     }
@@ -251,10 +248,7 @@ enum FontManager {
         let destination = ProjectFileManager.fontsDirectory(for: document)
             .appendingPathComponent(fileName)
 
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.copyItem(at: sourceURL, to: destination)
+        try ProjectFileManager.copyItemReplacingSafely(from: sourceURL, to: destination)
         os_log(.info, "FontManager: imported %{public}@ into project %{public}@", fileName, document.projectID)
         return fileName
     }

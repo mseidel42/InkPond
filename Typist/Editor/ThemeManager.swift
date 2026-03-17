@@ -9,13 +9,15 @@ import Foundation
 @Observable
 final class ThemeManager {
     private static let defaultsKey = "editorThemeID"
+    private let defaults: UserDefaults
 
     var themeID: String {
-        didSet { UserDefaults.standard.set(themeID, forKey: Self.defaultsKey) }
+        didSet { defaults.set(themeID, forKey: Self.defaultsKey) }
     }
 
-    init() {
-        themeID = UserDefaults.standard.string(forKey: Self.defaultsKey) ?? "system"
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        themeID = defaults.string(forKey: Self.defaultsKey) ?? "system"
     }
 
     var currentTheme: EditorTheme {

@@ -19,6 +19,7 @@ const EXTRA_FONT_CACHE_LIMIT: usize = 16;
 
 static BUNDLED_FONT_FACES: OnceLock<Arc<Vec<Font>>> = OnceLock::new();
 static EXTRA_FONT_FACES_CACHE: OnceLock<Mutex<HashMap<String, Arc<Vec<Font>>>>> = OnceLock::new();
+static PACKAGE_FETCH_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
 
 #[cfg(debug_assertions)]
 macro_rules! debug_log {
@@ -65,7 +66,7 @@ struct SimpleWorld {
     /// Root directory for resolving local file references (images, imports).
     root_dir: Option<PathBuf>,
     /// Maps "ns/name/ver" → Ok(extracted dir) | Err(message).
-    pkg_dirs: Mutex<HashMap<String, Result<PathBuf, String>>>,
+    pkg_dirs: Mutex<HashMap<String, Result<PathBuf, PackageError>>>,
     /// Per-request source cache (avoids re-reading the same file).
     source_cache: Mutex<HashMap<FileId, Source>>,
     /// Per-request binary file cache.
@@ -169,21 +170,26 @@ impl SimpleWorld {
         {
             let guard = self.pkg_dirs.lock().unwrap();
             if let Some(result) = guard.get(&key) {
-                return result
-                    .clone()
-                    .map_err(|_| FileError::Package(PackageError::NotFound(spec.clone())));
+                return result.clone().map_err(FileError::Package);
             }
         }
 
         let cache_root = self
             .pkg_cache_root
             .as_ref()
-            .ok_or(FileError::Package(PackageError::NotFound(spec.clone())))?;
+            .ok_or_else(|| {
+                FileError::Package(PackageError::Other(Some(
+                    "package cache directory is unavailable".into(),
+                )))
+            })?;
 
         let pkg_dir = cache_root
             .join(spec.namespace.as_str())
             .join(spec.name.as_str())
             .join(spec.version.to_string());
+
+        let package_lock = package_fetch_lock(&key);
+        let _guard = package_lock.lock().unwrap();
 
         let result = if pkg_dir.exists() {
             Ok(pkg_dir.clone())
@@ -192,11 +198,11 @@ impl SimpleWorld {
                 "https://packages.typst.org/{}/{}-{}.tar.gz",
                 spec.namespace, spec.name, spec.version
             );
-            download_and_extract(&url, &pkg_dir).map(|_| pkg_dir.clone())
+            download_and_extract(&url, &pkg_dir)
         };
 
         self.pkg_dirs.lock().unwrap().insert(key, result.clone());
-        result.map_err(|_| FileError::Package(PackageError::NotFound(spec.clone())))
+        result.map_err(FileError::Package)
     }
 
     fn format_span_location(&self, span: Span) -> Option<String> {
@@ -232,6 +238,15 @@ fn bundled_font_faces() -> Arc<Vec<Font>> {
             }
             Arc::new(faces)
         })
+        .clone()
+}
+
+fn package_fetch_lock(key: &str) -> Arc<Mutex<()>> {
+    let locks = PACKAGE_FETCH_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = locks.lock().unwrap();
+    guard
+        .entry(key.to_string())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
         .clone()
 }
 
@@ -277,24 +292,36 @@ fn extra_font_faces(paths: &[String]) -> Arc<Vec<Font>> {
 }
 
 /// Download a `.tar.gz` from `url` and extract it into `dest`.
-fn download_and_extract(url: &str, dest: &Path) -> Result<PathBuf, String> {
+fn download_and_extract(url: &str, dest: &Path) -> Result<PathBuf, PackageError> {
     let response = ureq::get(url)
         .call()
-        .map_err(|e| format!("download failed: {e}"))?;
+        .map_err(|e| PackageError::NetworkFailed(Some(format!("{e}").into())))?;
 
     let mut buf = Vec::new();
     response
         .into_reader()
         .read_to_end(&mut buf)
-        .map_err(|e| format!("read failed: {e}"))?;
+        .map_err(|e| PackageError::NetworkFailed(Some(format!("{e}").into())))?;
 
-    let staging_dir = make_staging_directory(dest)?;
+    let staging_dir = make_staging_directory(dest)
+        .map_err(|e| PackageError::Other(Some(e.into())))?;
     if let Err(error) = extract_tar_gz_bytes(&buf, &staging_dir) {
         let _ = std::fs::remove_dir_all(&staging_dir);
-        return Err(error);
+        return Err(PackageError::MalformedArchive(Some(error.into())));
     }
 
-    std::fs::rename(&staging_dir, dest).map_err(|e| format!("rename failed: {e}"))?;
+    match std::fs::rename(&staging_dir, dest) {
+        Ok(()) => {}
+        Err(_) if dest.exists() => {
+            let _ = std::fs::remove_dir_all(&staging_dir);
+        }
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&staging_dir);
+            return Err(PackageError::Other(Some(
+                format!("rename failed: {error}").into(),
+            )));
+        }
+    }
 
     Ok(dest.to_owned())
 }
@@ -645,7 +672,7 @@ fn walk_frame(
 }
 
 /// Extract a source map from a compiled document.
-/// Returns entries sorted by source offset, deduplicated by line.
+/// Returns entries sorted by source offset.
 fn extract_source_map(document: &PagedDocument, source: &Source) -> Vec<SourceMapEntry> {
     let mut entries = Vec::new();
 
@@ -655,9 +682,6 @@ fn extract_source_map(document: &PagedDocument, source: &Source) -> Vec<SourceMa
 
     // Sort by source offset.
     entries.sort_by_key(|e| e.source_offset);
-
-    // Deduplicate by line — keep the first entry for each line.
-    entries.dedup_by_key(|e| e.line);
 
     entries
 }
@@ -864,6 +888,33 @@ mod tests {
         assert!(entries.iter().all(|e| e.line >= 1));
         // Columns should be 1-based and > 0.
         assert!(entries.iter().all(|e| e.column >= 1));
+    }
+
+    #[test]
+    fn extract_source_map_preserves_multiple_entries_for_same_source_line() {
+        let source_text = concat!(
+            "#set page(width: 120pt, height: 200pt, margin: 8pt)\n",
+            "This is a deliberately long source line that should wrap into multiple rendered lines ",
+            "so the source map keeps more than one entry for the same original line."
+        );
+        let world = unsafe { SimpleWorld::new(source_text, std::ptr::null()) };
+        let compiled = typst::compile::<PagedDocument>(&world);
+        let document = compiled.output.expect("compilation should succeed");
+        let entries = extract_source_map(&document, &world.source);
+
+        let wrapped_line_entries: Vec<_> = entries.iter().filter(|entry| entry.line == 2).collect();
+
+        assert!(
+            wrapped_line_entries.len() > 1,
+            "expected multiple source-map entries for the wrapped source line, got {}",
+            wrapped_line_entries.len()
+        );
+        assert!(
+            wrapped_line_entries
+                .windows(2)
+                .any(|pair| pair[0].x_pt != pair[1].x_pt || pair[0].y_pt != pair[1].y_pt),
+            "expected wrapped entries to preserve multiple rendered positions"
+        );
     }
 
     #[derive(Clone)]

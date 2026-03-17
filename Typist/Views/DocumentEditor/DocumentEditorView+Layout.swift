@@ -37,11 +37,19 @@ extension DocumentEditorView {
             errorLines: compilationErrorLines,
             onPhotoTapped: { showingPhotoPicker = true },
             onSnippetTapped: { showingSnippetBrowser = true },
-            onImagePasted: { pastedImageData in
-                importImage(from: .rawData(pastedImageData, suggestedFileName: nil))
+            onImagePasted: { pastedImageData, selectedRange in
+                importImage(
+                    from: .rawData(pastedImageData, suggestedFileName: nil),
+                    anchorRange: selectedRange,
+                    targetFileName: currentFileName
+                )
             },
-            onRichPaste: { fragments in
-                handleRichPaste(fragments)
+            onRichPaste: { fragments, selectedRange in
+                handleRichPaste(
+                    fragments,
+                    anchorRange: selectedRange,
+                    targetFileName: currentFileName
+                )
             },
             fontFamilies: completionFontFamilies,
             bibEntries: cachedBibEntries,
@@ -288,7 +296,7 @@ extension DocumentEditorView {
             }
     }
 
-    var editorSheetsAndEvents: some View {
+    var editorPresentation: some View {
         editorChrome
             .photosPicker(isPresented: $showingPhotoPicker,
                           selection: $selectedPhotoItems,
@@ -326,6 +334,10 @@ extension DocumentEditorView {
                     loadFile(named: document.entryFileName)
                 }
             }
+    }
+
+    var editorLifecycleHandlers: some View {
+        editorPresentation
             .onAppear {
                 refreshCompileFontPaths()
                 prepareDocumentForEditing()
@@ -365,10 +377,17 @@ extension DocumentEditorView {
             .onChange(of: appFontLibrary.items) { _, _ in
                 handleCompileInputsChanged()
             }
+    }
+
+    var editorSheetsAndEvents: some View {
+        editorLifecycleHandlers
             .onChange(of: insertionRequest) { _, newValue in
                 if newValue == nil {
                     pumpPendingInsertionsIfNeeded()
                 }
+            }
+            .onChange(of: currentFileName) { _, _ in
+                pumpPendingInsertionsIfNeeded()
             }
             .onChange(of: selectedTab) { _, newTab in
                 InteractionFeedback.selection()
@@ -466,10 +485,17 @@ extension DocumentEditorView {
             .sheet(isPresented: $showingSnippetBrowser) {
                 SnippetBrowserSheet { snippet in
                     let (text, cursorOffset) = snippet.bodyWithCursorOffset()
-                    let insertionStart = editorViewState.selectedLocation
-                    insertionRequest = text
+                    let targetRange = NSRange(
+                        location: editorViewState.selectedLocation,
+                        length: editorViewState.selectedLength
+                    )
+                    insertionRequest = EditorInsertionRequest(
+                        text: text,
+                        targetRange: targetRange,
+                        targetFileName: currentFileName
+                    )
                     if let cursorOffset {
-                        pendingCursorJump = insertionStart + cursorOffset
+                        pendingCursorJump = targetRange.location + cursorOffset
                     }
                 }
             }

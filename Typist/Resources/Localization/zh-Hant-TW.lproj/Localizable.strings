@@ -40,6 +40,7 @@
 "font.scope.app" = "App";
 "font.scope.project" = "專案";
 "font.faces_count" = "%d 個字重";
+"font.copyName" = "拷貝字型名稱";
 "app_fonts.export_warning.title" = "不包含 App 字型";
 "app_fonts.export_warning.message" = "專案 ZIP 只會匯出專案目錄。已匯入的 App 字型不會被打包，目標裝置需另行提供這些字型。";
 "settings.version_format" = "版本 %@（%@）";
@@ -306,11 +307,11 @@
 "a11y.keyboard.snippet.hint" = "瀏覽並插入程式碼片段。";
 
 "onboarding.welcome.title" = "歡迎使用 Typist";
-"onboarding.welcome.subtitle" = "一款原生的 Typst 編輯器，\n適用於 iPad 和 iPhone。\n在你的裝置上\n輕鬆編寫精美排版的文件。";
+"onboarding.welcome.subtitle" = "一款原生的 Typst 編輯器。\n在你的裝置上輕鬆編寫精美排版的文件。";
 "onboarding.editor.title" = "強大的編輯器";
-"onboarding.editor.subtitle" = "語法醒目提示、自動完成\n和 Typst 專用鍵盤工具列，\n讓寫作得心應手。";
+"onboarding.editor.subtitle" = "語法醒目提示、自動完成和 Typst 工具列，\n讓寫作得心應手。";
 "onboarding.preview.title" = "即時預覽";
-"onboarding.preview.subtitle" = "即時查看文件效果。\n一邊編輯，\n一邊預覽排版結果。";
+"onboarding.preview.subtitle" = "即時查看文件效果。\n一邊編輯，一邊預覽排版結果。";
 "onboarding.projects.title" = "多檔案專案";
-"onboarding.projects.subtitle" = "在獨立的專案目錄中\n管理原始檔、圖片和字型。\n支援 ZIP 匯入匯出。";
+"onboarding.projects.subtitle" = "在獨立的專案目錄中管理原始檔、圖片和字型。\n支援 ZIP 匯入匯出。";
 "onboarding.action.get_started" = "開始使用";

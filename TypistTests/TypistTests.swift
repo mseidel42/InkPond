@@ -94,6 +94,27 @@ struct TypistTests {
         #expect(FileManager.default.fileExists(atPath: dest.path))
     }
 
+    @Test func projectFileManagerImportFilePreservesExistingDestinationWhenReplacementCopyFails() throws {
+        let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
+        ProjectFileManager.ensureProjectStructure(for: doc)
+        defer { try? ProjectFileManager.deleteProjectDirectory(for: doc) }
+
+        let destination = ProjectFileManager.projectDirectory(for: doc).appendingPathComponent("hello.txt")
+        try Data("existing".utf8).write(to: destination)
+
+        let missingSourceRoot = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: missingSourceRoot) }
+        let missingSource = missingSourceRoot.appendingPathComponent("hello.txt")
+
+        do {
+            try ProjectFileManager.importFile(from: missingSource, to: "", for: doc)
+            Issue.record("Expected import to fail for a missing source file")
+        } catch {}
+
+        let preserved = try String(contentsOf: destination, encoding: .utf8)
+        #expect(preserved == "existing")
+    }
+
     @Test func resolveImportedEntryFileRequiresSelectionWhenMainTypIsMissing() {
         let resolution = ProjectFileManager.resolveImportedEntryFile(from: ["chapter.typ", "appendix.typ"])
 
@@ -243,87 +264,59 @@ struct TypistTests {
     }
 
     @Test func themeManagerPersistsEditorThemeSelection() {
-        let defaults = UserDefaults.standard
-        let originalValue = defaults.object(forKey: editorThemeDefaultsKey)
-        defer {
-            if let originalValue {
-                defaults.set(originalValue, forKey: editorThemeDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: editorThemeDefaultsKey)
-            }
-        }
+        let (suiteName, defaults) = makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set("latte", forKey: editorThemeDefaultsKey)
 
-        let initialManager = ThemeManager()
+        let initialManager = ThemeManager(defaults: defaults)
         #expect(initialManager.themeID == "latte")
         #expect(initialManager.currentTheme.id == "latte")
 
         initialManager.themeID = "mocha"
 
-        let reloadedManager = ThemeManager()
+        let reloadedManager = ThemeManager(defaults: defaults)
         #expect(reloadedManager.themeID == "mocha")
         #expect(reloadedManager.currentTheme.id == "mocha")
     }
 
     @Test func themeManagerFallsBackToSystemThemeForUnknownValue() {
-        let defaults = UserDefaults.standard
-        let originalValue = defaults.object(forKey: editorThemeDefaultsKey)
-        defer {
-            if let originalValue {
-                defaults.set(originalValue, forKey: editorThemeDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: editorThemeDefaultsKey)
-            }
-        }
+        let (suiteName, defaults) = makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set("nord", forKey: editorThemeDefaultsKey)
 
-        let manager = ThemeManager()
+        let manager = ThemeManager(defaults: defaults)
         #expect(manager.themeID == "nord")
         #expect(manager.currentTheme.id == "system")
     }
 
     @Test func appAppearanceManagerPersistsAppearanceSelection() {
-        let defaults = UserDefaults.standard
-        let originalValue = defaults.object(forKey: appAppearanceDefaultsKey)
-        defer {
-            if let originalValue {
-                defaults.set(originalValue, forKey: appAppearanceDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: appAppearanceDefaultsKey)
-            }
-        }
+        let (suiteName, defaults) = makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set(AppAppearanceMode.light.rawValue, forKey: appAppearanceDefaultsKey)
 
-        let initialManager = AppAppearanceManager()
+        let initialManager = AppAppearanceManager(defaults: defaults)
         #expect(initialManager.mode == AppAppearanceMode.light.rawValue)
         #expect(initialManager.currentMode == .light)
         #expect(initialManager.colorScheme == .light)
 
         initialManager.mode = AppAppearanceMode.dark.rawValue
 
-        let reloadedManager = AppAppearanceManager()
+        let reloadedManager = AppAppearanceManager(defaults: defaults)
         #expect(reloadedManager.mode == AppAppearanceMode.dark.rawValue)
         #expect(reloadedManager.currentMode == .dark)
         #expect(reloadedManager.colorScheme == .dark)
     }
 
     @Test func appAppearanceManagerFallsBackToSystemForUnknownValue() {
-        let defaults = UserDefaults.standard
-        let originalValue = defaults.object(forKey: appAppearanceDefaultsKey)
-        defer {
-            if let originalValue {
-                defaults.set(originalValue, forKey: appAppearanceDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: appAppearanceDefaultsKey)
-            }
-        }
+        let (suiteName, defaults) = makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set("sepia", forKey: appAppearanceDefaultsKey)
 
-        let manager = AppAppearanceManager()
+        let manager = AppAppearanceManager(defaults: defaults)
         #expect(manager.mode == "sepia")
         #expect(manager.currentMode == .system)
         #expect(manager.colorScheme == nil)
@@ -331,7 +324,7 @@ struct TypistTests {
 
     @Test func typstCompilerUsesLowerQoSForPreviewThanExplicitCompile() {
         #expect(TypstCompiler.taskPriority(for: .debounced) == .utility)
-        #expect(TypstCompiler.taskPriority(for: .immediate) == .default)
+        #expect(TypstCompiler.taskPriority(for: .immediate) == .medium)
     }
 
     @MainActor
@@ -519,7 +512,7 @@ struct TypistTests {
         let compiler = TypstCompiler(
             compileWorker: { _, _, _ in
                 compileCounter.increment()
-                return .success(Data("compiled".utf8))
+                return .success((Data("compiled".utf8), nil))
             },
             documentBuilder: { _ in PDFDocument() },
             sleep: { _ in },
@@ -570,7 +563,7 @@ struct TypistTests {
         let compiler = TypstCompiler(
             compileWorker: { source, _, _ in
                 compileCounter.increment()
-                return .success(Data(source.utf8))
+                return .success((Data(source.utf8), nil))
             },
             documentBuilder: { _ in PDFDocument() },
             sleep: { _ in },
@@ -622,7 +615,7 @@ struct TypistTests {
         let compiler = TypstCompiler(
             compileWorker: { source, _, _ in
                 compileCounter.increment()
-                return .success(Data(source.utf8))
+                return .success((Data(source.utf8), nil))
             },
             documentBuilder: { _ in PDFDocument() },
             sleep: { _ in },
@@ -1120,6 +1113,13 @@ struct TypistTests {
         return dir
     }
 
+    private func makeIsolatedDefaults() -> (suiteName: String, defaults: UserDefaults) {
+        let suiteName = "TypistTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (suiteName, defaults)
+    }
+
     private func makeCachePackage(
         root: URL,
         namespace: String,
@@ -1271,7 +1271,7 @@ private final class CompileProbe: @unchecked Sendable {
         }
     }
 
-    func compile(source: String) -> Result<Data, TypstBridgeError> {
+    func compile(source: String) -> Result<(Data, SourceMap?), TypstBridgeError> {
         let blocker = lock.withLock { () -> DispatchSemaphore? in
             started.append(source)
             activeCount += 1
@@ -1284,7 +1284,7 @@ private final class CompileProbe: @unchecked Sendable {
         lock.withLock {
             activeCount -= 1
         }
-        return .success(Data(source.utf8))
+        return .success((Data(source.utf8), nil))
     }
 }
 

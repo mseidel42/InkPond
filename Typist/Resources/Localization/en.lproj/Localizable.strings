@@ -40,6 +40,7 @@
 "font.scope.app" = "app";
 "font.scope.project" = "project";
 "font.faces_count" = "%d faces";
+"font.copyName" = "Copy Font Name";
 "app_fonts.export_warning.title" = "App Fonts Not Included";
 "app_fonts.export_warning.message" = "Project ZIP exports only the project directory. Imported App fonts are not bundled and must exist separately on the destination device.";
 "settings.version_format" = "Version %@ (%@)";
@@ -306,11 +307,11 @@
 "a11y.keyboard.snippet.hint" = "Browse and insert code snippets.";
 
 "onboarding.welcome.title" = "Welcome to Typist";
-"onboarding.welcome.subtitle" = "A native Typst editor\nfor iPad and iPhone.\nWrite beautifully typeset documents,\nright from your device.";
+"onboarding.welcome.subtitle" = "A native Typst editor for iPad and iPhone.\nWrite beautifully typeset documents,\nright from your device.";
 "onboarding.editor.title" = "Powerful Editor";
-"onboarding.editor.subtitle" = "Syntax highlighting, auto-completion,\nand a Typst-optimized keyboard bar\nmake writing effortless.";
+"onboarding.editor.subtitle" = "Syntax highlighting, auto-completion,\nand a Typst-optimized keyboard bar make writing effortless.";
 "onboarding.preview.title" = "Live Preview";
-"onboarding.preview.subtitle" = "See your document come to life\nin real time.\nEdit on one side,\npreview the result on the other.";
+"onboarding.preview.subtitle" = "See your document come to life in real time.\nEdit on one side, preview the result on the other.";
 "onboarding.projects.title" = "Multi-File Projects";
-"onboarding.projects.subtitle" = "Organize source files, images, and fonts\nin per-project directories.\nImport and export as ZIP.";
+"onboarding.projects.subtitle" = "Organize source files, images, and fonts in per-project directories.\nImport and export as ZIP.";
 "onboarding.action.get_started" = "Get Started";

@@ -39,7 +39,7 @@ struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
-        if hasCompletedOnboarding {
+        if hasCompletedOnboarding || shouldSkipOnboardingForUITests {
             mainContent
         } else {
             OnboardingView {
@@ -48,6 +48,12 @@ struct ContentView: View {
             .preferredColorScheme(appAppearanceManager.colorScheme)
             .environment(appAppearanceManager)
         }
+    }
+
+    private var shouldSkipOnboardingForUITests: Bool {
+        let processInfo = ProcessInfo.processInfo
+        return processInfo.arguments.contains("UITEST_SKIP_ONBOARDING")
+            || processInfo.environment["UITEST_SKIP_ONBOARDING"] == "1"
     }
 
     private var mainContent: some View {

@@ -78,8 +78,8 @@ final class TypstTextView: UITextView {
     var onSnippetButtonTapped: (() -> Void)? {
         didSet { (inputAccessoryView as? KeyboardAccessoryView)?.onSnippetButtonTapped = onSnippetButtonTapped }
     }
-    var onImagePasted: ((Data) -> Void)?
-    var onRichPaste: (([PasteFragment]) -> Void)?
+    var onImagePasted: ((Data, NSRange) -> Void)?
+    var onRichPaste: (([PasteFragment], NSRange) -> Void)?
     private let pasteImageTypes: [UTType] = [.png, .jpeg, .heic, .heif, .tiff, .gif, .webP]
 
     // MARK: - Init (Force TextKit 1)
@@ -292,7 +292,7 @@ final class TypstTextView: UITextView {
         }
 
         if let onRichPaste {
-            onRichPaste(fragments)
+            onRichPaste(fragments, selectedRange)
             return
         }
 
@@ -310,7 +310,7 @@ final class TypstTextView: UITextView {
                     }
                     textBuffer = ""
                 }
-                onImagePasted?(data)
+                onImagePasted?(data, selectedRange)
             case .imageRemoteURL:
                 // Fallback path cannot import remote URLs synchronously.
                 // If rich paste handler isn't set, ignore remote image fragments.
@@ -328,7 +328,8 @@ final class TypstTextView: UITextView {
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(paste(_:)) {
-            if !pasteFragmentsFromPasteboard().isEmpty {
+            let pb = UIPasteboard.general
+            if pb.hasStrings || pb.hasImages || pb.hasURLs || pb.numberOfItems > 0 {
                 return true
             }
         }

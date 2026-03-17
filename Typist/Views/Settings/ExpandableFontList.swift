@@ -46,6 +46,13 @@ struct ExpandableFontList: View {
                 }
                 .buttonStyle(FontListRowButtonStyle())
                 .contentShape(Rectangle())
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = group.familyName
+                    } label: {
+                        Label(L10n.tr("font.copyName"), systemImage: "doc.on.doc")
+                    }
+                }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if let onDeleteGroup, !group.fileNames.isEmpty {
                         Button("Delete", role: .destructive) {

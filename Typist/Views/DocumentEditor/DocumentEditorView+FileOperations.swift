@@ -46,6 +46,9 @@ extension DocumentEditorView {
         saveTask?.cancel()
         saveTask = nil
         let text = (try? ProjectFileManager.readTypFile(named: name, for: document)) ?? ""
+        insertionRequest = nil
+        pendingCursorJump = nil
+        editorViewState = EditorViewState()
         currentFileName = name
         isLoadingFileContent = true
         editorText = text
@@ -55,6 +58,7 @@ extension DocumentEditorView {
             entrySource = text
         }
         compilationErrorLines = recomputeCompilationErrorLines()
+        pumpPendingInsertionsIfNeeded()
     }
 
     func handleEditorTextChange(_ content: String) {

@@ -11,10 +11,13 @@ import SwiftData
 @main
 struct TypistApp: App {
     private let sharedModelContainer: ModelContainer? = {
+        let processInfo = ProcessInfo.processInfo
+        let useInMemoryStore = processInfo.arguments.contains("UITEST_IN_MEMORY_STORE")
+            || processInfo.environment["UITEST_IN_MEMORY_STORE"] == "1"
         let schema = Schema([
             TypistDocument.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: useInMemoryStore)
 
         return try? ModelContainer(for: schema, configurations: [modelConfiguration])
     }()

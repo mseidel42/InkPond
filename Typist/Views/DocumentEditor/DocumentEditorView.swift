@@ -48,14 +48,14 @@ struct DocumentEditorView: View {
     @State var showingFileBrowser = false
     @State var showingProjectSettings = false
     @State var selectedPhotoItems: [PhotosPickerItem] = []
-    @State var insertionRequest: String?
+    @State var insertionRequest: EditorInsertionRequest?
     @State var findRequested = false
     @State var exporter = ExportController()
     @State var imageImportError: String?
     @State var fileSaveError: String?
     @State var previewActionError: String?
     @State var isImageDropTarget = false
-    @State var pendingInsertionQueue: [String] = []
+    @State var pendingInsertionQueue: [EditorInsertionRequest] = []
     @State var imageImportToast: String?
     @State var toastDismissTask: Task<Void, Never>?
     @State var showingImportConfiguration = false

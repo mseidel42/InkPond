@@ -10,6 +10,8 @@ import UIKit
 
 extension DocumentEditorView {
     func handleImageDrop(providers: [NSItemProvider]) -> Bool {
+        let anchorRange = currentInsertionRange()
+        let targetFileName = currentFileName
         guard let provider = providers.first(where: {
             $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) ||
             $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
@@ -23,7 +25,11 @@ extension DocumentEditorView {
                     Task { @MainActor in imageImportError = L10n.tr("error.image.load_data_failed") }
                     return
                 }
-                importImage(from: .rawData(data, suggestedFileName: provider.suggestedName))
+                importImage(
+                    from: .rawData(data, suggestedFileName: provider.suggestedName),
+                    anchorRange: anchorRange,
+                    targetFileName: targetFileName
+                )
             }
             return true
         }
@@ -44,24 +50,24 @@ extension DocumentEditorView {
                 Task { @MainActor in imageImportError = L10n.tr("error.image.load_data_failed") }
                 return
             }
-            importImage(from: .fileURL(fileURL))
+            importImage(from: .fileURL(fileURL), anchorRange: anchorRange, targetFileName: targetFileName)
         }
         return true
     }
 
     func handleImageSelection(_ items: [PhotosPickerItem]) {
         guard let item = items.first else { return }
-        importImage(from: .photoItem(item))
+        importImage(from: .photoItem(item), anchorRange: currentInsertionRange(), targetFileName: currentFileName)
         selectedPhotoItems = []
     }
 
-    func importImage(from source: ImageImportSource) {
+    func importImage(from source: ImageImportSource, anchorRange: NSRange, targetFileName: String) {
         Task {
             do {
                 let result = try await importImageAsset(from: source)
                 await MainActor.run {
                     refreshImageFiles()
-                    enqueueInsertion(result.reference)
+                    enqueueInsertion(result.reference, at: anchorRange, for: targetFileName)
                     showImageImportToast(L10n.imageInserted(path: result.relativePath))
                 }
             } catch {
@@ -72,7 +78,11 @@ extension DocumentEditorView {
         }
     }
 
-    func handleRichPaste(_ fragments: [TypstTextView.PasteFragment]) {
+    func handleRichPaste(
+        _ fragments: [TypstTextView.PasteFragment],
+        anchorRange: NSRange,
+        targetFileName: String
+    ) {
         Task {
             var combinedInsertion = ""
             var firstError: String?
@@ -110,7 +120,7 @@ extension DocumentEditorView {
                     refreshImageFiles()
                 }
                 if !combinedInsertion.isEmpty {
-                    enqueueInsertion(combinedInsertion)
+                    enqueueInsertion(combinedInsertion, at: anchorRange, for: targetFileName)
                 }
                 if let firstPath = insertedImages.first {
                     if insertedImages.count == 1 {
@@ -246,19 +256,30 @@ extension DocumentEditorView {
     }
 
     @MainActor
-    func enqueueInsertion(_ reference: String) {
-        let normalizedReference = normalizeTypstQuotes(reference)
-        if insertionRequest == nil {
-            insertionRequest = normalizedReference
+    func enqueueInsertion(_ reference: String, at targetRange: NSRange, for targetFileName: String) {
+        let request = EditorInsertionRequest(
+            text: normalizeTypstQuotes(reference),
+            targetRange: targetRange,
+            targetFileName: targetFileName
+        )
+        if insertionRequest == nil, currentFileName == targetFileName {
+            insertionRequest = request
         } else {
-            pendingInsertionQueue.append(normalizedReference)
+            pendingInsertionQueue.append(request)
         }
     }
 
     @MainActor
     func pumpPendingInsertionsIfNeeded() {
-        guard insertionRequest == nil, !pendingInsertionQueue.isEmpty else { return }
-        insertionRequest = pendingInsertionQueue.removeFirst()
+        guard insertionRequest == nil else { return }
+        guard let index = pendingInsertionQueue.firstIndex(where: { $0.targetFileName == currentFileName }) else {
+            return
+        }
+        insertionRequest = pendingInsertionQueue.remove(at: index)
+    }
+
+    func currentInsertionRange() -> NSRange {
+        NSRange(location: editorViewState.selectedLocation, length: editorViewState.selectedLength)
     }
 
     @MainActor

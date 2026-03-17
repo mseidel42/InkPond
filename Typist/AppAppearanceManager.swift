@@ -27,13 +27,15 @@ enum AppAppearanceMode: String, CaseIterable {
 @Observable
 final class AppAppearanceManager {
     private static let defaultsKey = "appAppearanceMode"
+    private let defaults: UserDefaults
 
     var mode: String {
-        didSet { UserDefaults.standard.set(mode, forKey: Self.defaultsKey) }
+        didSet { defaults.set(mode, forKey: Self.defaultsKey) }
     }
 
-    init() {
-        mode = UserDefaults.standard.string(forKey: Self.defaultsKey) ?? AppAppearanceMode.system.rawValue
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        mode = defaults.string(forKey: Self.defaultsKey) ?? AppAppearanceMode.system.rawValue
     }
 
     var currentMode: AppAppearanceMode {
