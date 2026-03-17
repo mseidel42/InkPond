@@ -315,3 +315,25 @@
 "onboarding.projects.title" = "多檔案專案";
 "onboarding.projects.subtitle" = "在獨立的專案目錄中管理原始檔、圖片和字型。\n支援 ZIP 匯入匯出。";
 "onboarding.action.get_started" = "開始使用";
+
+"icloud.title" = "iCloud";
+"icloud.sync_toggle" = "iCloud 同步";
+"icloud.sync_footer.on" = "文件和專案檔案透過 iCloud 在你的裝置間同步。";
+"icloud.sync_footer.off" = "文件和專案檔案僅儲存在本裝置上。";
+"icloud.error.unavailable" = "iCloud 不可用。請在系統設定中登入 iCloud。";
+"icloud.migrating" = "正在遷移檔案⋯";
+"icloud.restart_title" = "需要重新啟動";
+"icloud.restart_message" = "更改 iCloud 同步設定需要重新啟動 Typist 才能完全生效。";
+"icloud.restart_action" = "結束 Typist";
+"icloud.keep_downloaded_tip" = "為獲得最佳體驗，請打開「檔案」App，前往 iCloud 雲碟，長按 Typist 資料夾，選擇「保留下載」，確保檔案始終可離線使用。";
+"icloud.download_all" = "下載所有檔案";
+"icloud.error.verification_failed" = "專案「%@」的遷移驗證失敗，副本可能不完整。";
+"icloud.error.download_timeout" = "部分檔案未能及時從 iCloud 下載。請檢查網絡連線後重試。";
+"icloud.status.checking" = "正在檢查同步狀態⋯";
+"icloud.status.no_files" = "iCloud 中沒有檔案";
+"icloud.status.synced" = "全部 %d 個檔案已同步";
+"icloud.status.downloading" = "正在下載 %d 個檔案⋯";
+"icloud.status.uploading" = "正在上傳 %d 個檔案⋯";
+"icloud.status.syncing" = "正在同步 %d 個檔案⋯";
+"icloud.status.not_downloaded" = "%d 個檔案未下載";
+"icloud.status.error" = "%d 個檔案同步出錯";

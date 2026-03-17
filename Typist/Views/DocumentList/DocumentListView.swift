@@ -69,9 +69,15 @@ struct DocumentListView: View {
 
     let rowDateFormat = Date.FormatStyle(date: .abbreviated, time: .shortened)
 
+    var deduplicatedDocuments: [TypistDocument] {
+        Dictionary(grouping: documents, by: \.projectID)
+            .values
+            .map(preferredDocumentForDuplicateGroup)
+    }
+
     var filteredDocuments: [TypistDocument] {
-        guard !searchText.isEmpty else { return documents }
-        return documents.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+        guard !searchText.isEmpty else { return deduplicatedDocuments }
+        return deduplicatedDocuments.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
     }
 
     var sortedDocuments: [TypistDocument] {
@@ -83,7 +89,7 @@ struct DocumentListView: View {
     }
 
     var isShowingLibraryEmptyState: Bool {
-        documents.isEmpty && searchText.isEmpty
+        deduplicatedDocuments.isEmpty && searchText.isEmpty
     }
 
     var isIPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }

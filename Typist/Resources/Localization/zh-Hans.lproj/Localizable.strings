@@ -315,3 +315,25 @@
 "onboarding.projects.title" = "多文件项目";
 "onboarding.projects.subtitle" = "在独立的项目目录中管理源文件、图片和字体。\n支持 ZIP 导入导出。";
 "onboarding.action.get_started" = "开始使用";
+
+"icloud.title" = "iCloud";
+"icloud.sync_toggle" = "iCloud 同步";
+"icloud.sync_footer.on" = "文档和项目文件通过 iCloud 在你的设备间同步。";
+"icloud.sync_footer.off" = "文档和项目文件仅存储在本设备上。";
+"icloud.error.unavailable" = "iCloud 不可用。请在系统设置中登录 iCloud。";
+"icloud.migrating" = "正在迁移文件…";
+"icloud.restart_title" = "需要重启";
+"icloud.restart_message" = "更改 iCloud 同步设置需要重启 Typist 才能完全生效。";
+"icloud.restart_action" = "退出 Typist";
+"icloud.keep_downloaded_tip" = "为获得最佳体验，请打开「文件」App，前往 iCloud 云盘，长按 Typist 文件夹，选择「保留下载」，确保文件始终可离线使用。";
+"icloud.download_all" = "下载所有文件";
+"icloud.error.verification_failed" = "项目「%@」的迁移验证失败，副本可能不完整。";
+"icloud.error.download_timeout" = "部分文件未能及时从 iCloud 下载。请检查网络连接后重试。";
+"icloud.status.checking" = "正在检查同步状态…";
+"icloud.status.no_files" = "iCloud 中没有文件";
+"icloud.status.synced" = "全部 %d 个文件已同步";
+"icloud.status.downloading" = "正在下载 %d 个文件…";
+"icloud.status.uploading" = "正在上传 %d 个文件…";
+"icloud.status.syncing" = "正在同步 %d 个文件…";
+"icloud.status.not_downloaded" = "%d 个文件未下载";
+"icloud.status.error" = "%d 个文件同步出错";

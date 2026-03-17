@@ -147,7 +147,11 @@ extension ProjectFileManager {
         ensureImageDirectory(for: document)
         let imageDir = safeImageDirectoryName(from: document.imageDirectoryName)
         let dest = imagesDirectory(for: document).appendingPathComponent(fileName)
-        try data.write(to: dest)
+        if useCoordination {
+            try CloudFileCoordinator.writeData(data, to: dest)
+        } else {
+            try data.write(to: dest)
+        }
         os_log(.info, "ProjectFileManager: saved image %{public}@", fileName)
         return imageDir.isEmpty ? fileName : "\(imageDir)/\(fileName)"
     }

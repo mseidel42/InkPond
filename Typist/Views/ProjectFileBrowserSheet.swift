@@ -15,6 +15,7 @@ struct ProjectFileBrowserSheet: View {
     var openFile: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(StorageManager.self) private var storageManager
     @State private var projectTree: [ProjectTreeNode] = []
     @State private var expandedNodes: Set<String> = []
     @State private var showingProjectSettings = false
@@ -25,6 +26,7 @@ struct ProjectFileBrowserSheet: View {
     @State private var showingActionError = false
     @State private var previewItem: PreviewItem?
     @State private var cachedPreviewAspectRatios: [String: CGFloat] = [:]
+    @State private var cloudSyncMonitor = CloudSyncMonitor()
 
     private static let imageExtensions = ProjectFileManager.supportedImageFileExtensions
     private static let fontExtensions: Set<String> = ["otf", "ttf", "woff", "woff2"]
@@ -63,6 +65,17 @@ struct ProjectFileBrowserSheet: View {
                     .accessibilityLabel(L10n.a11yProjectFilesSettingsLabel)
                     .accessibilityHint(L10n.a11yProjectFilesSettingsHint)
                     .accessibilityIdentifier("project-files.settings")
+
+                    if storageManager.isUsingiCloud && hasNotDownloadedFiles {
+                        Button {
+                            cloudSyncMonitor.downloadAll()
+                            InteractionFeedback.impact(.light)
+                        } label: {
+                            Image(systemName: "icloud.and.arrow.down")
+                        }
+                        .accessibilityLabel(L10n.tr("icloud.download_all"))
+                        .accessibilityIdentifier("project-files.download-all")
+                    }
 
                     Menu {
                         Button {
@@ -116,15 +129,21 @@ struct ProjectFileBrowserSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .onAppear { refreshProjectState() }
-            .onChange(of: document.imageDirectoryName) { _, _ in
-                refreshProjectState()
-            }
-            .onChange(of: actionError) { _, newValue in
-                guard newValue != nil else { return }
-                InteractionFeedback.notify(.error)
-                AccessibilitySupport.announce(newValue)
-            }
+        .onAppear {
+            refreshProjectState()
+            startCloudMonitoringIfNeeded()
+        }
+        .onDisappear {
+            cloudSyncMonitor.stopMonitoring()
+        }
+        .onChange(of: document.imageDirectoryName) { _, _ in
+            refreshProjectState()
+        }
+        .onChange(of: actionError) { _, newValue in
+            guard newValue != nil else { return }
+            InteractionFeedback.notify(.error)
+            AccessibilitySupport.announce(newValue)
+        }
         .sheet(isPresented: $showingProjectSettings, onDismiss: refreshProjectState) {
             ProjectSettingsSheet(document: document, openFile: openFile)
         }
@@ -239,6 +258,9 @@ struct ProjectFileBrowserSheet: View {
             Text(node.displayName)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
+            if storageManager.isUsingiCloud, !node.isDirectory {
+                cloudStatusIndicator(for: node.relativePath)
+            }
             Spacer()
             if node.kind == .typ {
                 badges(for: node.relativePath)
@@ -247,6 +269,39 @@ struct ProjectFileBrowserSheet: View {
         .padding(.leading, CGFloat(row.depth) * 18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func cloudStatusIndicator(for relativePath: String) -> some View {
+        switch cloudSyncMonitor.fileStatuses[relativePath] {
+        case .notDownloaded:
+            Image(systemName: "icloud.and.arrow.down")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .onTapGesture {
+                    let url = ProjectFileManager.projectDirectory(for: document)
+                        .appendingPathComponent(relativePath)
+                    cloudSyncMonitor.startDownloading(at: url)
+                    InteractionFeedback.impact(.light)
+                }
+        case .downloading(let progress):
+            ProgressView(value: progress)
+                .progressViewStyle(.circular)
+                .scaleEffect(0.55)
+                .frame(width: 16, height: 16)
+        case .uploading(let progress):
+            ProgressView(value: progress)
+                .progressViewStyle(.circular)
+                .scaleEffect(0.55)
+                .frame(width: 16, height: 16)
+                .tint(.orange)
+        case .error:
+            Image(systemName: "exclamationmark.icloud")
+                .font(.system(size: 11))
+                .foregroundStyle(.red)
+        case .current, .none:
+            EmptyView()
+        }
     }
 
     @ViewBuilder
@@ -309,6 +364,19 @@ struct ProjectFileBrowserSheet: View {
 
     private func refreshProjectState() {
         projectTree = ProjectFileManager.projectTree(for: document)
+    }
+
+    private func startCloudMonitoringIfNeeded() {
+        guard storageManager.isUsingiCloud else { return }
+        let projectDir = ProjectFileManager.projectDirectory(for: document)
+        cloudSyncMonitor.startMonitoring(projectURL: projectDir)
+    }
+
+    private var hasNotDownloadedFiles: Bool {
+        cloudSyncMonitor.fileStatuses.values.contains { status in
+            if case .notDownloaded = status { return true }
+            return false
+        }
     }
 
     private func createNewFile() {
