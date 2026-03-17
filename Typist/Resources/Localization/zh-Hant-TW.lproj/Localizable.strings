@@ -261,6 +261,25 @@
 "a11y.keyboard.symbol.at_sign" = "插入 @ 符號";
 "a11y.keyboard.symbol.slash" = "插入斜線";
 
+"shortcuts.title" = "鍵盤快速鍵";
+"shortcuts.section.general" = "一般";
+"shortcuts.section.completion" = "自動完成";
+"shortcuts.section.system" = "系統";
+"shortcuts.general.find_replace" = "尋找與取代";
+"shortcuts.completion.navigate" = "瀏覽建議";
+"shortcuts.completion.confirm" = "確認選取";
+"shortcuts.completion.dismiss" = "關閉";
+"shortcuts.system.undo" = "復原";
+"shortcuts.system.redo" = "重做";
+"shortcuts.system.select_all" = "全選";
+"shortcuts.system.copy" = "拷貝";
+"shortcuts.system.cut" = "剪下";
+"shortcuts.system.paste" = "貼上";
+
+"outline.title" = "大綱";
+"outline.empty.title" = "沒有標題";
+"outline.empty.message" = "在 Typst 文件中使用 = 新增標題即可查看大綱。";
+
 "resume.alert.title" = "繼續編輯？";
 "resume.alert.message" = "返回上次離開的位置？";
 "resume.alert.message_with_file" = "返回上次在 %@ 中離開的位置？";

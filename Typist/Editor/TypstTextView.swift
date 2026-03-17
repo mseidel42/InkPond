@@ -248,11 +248,16 @@ final class TypstTextView: UITextView {
         return true
     }
 
+    func suppressCompletionForNextSelectionChange() {
+        suppressNextSelectionCompletion = true
+    }
+
     // MARK: - First Responder Guard
 
     @discardableResult
     override func resignFirstResponder() -> Bool {
         if suppressResignFirstResponder { return false }
+        dismissCompletion()
         return super.resignFirstResponder()
     }
 

@@ -13,7 +13,14 @@ struct PreviewScrollTarget: Equatable, Sendable {
     let page: Int
     let yPoints: Float
     let xPoints: Float
+    /// Unique ID so two consecutive targets at the same position are still distinct,
+    /// ensuring the preview always scrolls and shows the sync marker.
+    private let seq: UInt = {
+        _seqCounter &+= 1
+        return _seqCounter
+    }()
 }
+private nonisolated(unsafe) var _seqCounter: UInt = 0
 
 struct EditorScrollTarget: Equatable, Sendable {
     let line: Int

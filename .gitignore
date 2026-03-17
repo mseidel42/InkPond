@@ -54,3 +54,4 @@ dist/
 .env
 .env.local
 .claude/
+IDEAS.md

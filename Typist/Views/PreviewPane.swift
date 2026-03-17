@@ -84,6 +84,9 @@ private struct PDFPreviewScrollState {
 final class PDFContainerView: UIView {
     fileprivate let pdfView = PassivePDFView()
     private let syncMarkerView = PreviewSyncMarkerView()
+    /// Incremented on each `scrollToPosition` call so stale scroll-animation
+    /// completion handlers don't fire `showMarker` for an outdated position.
+    private var scrollGeneration: UInt = 0
     /// When true, `reloadDocument` skips scroll restoration so that
     /// a pending `scrollToPosition` call can take priority.
     var suppressScrollRestoration = false
@@ -215,6 +218,7 @@ final class PDFContainerView: UIView {
 
 private final class PreviewSyncMarkerView: UIView {
     private let pillView = UIView()
+    private var fadeWorkItem: DispatchWorkItem?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -243,6 +247,8 @@ private final class PreviewSyncMarkerView: UIView {
             height: pillHeight
         )
 
+        // Cancel any pending fade-out and stop in-flight animations.
+        fadeWorkItem?.cancel()
         layer.removeAllAnimations()
         pillView.layer.removeAllAnimations()
 
@@ -254,9 +260,16 @@ private final class PreviewSyncMarkerView: UIView {
             self.pillView.transform = .identity
         }
 
-        UIView.animate(withDuration: 0.5, delay: 1.2, options: [.curveEaseIn]) {
-            self.alpha = 0
+        // Schedule fade-out via a cancellable work item so a rapid
+        // follow-up call to show(at:) can prevent the stale fade.
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            UIView.animate(withDuration: 0.5, delay: 0, options: [.curveEaseIn]) {
+                self.alpha = 0
+            }
         }
+        fadeWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
     }
 }
 
@@ -359,10 +372,15 @@ extension PDFContainerView {
         let pdfY = pageBounds.height - CGFloat(yPoints)
         let pdfX = CGFloat(xPoints)
 
-        // Use go(to:) to ensure the target page is visible and laid out,
-        // then refine the scroll position after PDFKit has settled.
-        let destination = PDFDestination(page: pdfPage, at: CGPoint(x: pdfX, y: pdfY))
-        pdfView.go(to: destination)
+        // Check if the target is already near the visible area.
+        // If so, skip `go(to:)` to avoid a jarring double-scroll bounce
+        // (go(to:) overshoots, then the refined animation corrects it).
+        let targetInView = pdfView.convert(CGPoint(x: pdfX, y: pdfY), from: pdfPage)
+        let visibleRect = pdfView.bounds.insetBy(dx: 0, dy: -pdfView.bounds.height * 0.5)
+        if !visibleRect.contains(targetInView) {
+            let destination = PDFDestination(page: pdfPage, at: CGPoint(x: pdfX, y: pdfY))
+            pdfView.go(to: destination)
+        }
 
         // Defer the precise positioning to let PDFKit finish its internal layout.
         DispatchQueue.main.async { [weak self] in
@@ -385,8 +403,11 @@ extension PDFContainerView {
             let clampedOffset = self.clampedContentOffset(desiredOffset, in: scrollView)
             let needsScroll = abs(scrollView.contentOffset.y - clampedOffset.y) > 2
 
+            self.scrollGeneration &+= 1
+            let currentGeneration = self.scrollGeneration
+
             let showMarker = { [weak self] in
-                guard let self else { return }
+                guard let self, self.scrollGeneration == currentGeneration else { return }
                 let updatedPoint = self.pdfView.convert(CGPoint(x: pdfX, y: pdfY), from: pdfPage)
                 let markerPoint = self.convert(updatedPoint, from: self.pdfView)
                 self.syncMarkerView.show(at: markerPoint)

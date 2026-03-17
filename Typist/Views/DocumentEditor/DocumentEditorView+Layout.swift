@@ -215,6 +215,13 @@ extension DocumentEditorView {
                 Button { findRequested = true } label: {
                     Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass")
                 }
+                Button {
+                    InteractionFeedback.impact(.light)
+                    focusCoordinator.dismissKeyboard()
+                    showingKeyboardShortcuts = true
+                } label: {
+                    Label(L10n.tr("shortcuts.title"), systemImage: "keyboard")
+                }
             }
 
             Section {
@@ -255,6 +262,17 @@ extension DocumentEditorView {
             .navigationBarTitleDisplayMode(.inline)
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        InteractionFeedback.impact(.light)
+                        focusCoordinator.dismissKeyboard()
+                        showingOutline = true
+                    } label: {
+                        Image(systemName: "list.bullet")
+                    }
+                    .accessibilityLabel(L10n.tr("outline.title"))
+                    .accessibilityIdentifier("editor.outline")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: shareButtonAction) {
                         Image(systemName: "square.and.arrow.up")
@@ -429,6 +447,21 @@ extension DocumentEditorView {
                 }
             }
             .sheet(item: $exporter.exportURL) { url in ActivityView(activityItems: [url]) }
+            .sheet(isPresented: $showingKeyboardShortcuts) {
+                NavigationStack {
+                    KeyboardShortcutsView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button(L10n.tr("Done")) { showingKeyboardShortcuts = false }
+                            }
+                        }
+                }
+            }
+            .sheet(isPresented: $showingOutline) {
+                OutlineView(editorText: editorText) { offset in
+                    pendingCursorJump = offset
+                }
+            }
             .fullScreenCover(isPresented: $showingSlideshow) {
                 if let pdf = compiler.pdfDocument {
                     SlideshowView(document: pdf)

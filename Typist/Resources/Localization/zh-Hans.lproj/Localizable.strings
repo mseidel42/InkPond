@@ -261,6 +261,25 @@
 "a11y.keyboard.symbol.at_sign" = "插入 @ 符号";
 "a11y.keyboard.symbol.slash" = "插入斜杠";
 
+"shortcuts.title" = "键盘快捷键";
+"shortcuts.section.general" = "通用";
+"shortcuts.section.completion" = "补全";
+"shortcuts.section.system" = "系统";
+"shortcuts.general.find_replace" = "查找与替换";
+"shortcuts.completion.navigate" = "浏览建议";
+"shortcuts.completion.confirm" = "确认选择";
+"shortcuts.completion.dismiss" = "关闭";
+"shortcuts.system.undo" = "撤销";
+"shortcuts.system.redo" = "重做";
+"shortcuts.system.select_all" = "全选";
+"shortcuts.system.copy" = "拷贝";
+"shortcuts.system.cut" = "剪切";
+"shortcuts.system.paste" = "粘贴";
+
+"outline.title" = "大纲";
+"outline.empty.title" = "没有标题";
+"outline.empty.message" = "在 Typst 文档中使用 = 添加标题即可查看大纲。";
+
 "resume.alert.title" = "继续编辑？";
 "resume.alert.message" = "返回上次离开的位置？";
 "resume.alert.message_with_file" = "返回上次在 %@ 中离开的位置？";

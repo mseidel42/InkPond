@@ -261,6 +261,25 @@
 "a11y.keyboard.symbol.at_sign" = "Insert at sign";
 "a11y.keyboard.symbol.slash" = "Insert slash";
 
+"shortcuts.title" = "Keyboard Shortcuts";
+"shortcuts.section.general" = "General";
+"shortcuts.section.completion" = "Completion";
+"shortcuts.section.system" = "System";
+"shortcuts.general.find_replace" = "Find & Replace";
+"shortcuts.completion.navigate" = "Navigate suggestions";
+"shortcuts.completion.confirm" = "Confirm selection";
+"shortcuts.completion.dismiss" = "Dismiss";
+"shortcuts.system.undo" = "Undo";
+"shortcuts.system.redo" = "Redo";
+"shortcuts.system.select_all" = "Select All";
+"shortcuts.system.copy" = "Copy";
+"shortcuts.system.cut" = "Cut";
+"shortcuts.system.paste" = "Paste";
+
+"outline.title" = "Outline";
+"outline.empty.title" = "No Headings";
+"outline.empty.message" = "Add headings with = in your Typst document to see an outline.";
+
 "resume.alert.title" = "Resume Editing?";
 "resume.alert.message" = "Return to where you left off last time?";
 "resume.alert.message_with_file" = "Return to %@ where you left off last time?";

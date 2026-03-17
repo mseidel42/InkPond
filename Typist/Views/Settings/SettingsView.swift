@@ -34,6 +34,7 @@ struct SettingsView: View {
             List {
                 headerSection
                 appearanceSection
+                keyboardShortcutsSection
                 projectsSection
                 fontsSection
                 cacheSection
@@ -147,6 +148,18 @@ extension SettingsView {
                 Text("Mocha · Dark").tag("mocha")
                 Text("Latte · Light").tag("latte")
             }
+        }
+    }
+
+    var keyboardShortcutsSection: some View {
+        Section {
+            NavigationLink {
+                KeyboardShortcutsView()
+            } label: {
+                Label(L10n.tr("shortcuts.title"), systemImage: "keyboard")
+                    .foregroundStyle(.primary)
+            }
+            .accessibilityIdentifier("settings.keyboard-shortcuts")
         }
     }
 

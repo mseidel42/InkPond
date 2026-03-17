@@ -78,6 +78,8 @@ struct EditorView: UIViewRepresentable {
                 self.cursorJumpOffset = nil
                 let maxOffset = textView.text.utf16.count
                 let safeOffset = min(max(0, jumpOffset), maxOffset)
+                textView.dismissCompletion()
+                textView.suppressCompletionForNextSelectionChange()
                 textView.selectedRange = NSRange(location: safeOffset, length: 0)
                 coordinator.captureViewState(from: textView)
                 let line = coordinator.lineNumber(forUTF16Offset: safeOffset, in: textView.text)
@@ -119,6 +121,9 @@ struct EditorView: UIViewRepresentable {
         var parent: EditorView
         weak var textView: TypstTextView?
         private var lastAppliedViewState: EditorViewState?
+        /// Set during `textViewDidChange` so the subsequent `textViewDidChangeSelection` knows
+        /// the cursor moved because of typing, not a deliberate navigation.
+        private var isProcessingTextChange = false
 
         init(_ parent: EditorView) {
             self.parent = parent
@@ -147,6 +152,8 @@ struct EditorView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             guard let typstTextView = textView as? TypstTextView else { return }
+            isProcessingTextChange = true
+            defer { isProcessingTextChange = false }
             parent.text = textView.text
             captureViewState(from: typstTextView)
             typstTextView.scheduleHighlighting(.debounced, textChanged: true)
@@ -159,7 +166,10 @@ struct EditorView: UIViewRepresentable {
             // After a tap-to-dismiss, skip re-triggering completion for this selection change
             if typstTextView.consumeSelectionSuppression() { return }
             typstTextView.updateCompletion()
-            if parent.syncCoordinator?.isEditorToPreviewSyncEnabled == true {
+            // Only sync cursor to preview on deliberate navigation (tap, arrow keys),
+            // not on every keystroke — typing causes noisy preview jumps.
+            if !isProcessingTextChange,
+               parent.syncCoordinator?.isEditorToPreviewSyncEnabled == true {
                 syncCursorToPreview(textView)
             }
         }
