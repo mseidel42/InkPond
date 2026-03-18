@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import os.log
+import os
 
 // MARK: - Error type
 
@@ -72,7 +72,12 @@ enum ProjectFileManager {
     static let fontFileExtensions: Set<String> = ["otf", "ttf", "woff", "woff2"]
 
     /// Shared StorageManager reference — set at app launch from TypistApp.
-    nonisolated(unsafe) static var storageManager: StorageManager?
+    /// Protected by a lock for thread-safe access from any actor context.
+    private nonisolated static let _storageManagerLock = OSAllocatedUnfairLock<StorageManager?>(initialState: nil)
+    nonisolated static var storageManager: StorageManager? {
+        get { _storageManagerLock.withLock { $0 } }
+        set { _storageManagerLock.withLock { $0 = newValue } }
+    }
 
     static var documentsURL: URL {
         if let manager = storageManager {
@@ -83,6 +88,13 @@ enum ProjectFileManager {
             fatalError("DocumentDirectory unavailable — this should never happen in a sandboxed app")
         }
         return docs
+    }
+
+    static var syncDocumentsURL: URL? {
+        if let manager = storageManager {
+            return manager.syncDocumentsURL
+        }
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
     }
 
     static func projectDirectory(for document: TypistDocument) -> URL {
@@ -112,7 +124,7 @@ enum ProjectFileManager {
     }
 
     /// Whether file operations should use NSFileCoordinator (iCloud mode).
-    /// Nonisolated because it reads from the nonisolated(unsafe) storageManager
+    /// Nonisolated because it reads from the lock-protected storageManager
     /// and must be callable from any actor context (e.g. BackgroundDocumentFileWriter).
     nonisolated static var useCoordination: Bool {
         storageManager?.isUsingiCloud ?? false

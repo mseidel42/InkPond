@@ -291,7 +291,7 @@ extension DocumentEditorView {
             imageImportToast = message
         }
         toastDismissTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            try? await Task.sleep(for: .seconds(1.8))
             withAnimation(.easeInOut(duration: 0.18)) {
                 imageImportToast = nil
             }

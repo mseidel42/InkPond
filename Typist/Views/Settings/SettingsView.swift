@@ -18,7 +18,6 @@ struct SettingsView: View {
 
     @State var showingZipImporter = false
     @State var zipImportError: String?
-    @State private var showRestartAlert = false
     @State private var cloudSyncMonitor = CloudSyncMonitor()
 
     var onImport: (URL) -> Void
@@ -47,11 +46,11 @@ struct SettingsView: View {
                 aboutSection
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Settings")
+            .navigationTitle(L10n.tr("Settings"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button(L10n.tr("Done")) {
                         InteractionFeedback.impact(.light)
                         dismiss()
                     }
@@ -67,25 +66,25 @@ struct SettingsView: View {
                     zipImportError = error.localizedDescription
                 }
             }
-            .alert("Import Error", isPresented: Binding(
+            .alert(L10n.tr("Import Error"), isPresented: Binding(
                 get: { zipImportError != nil },
                 set: { if !$0 { zipImportError = nil } }
             )) {
-                Button("OK") { zipImportError = nil }
+                Button(L10n.tr("OK")) { zipImportError = nil }
             } message: {
                 Text(zipImportError ?? "")
             }
-            .alert(L10n.tr("icloud.restart_title"), isPresented: $showRestartAlert) {
-                Button(L10n.tr("icloud.restart_action"), role: .destructive) {
-                    exit(0)
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(L10n.tr("icloud.restart_message"))
-            }
             .onAppear {
+                storageManager.refreshICloudAvailability()
                 if storageManager.isUsingiCloud {
                     cloudSyncMonitor.startMonitoringAll()
+                }
+            }
+            .onChange(of: storageManager.mode) { _, newMode in
+                if newMode == .iCloud {
+                    cloudSyncMonitor.startMonitoringAll()
+                } else {
+                    cloudSyncMonitor.stopMonitoring()
                 }
             }
             .onDisappear {
@@ -104,7 +103,7 @@ extension SettingsView {
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
                     .accessibilityHidden(true)
-                Text("Typist")
+                Text(L10n.appName)
                     .font(.title2.bold())
                 Text(versionString)
                     .font(.subheadline)
@@ -164,9 +163,6 @@ extension SettingsView {
                         let documents = (try? modelContext.fetch(descriptor)) ?? []
                         Task {
                             await storageManager.setMode(targetMode, documents: documents)
-                            if storageManager.migrationError == nil {
-                                showRestartAlert = true
-                            }
                         }
                     }
                 )) {
@@ -258,7 +254,7 @@ extension SettingsView {
     }
 
     var appearanceSection: some View {
-        Section("Appearance") {
+        Section(L10n.tr("Appearance")) {
             Picker(selection: Binding(
                 get: { appAppearanceManager.mode },
                 set: { newMode in
@@ -267,11 +263,11 @@ extension SettingsView {
                     }
                 }
             )) {
-                Text("Follow System").tag(AppAppearanceMode.system.rawValue)
-                Text("Light").tag(AppAppearanceMode.light.rawValue)
-                Text("Dark").tag(AppAppearanceMode.dark.rawValue)
+                Text(L10n.tr("Follow System")).tag(AppAppearanceMode.system.rawValue)
+                Text(L10n.tr("Light")).tag(AppAppearanceMode.light.rawValue)
+                Text(L10n.tr("Dark")).tag(AppAppearanceMode.dark.rawValue)
             } label: {
-                Label("App Appearance", systemImage: "circle.lefthalf.filled")
+                Label(L10n.tr("App Appearance"), systemImage: "circle.lefthalf.filled")
             }
 
             Picker(selection: Binding(
@@ -282,11 +278,11 @@ extension SettingsView {
                     }
                 }
             )) {
-                Text("Auto").tag("system")
-                Text("Mocha · Dark").tag("mocha")
-                Text("Latte · Light").tag("latte")
+                Text(L10n.tr("Auto")).tag("system")
+                Text(L10n.tr("Mocha · Dark")).tag("mocha")
+                Text(L10n.tr("Latte · Light")).tag("latte")
             } label: {
-                Label("Editor Theme", systemImage: "paintpalette")
+                Label(L10n.tr("Editor Theme"), systemImage: "paintpalette")
             }
         }
     }
@@ -304,11 +300,11 @@ extension SettingsView {
     }
 
     var projectsSection: some View {
-        Section("Projects") {
+        Section(L10n.tr("Projects")) {
             Button {
                 showingZipImporter = true
             } label: {
-                Label("Import ZIP", systemImage: "square.and.arrow.down")
+                Label(L10n.tr("Import ZIP"), systemImage: "square.and.arrow.down")
                     .foregroundStyle(.primary)
             }
             .accessibilityIdentifier("settings.import-zip")
@@ -316,7 +312,7 @@ extension SettingsView {
     }
 
     var fontsSection: some View {
-        Section("Fonts") {
+        Section(L10n.tr("Fonts")) {
             NavigationLink {
                 AppFontManagementView()
             } label: {
@@ -337,11 +333,11 @@ extension SettingsView {
     }
 
     var cacheSection: some View {
-        Section("Cache") {
+        Section(L10n.tr("Cache")) {
             NavigationLink {
                 CompiledPreviewCacheManagementView()
             } label: {
-                Label("Manage Compile Cache", systemImage: "doc.text.magnifyingglass")
+                Label(L10n.tr("Manage Compile Cache"), systemImage: "doc.text.magnifyingglass")
                     .foregroundStyle(.primary)
             }
             .accessibilityIdentifier("settings.compile-cache")
@@ -349,7 +345,7 @@ extension SettingsView {
             NavigationLink {
                 PreviewPackageCacheManagementView()
             } label: {
-                Label("Manage Package Cache", systemImage: "externaldrive.badge.person.crop")
+                Label(L10n.tr("Manage Package Cache"), systemImage: "externaldrive.badge.person.crop")
                     .foregroundStyle(.primary)
             }
             .accessibilityIdentifier("settings.cache")
@@ -361,7 +357,7 @@ extension SettingsView {
             NavigationLink {
                 AcknowledgementsView()
             } label: {
-                Label("Acknowledgements", systemImage: "heart")
+                Label(L10n.tr("Acknowledgements"), systemImage: "heart")
                     .foregroundStyle(.primary)
             }
             .accessibilityIdentifier("settings.acknowledgements")

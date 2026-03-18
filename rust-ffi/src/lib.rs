@@ -3,11 +3,12 @@ use std::ffi::{CStr, CString};
 use std::io::Read;
 use std::os::raw::c_char;
 use std::path::{Component, Path, PathBuf};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use typst::diag::{FileError, FileResult, PackageError, SourceDiagnostic};
 use typst::foundations::{Bytes, Datetime};
-use typst::layout::{Frame, FrameItem, PagedDocument};
+use typst::layout::{Frame, FrameItem, PagedDocument, Point, Transform};
 use typst::syntax::package::PackageSpec;
 use typst::syntax::{FileId, Source, Span, VirtualPath};
 use typst::text::{Font, FontBook};
@@ -89,8 +90,7 @@ impl SimpleWorld {
             fonts.push(font);
         }
 
-        let bundled_count = fonts.len();
-        debug_log!("[typst-ffi] bundled fonts: {}", bundled_count);
+        debug_log!("[typst-ffi] bundled fonts: {}", fonts.len());
 
         let mut pkg_cache_root: Option<PathBuf> = None;
         let mut root_dir: Option<PathBuf> = None;
@@ -102,22 +102,30 @@ impl SimpleWorld {
             debug_log!("[typst-ffi] font_path_count from Swift: {}", opts.font_path_count);
 
             // Gather extra font paths from Swift.
-            for i in 0..opts.font_path_count {
-                let ptr = *opts.font_paths.add(i);
-                if ptr.is_null() {
-                    continue;
+            if !opts.font_paths.is_null() {
+                for i in 0..opts.font_path_count {
+                    let ptr = *opts.font_paths.add(i);
+                    if ptr.is_null() {
+                        continue;
+                    }
+                    let path = match CStr::from_ptr(ptr).to_str() {
+                        Ok(s) => s.to_string(),
+                        Err(_) => continue,
+                    };
+                    font_paths.push(path);
                 }
-                let path = match CStr::from_ptr(ptr).to_str() {
-                    Ok(s) => s.to_string(),
-                    Err(_) => continue,
-                };
-                font_paths.push(path);
+            } else if opts.font_path_count > 0 {
+                debug_log!(
+                    "[typst-ffi] font_path_count was non-zero but font_paths pointer was null"
+                );
             }
 
             // --- Package cache directory ---
             if !opts.cache_dir.is_null() {
                 if let Ok(s) = CStr::from_ptr(opts.cache_dir).to_str() {
-                    pkg_cache_root = Some(PathBuf::from(s));
+                    if !s.is_empty() {
+                        pkg_cache_root = Some(PathBuf::from(s));
+                    }
                 }
             }
 
@@ -271,11 +279,13 @@ fn extra_font_faces(paths: &[String]) -> Arc<Vec<Font>> {
                 }
             }
             Err(e) => {
+                let _ = &e;
                 debug_log!("[typst-ffi] FAILED to read font: {} — {}", path, e);
                 failed += 1;
             }
         }
     }
+    let _ = failed;
     debug_log!(
         "[typst-ffi] extra font cache miss: {} faces, {} files failed",
         faces.len(),
@@ -534,6 +544,16 @@ pub unsafe extern "C" fn typst_compile(
     source: *const c_char,
     options: *const TypstOptions,
 ) -> TypstResult {
+    match catch_unwind(AssertUnwindSafe(|| unsafe { typst_compile_impl(source, options) })) {
+        Ok(result) => result,
+        Err(_) => error_result("Typst compiler panicked"),
+    }
+}
+
+unsafe fn typst_compile_impl(
+    source: *const c_char,
+    options: *const TypstOptions,
+) -> TypstResult {
     if source.is_null() {
         return error_result("null source pointer");
     }
@@ -571,10 +591,8 @@ pub unsafe extern "C" fn typst_compile(
 #[no_mangle]
 pub unsafe extern "C" fn typst_free_result(result: TypstResult) {
     if !result.pdf_data.is_null() {
-        drop(Box::from_raw(std::slice::from_raw_parts_mut(
-            result.pdf_data,
-            result.pdf_len,
-        )));
+        let slice_ptr = std::ptr::slice_from_raw_parts_mut(result.pdf_data, result.pdf_len);
+        drop(Box::from_raw(slice_ptr));
     }
     if !result.error_message.is_null() {
         drop(CString::from_raw(result.error_message));
@@ -586,6 +604,7 @@ pub unsafe extern "C" fn typst_free_result(result: TypstResult) {
 // ---------------------------------------------------------------------------
 
 /// A single source-map entry mapping a PDF position to a source location.
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct SourceMapEntry {
     /// 0-based page index.
@@ -620,14 +639,12 @@ pub struct TypstResultWithMap {
 fn walk_frame(
     frame: &Frame,
     page_index: u32,
-    x_offset: f64,
-    y_offset: f64,
+    transform: Transform,
     source: &Source,
     entries: &mut Vec<SourceMapEntry>,
 ) {
     for (pos, item) in frame.items() {
-        let x = x_offset + pos.x.to_pt();
-        let y = y_offset + pos.y.to_pt();
+        let point = Point::new(pos.x, pos.y).transform(transform);
 
         match item {
             FrameItem::Text(text_item) => {
@@ -649,8 +666,8 @@ fn walk_frame(
                         if let Some((line, col)) = source.lines().byte_to_line_column(range.start) {
                             entries.push(SourceMapEntry {
                                 page: page_index,
-                                y_pt: y as f32,
-                                x_pt: x as f32,
+                                y_pt: point.y.to_pt() as f32,
+                                x_pt: point.x.to_pt() as f32,
                                 source_offset: range.start as u32,
                                 source_length: (range.end - range.start).min(u16::MAX as usize) as u16,
                                 line: (line + 1) as u32,
@@ -661,10 +678,10 @@ fn walk_frame(
                 }
             }
             FrameItem::Group(group) => {
-                // Use translation components only (ignoring rotation/scale).
-                let gx = x + group.transform.tx.to_pt();
-                let gy = y + group.transform.ty.to_pt();
-                walk_frame(&group.frame, page_index, gx, gy, source, entries);
+                let group_transform = transform
+                    .pre_concat(Transform::translate(pos.x, pos.y))
+                    .pre_concat(group.transform);
+                walk_frame(&group.frame, page_index, group_transform, source, entries);
             }
             _ => {}
         }
@@ -672,18 +689,124 @@ fn walk_frame(
 }
 
 /// Extract a source map from a compiled document.
-/// Returns entries sorted by source offset.
+/// Returns entries sorted by source offset, deduplicated so that each source
+/// span maps to a single PDF position (the body occurrence, not TOC/header
+/// duplicates).
 fn extract_source_map(document: &PagedDocument, source: &Source) -> Vec<SourceMapEntry> {
     let mut entries = Vec::new();
 
     for (page_index, page) in document.pages.iter().enumerate() {
-        walk_frame(&page.frame, page_index as u32, 0.0, 0.0, source, &mut entries);
+        walk_frame(
+            &page.frame,
+            page_index as u32,
+            Transform::identity(),
+            source,
+            &mut entries,
+        );
     }
 
     // Sort by source offset.
     entries.sort_by_key(|e| e.source_offset);
 
+    // Deduplicate entries that share the same source_offset (same source span
+    // rendered in multiple places, e.g. outline/TOC, body heading, page header).
+    // For each group, pick the entry whose page best matches the surrounding
+    // body content — the nearest entry on a different source offset tells us
+    // which page the body flow is on.
+    deduplicate_source_map(&mut entries);
+
     entries
+}
+
+/// For groups of entries sharing the same `source_offset` that span multiple
+/// pages (e.g. heading text rendered in TOC, body, and page headers), keep
+/// only the entries on the "body" page.  Groups that are all on the same page
+/// (e.g. wrapped text) are left untouched.
+fn deduplicate_source_map(entries: &mut Vec<SourceMapEntry>) {
+    if entries.len() <= 1 {
+        return;
+    }
+
+    // Phase 1 — identify offset groups and whether they span multiple pages.
+    //   (start, end, multi_page)
+    let mut groups: Vec<(usize, usize, bool)> = Vec::new();
+    {
+        let mut i = 0;
+        while i < entries.len() {
+            let offset = entries[i].source_offset;
+            let mut j = i + 1;
+            while j < entries.len() && entries[j].source_offset == offset {
+                j += 1;
+            }
+            let multi = entries[i..j].windows(2).any(|w| w[0].page != w[1].page);
+            groups.push((i, j, multi));
+            i = j;
+        }
+    }
+
+    // Phase 2 — for each multi-page group, find the body page by looking at
+    // the nearest *single-page* (non-duplicate) group's page.
+    let mut result: Vec<SourceMapEntry> = Vec::with_capacity(entries.len());
+
+    for (gi, &(start, end, multi)) in groups.iter().enumerate() {
+        if !multi {
+            // All entries on the same page — keep every entry (line wrapping).
+            result.extend_from_slice(&entries[start..end]);
+            continue;
+        }
+
+        // Find reference page from the nearest single-page group.
+        // Prefer FORWARD neighbours — body content after a heading is on
+        // the same page as the heading itself, whereas backward neighbours
+        // (e.g. document title / TOC preamble) may sit on the TOC page.
+        let ref_page = {
+            let mut found = None;
+            // Forward search first.
+            for d in 1..groups.len() {
+                if gi + d < groups.len() {
+                    let (gs, _, gm) = groups[gi + d];
+                    if !gm {
+                        found = Some(entries[gs].page);
+                        break;
+                    }
+                }
+            }
+            // Backward search only if nothing found forwards.
+            if found.is_none() {
+                for d in 1..groups.len() {
+                    if gi >= d {
+                        let (gs, _, gm) = groups[gi - d];
+                        if !gm {
+                            found = Some(entries[gs].page);
+                            break;
+                        }
+                    }
+                }
+            }
+            // Fallback: highest page (body is after TOC).
+            found.unwrap_or(entries[end - 1].page)
+        };
+
+        // Determine which page in this group is closest to ref_page.
+        let mut best_page = entries[start].page;
+        let mut best_dist = best_page.abs_diff(ref_page);
+        for k in (start + 1)..end {
+            let dist = entries[k].page.abs_diff(ref_page);
+            if dist < best_dist {
+                best_page = entries[k].page;
+                best_dist = dist;
+            }
+        }
+
+        // Keep all entries on the best page (preserves wrapped text on the body page).
+        for k in start..end {
+            if entries[k].page == best_page {
+                result.push(entries[k]);
+            }
+        }
+    }
+
+    *entries = result;
 }
 
 /// Compile Typst source to PDF and extract a source map.
@@ -693,6 +816,18 @@ fn extract_source_map(document: &PagedDocument, source: &Source) -> Vec<SourceMa
 /// Free the result with `typst_free_result_with_map`.
 #[no_mangle]
 pub unsafe extern "C" fn typst_compile_with_source_map(
+    source: *const c_char,
+    options: *const TypstOptions,
+) -> TypstResultWithMap {
+    match catch_unwind(AssertUnwindSafe(|| unsafe {
+        typst_compile_with_source_map_impl(source, options)
+    })) {
+        Ok(result) => result,
+        Err(_) => error_result_with_map("Typst compiler panicked"),
+    }
+}
+
+unsafe fn typst_compile_with_source_map_impl(
     source: *const c_char,
     options: *const TypstOptions,
 ) -> TypstResultWithMap {
@@ -750,19 +885,16 @@ pub unsafe extern "C" fn typst_compile_with_source_map(
 #[no_mangle]
 pub unsafe extern "C" fn typst_free_result_with_map(result: TypstResultWithMap) {
     if !result.pdf_data.is_null() {
-        drop(Box::from_raw(std::slice::from_raw_parts_mut(
-            result.pdf_data,
-            result.pdf_len,
-        )));
+        let slice_ptr = std::ptr::slice_from_raw_parts_mut(result.pdf_data, result.pdf_len);
+        drop(Box::from_raw(slice_ptr));
     }
     if !result.error_message.is_null() {
         drop(CString::from_raw(result.error_message));
     }
     if !result.source_map.is_null() {
-        drop(Box::from_raw(std::slice::from_raw_parts_mut(
-            result.source_map,
-            result.source_map_len,
-        )));
+        let slice_ptr =
+            std::ptr::slice_from_raw_parts_mut(result.source_map, result.source_map_len);
+        drop(Box::from_raw(slice_ptr));
     }
 }
 
@@ -915,6 +1047,36 @@ mod tests {
                 .any(|pair| pair[0].x_pt != pair[1].x_pt || pair[0].y_pt != pair[1].y_pt),
             "expected wrapped entries to preserve multiple rendered positions"
         );
+    }
+
+    #[test]
+    fn simple_world_ignores_null_font_paths_array() {
+        let options = TypstOptions {
+            font_paths: std::ptr::null(),
+            font_path_count: 1,
+            cache_dir: std::ptr::null(),
+            root_dir: std::ptr::null(),
+        };
+
+        let world = unsafe { SimpleWorld::new("= Hello", &options) };
+        let bundled_count = bundled_font_faces().len();
+
+        assert_eq!(world.fonts.len(), bundled_count);
+    }
+
+    #[test]
+    fn simple_world_ignores_empty_cache_dir() {
+        let empty_cache = CString::new("").unwrap();
+        let options = TypstOptions {
+            font_paths: std::ptr::null(),
+            font_path_count: 0,
+            cache_dir: empty_cache.as_ptr(),
+            root_dir: std::ptr::null(),
+        };
+
+        let world = unsafe { SimpleWorld::new("= Hello", &options) };
+
+        assert!(world.pkg_cache_root.is_none());
     }
 
     #[derive(Clone)]

@@ -22,11 +22,13 @@ extension DocumentListView {
             }
         }
         .task {
-            ProjectFileManager.migrateLegacyStructure(documents: documents)
-            syncWithFilesystem()
-            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-            monitor.onChange = { scheduleFilesystemSync() }
-            monitor.start(url: docs)
+            startFilesystemMonitoring()
+        }
+        .onChange(of: storageManager.mode) { _, _ in
+            startFilesystemMonitoring()
+        }
+        .onChange(of: storageManager.iCloudAvailable) { _, _ in
+            startFilesystemMonitoring()
         }
         .onDisappear {
             monitor.stop()
@@ -114,6 +116,19 @@ extension DocumentListView {
 
     var searchEmptyState: some View {
         ContentUnavailableView.search(text: searchText)
+    }
+
+    func startFilesystemMonitoring() {
+        monitor.stop()
+        syncTask?.cancel()
+        syncTask = nil
+
+        ProjectFileManager.migrateLegacyStructure(documents: documents)
+        syncWithFilesystem()
+
+        guard let docs = ProjectFileManager.syncDocumentsURL else { return }
+        monitor.onChange = { scheduleFilesystemSync() }
+        monitor.start(url: docs)
     }
 
     @ToolbarContentBuilder

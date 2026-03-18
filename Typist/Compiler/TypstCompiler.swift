@@ -46,6 +46,8 @@ final class TypstCompiler {
         case failure(TypstBridgeError)
     }
 
+    private struct CompileTimeoutError: Error {}
+
     private static let compileDelay = Duration.milliseconds(350)
     private static let compileTimeout = Duration.seconds(30)
     nonisolated private static let logger = Logger(
@@ -148,6 +150,8 @@ final class TypstCompiler {
     func clearPreview() {
         debounceTask?.cancel()
         debounceTask = nil
+        activeTask?.cancel()
+        activeTask = nil
         scheduledRequest = nil
         pendingRequest = nil
         compileGeneration &+= 1
@@ -163,6 +167,8 @@ final class TypstCompiler {
     func cancel() {
         debounceTask?.cancel()
         debounceTask = nil
+        activeTask?.cancel()
+        activeTask = nil
         scheduledRequest = nil
         pendingRequest = nil
         compileGeneration &+= 1
@@ -227,25 +233,38 @@ final class TypstCompiler {
 
             let workerResult: WorkerResult
             do {
-                workerResult = try await withThrowingTaskGroup(of: WorkerResult.self) { group in
-                    group.addTask { await compilationTask.value }
-                    group.addTask {
-                        try await Task.sleep(for: timeout)
-                        throw CancellationError()
+                workerResult = try await withTaskCancellationHandler(operation: {
+                    try await withThrowingTaskGroup(of: WorkerResult.self) { group in
+                        group.addTask { await compilationTask.value }
+                        group.addTask {
+                            try await Task.sleep(for: timeout)
+                            throw CompileTimeoutError()
+                        }
+                        let result = try await group.next()!
+                        group.cancelAll()
+                        return result
                     }
-                    let result = try await group.next()!
-                    group.cancelAll()
-                    return result
-                }
-            } catch {
+                }, onCancel: {
+                    compilationTask.cancel()
+                })
+            } catch is CompileTimeoutError {
+                compilationTask.cancel()
                 Self.logger.error("Compilation timed out after \(timeout)")
-                workerResult = .failure(.compilationFailed("Compilation timed out."))
+                workerResult = .failure(.compilationFailed(L10n.tr("error.typst.compilation_timeout")))
+            } catch is CancellationError {
+                compilationTask.cancel()
+                return
+            } catch {
+                compilationTask.cancel()
+                Self.logger.error("Compilation failed unexpectedly: \(error.localizedDescription, privacy: .public)")
+                workerResult = .failure(.compilationFailed(error.localizedDescription))
             }
-            self?.finishCompilation(workerResult, generation: request.generation)
+            guard !Task.isCancelled else { return }
+            self?.finishCompilation(workerResult, generation: request.generation, request: request)
         }
     }
 
-    private func finishCompilation(_ result: WorkerResult, generation: UInt64) {
+    private func finishCompilation(_ result: WorkerResult, generation: UInt64, request: CompileRequest? = nil) {
         activeTask = nil
 
         if generation == compileGeneration {
@@ -257,6 +276,19 @@ final class TypstCompiler {
                 sourceMap = map
                 errorMessage = nil
                 compiledOnce = true
+                // Cache hit produces no source map — schedule a follow-up
+                // compilation that bypasses the cache so the source map is
+                // available for editor↔preview sync and outline navigation.
+                if map == nil, let request {
+                    compile(
+                        source: request.source,
+                        fontPaths: request.fontPaths,
+                        rootDir: request.rootDir,
+                        mode: .debounced,
+                        previewCachePolicy: .bypassCache,
+                        previewCacheDescriptor: request.previewCacheDescriptor
+                    )
+                }
             case .failure(let error):
                 // Keep the last successful PDF visible; only update the error banner.
                 errorMessage = error.localizedDescription

@@ -17,8 +17,8 @@
 "sort.menu.sort_by" = "Sort By";
 "sort.menu.order" = "Order";
 "sort.menu.button" = "Sort";
-"doc.time.created" = "Create";
-"doc.time.modified" = "Modify";
+"doc.time.created" = "Created";
+"doc.time.modified" = "Modified";
 "doc.list.empty.title" = "No Documents Yet";
 "doc.list.empty.message" = "Create a new document to start writing.";
 "doc.list.empty.action" = "New Document";
@@ -44,7 +44,7 @@
 "app_fonts.export_warning.title" = "App Fonts Not Included";
 "app_fonts.export_warning.message" = "Project ZIP exports only the project directory. Imported App fonts are not bundled and must exist separately on the destination device.";
 "settings.version_format" = "Version %@ (%@)";
-"settings.typst_version_format" = "Typst-ios %@";
+"settings.typst_version_format" = "Typst iOS %@";
 
 "error.file.cannot_delete_entry" = "The entry file cannot be deleted.";
 "error.file.already_exists" = "A file named \"%@\" already exists.";
@@ -59,6 +59,7 @@
 
 "error.typst.compiler_not_linked" = "Typst compiler library not linked. Run rust-ffi/build-ios.sh.";
 "error.typst.unknown_compilation" = "Unknown compilation error";
+"error.typst.compilation_timeout" = "Compilation timed out.";
 "error.image.load_data_failed" = "Failed to load image data.";
 "error.image.process_failed" = "Could not process image.";
 "error.datastore.title" = "Unable to Open Data Store";
@@ -121,6 +122,7 @@
 "Project Root" = "Project Root";
 "Selecting a font directory imports its font files into the project font library. You can also skip this step." = "Selecting a font directory imports its font files into the project font library. You can also skip this step.";
 "Image Import Error" = "Image Import Error";
+"File Error" = "File Error";
 "No .typ files" = "No .typ files";
 "Source Files" = "Source Files";
 "No images" = "No images";
@@ -171,7 +173,7 @@
 "Packages" = "Packages";
 "No cached document previews" = "No cached document previews";
 "No cached @preview packages" = "No cached @preview packages";
-"Compile Now" = "Immediate Compile";
+"Compile Now" = "Compile Now";
 "Recompile" = "Recompile";
 "Cache Error" = "Cache Error";
 "Clear All Compile Cache" = "Clear All Compile Cache";

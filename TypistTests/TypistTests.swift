@@ -485,6 +485,31 @@ struct TypistTests {
     }
 
     @MainActor
+    @Test func typstCompilerCancelPreventsInFlightResultFromApplying() async {
+        let probe = CompileProbe()
+        probe.block("first")
+
+        let compiler = TypstCompiler(
+            compileWorker: { source, _, _ in probe.compile(source: source) },
+            documentBuilder: { _ in PDFDocument() },
+            sleep: { _ in }
+        )
+
+        compiler.compileNow(source: "first", fontPaths: [], rootDir: nil)
+        await waitUntil {
+            probe.startedSources == ["first"]
+        }
+
+        compiler.cancel()
+        probe.release("first")
+        try? await Task.sleep(for: .milliseconds(100))
+
+        #expect(!compiler.isCompiling)
+        #expect(compiler.pdfData == nil)
+        #expect(!compiler.compiledOnce)
+    }
+
+    @MainActor
     @Test func typstCompilerUsesCompiledPreviewCacheWhenFingerprintMatches() async throws {
         let doc = makeDocument(projectID: "compiler-cache-hit")
         let cacheRoot = makeTempDirectory()
@@ -784,6 +809,23 @@ struct TypistTests {
         #expect(!isQuoted)
         #expect(items.map(\.label) == ["Source Han Sans SC"])
         #expect(items.allSatisfy { $0.isInsertable })
+    }
+
+    @Test func completionEngineSupportsUtf16CursorOffsetsWhenEmojiPrecedesCursor() {
+        let engine = CompletionEngine()
+        engine.fontFamilies = ["Source Han Sans SC"]
+        let text = "😀 #text(font: So"
+        let cursorOffset = (text as NSString).length
+
+        let result = engine.completions(for: text, cursorOffset: cursorOffset)
+
+        guard case .value(_, let isQuoted, let items)? = result else {
+            Issue.record("Expected font value completion for UTF-16 cursor offsets")
+            return
+        }
+
+        #expect(!isQuoted)
+        #expect(items.map(\.label) == ["Source Han Sans SC"])
     }
 
     @Test func completionEngineStaticValuesAreHintOnly() throws {

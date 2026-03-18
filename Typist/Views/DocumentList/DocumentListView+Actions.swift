@@ -54,7 +54,11 @@ extension DocumentListView {
 
     func syncWithFilesystem() {
         deduplicateDocumentsByProjectID()
-        let existingFolders = ProjectFileManager.trackedFolderNames()
+        let knownIDs = Set(documents.map { $0.projectID })
+        guard let existingFolders = ProjectFileManager.trackedFolderNames(),
+              let newFolders = ProjectFileManager.untrackedFolderNames(knownProjectIDs: knownIDs) else {
+            return
+        }
 
         for document in documents where !existingFolders.contains(document.projectID) {
             try? CompiledPreviewCacheStore().remove(projectID: document.projectID)
@@ -64,8 +68,6 @@ extension DocumentListView {
             modelContext.delete(document)
         }
 
-        let knownIDs = Set(documents.map { $0.projectID })
-        let newFolders = ProjectFileManager.untrackedFolderNames(knownProjectIDs: knownIDs)
         for folderName in newFolders {
             let folderURL = ProjectFileManager.projectDirectory(folderName: folderName)
             let allFiles = ProjectFileManager.listAllFiles(in: folderURL)

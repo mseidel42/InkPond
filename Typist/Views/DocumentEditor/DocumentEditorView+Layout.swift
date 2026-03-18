@@ -81,7 +81,7 @@ extension DocumentEditorView {
             compileToken: compileToken,
             focusCoordinator: focusCoordinator,
             sourceMap: isSyncEnabled ? compiler.sourceMap : nil,
-            syncCoordinator: isSyncEnabled ? syncCoordinator : nil,
+            syncCoordinator: syncCoordinator,
             entryFileName: document.entryFileName,
             onGoToError: { file, line, column in
                 navigateToError(file: file, line: line, column: column)
@@ -179,12 +179,12 @@ extension DocumentEditorView {
     var shareButtonAction: () -> Void {
         if sizeClass == .regular || selectedTab == 1 {
             return {
-                flushPendingSave()
+                guard flushPendingSave() else { return }
                 exporter.exportPDF(for: document, cachedPDF: compiler.pdfDocument)
             }
         }
         return {
-            flushPendingSave()
+            guard flushPendingSave() else { return }
             exporter.exportTypSource(for: document, fileName: currentFileName)
         }
     }
@@ -331,7 +331,7 @@ extension DocumentEditorView {
                     document.importImageDirectoryOptions = []
                     document.importFontDirectoryOptions = []
                     showingImportConfiguration = false
-                    loadFile(named: document.entryFileName)
+                    _ = loadFile(named: document.entryFileName)
                 }
             }
     }
@@ -349,7 +349,7 @@ extension DocumentEditorView {
             .onDisappear {
                 positionSyncTask?.cancel()
                 positionSyncTask = nil
-                flushPendingSave()
+                _ = flushPendingSave()
                 persistEditorPositionIfNeeded()
                 focusCoordinator.setResignSuppressed(false)
                 compiler.cancel()
@@ -370,7 +370,7 @@ extension DocumentEditorView {
                     selectedTab = 0
                 }
                 if currentFileName != document.entryFileName {
-                    openFile(named: document.entryFileName)
+                    guard openFileIfPossible(named: document.entryFileName) else { return }
                 }
                 pendingCursorJump = utf16Offset(forLine: target.line, column: target.column, in: editorText)
                 syncCoordinator.editorScrollTarget = nil
@@ -488,7 +488,7 @@ extension DocumentEditorView {
             }
             .sheet(isPresented: $showingOutline) {
                 OutlineView(editorText: editorText) { offset in
-                    pendingCursorJump = offset
+                    handleOutlineJump(characterOffset: offset)
                 }
             }
             .sheet(isPresented: $showingSnippetBrowser) {
@@ -524,7 +524,7 @@ extension DocumentEditorView {
             .alert(L10n.appFontsExportWarningTitle, isPresented: $showingZipExportWarning) {
                 Button("Cancel", role: .cancel) {}
                 Button("Continue") {
-                    flushPendingSave()
+                    guard flushPendingSave() else { return }
                     exporter.exportZip(for: document)
                 }
             } message: {

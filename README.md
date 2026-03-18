@@ -76,13 +76,21 @@ Typist is a native iOS/iPadOS editor for [Typst](https://typst.app/), with live 
    git clone <your-fork-or-origin-url>
    cd Typist
    ```
-2. Build Rust FFI framework:
+2. Make sure the native toolchain is ready:
+   ```bash
+   xcode-select -p
+   cargo --version
+   rustup show
+   ```
+   If any of these fail, install Xcode command line tools and the Rust toolchain before continuing.
+3. Build the Rust FFI framework:
    ```bash
    cd rust-ffi
    ./build-ios.sh
    cd ..
    ```
-3. Build and run in Xcode:
+   This generates `Frameworks/typst_ios.xcframework`, which is not committed to git.
+4. Build and run in Xcode:
    ```bash
    open Typist.xcodeproj
    ```
@@ -110,6 +118,7 @@ xcodebuild test -project Typist.xcodeproj -scheme Typist -destination 'platform=
   - updating Typst / Rust dependencies
   - changing `rust-ffi/src/lib.rs`
   - rebuilding release artifacts for distribution
+- If Xcode shows `Typst compiler library not linked`, the xcframework is missing, stale, or was built before switching branches. Re-run the build script and rebuild the app.
 
 Current pinned Typst version: `0.14.2` (see `rust-ffi/Cargo.toml`).
 
@@ -194,6 +203,8 @@ Typist/
 
 - `Typst compiler library not linked`:
   - Run `cd rust-ffi && ./build-ios.sh` and rebuild the app.
+  - If the script fails immediately, check `cargo --version`, `rustup show`, and `xcode-select -p`.
+  - If the script succeeds but Xcode still fails to link, clean the build folder and rerun the app build.
 - Simulator link errors about `typst_ios` architecture:
   - Rebuild xcframework; the script generates `arm64 + x86_64` simulator slices.
 - TestFlight upload succeeded but not distributable yet:

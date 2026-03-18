@@ -42,9 +42,22 @@ struct SourceMap: Sendable {
             }
         }
 
-        // If exact match, use it; otherwise use the previous entry.
+        // If exact match, pick the entry with the largest Y among all entries
+        // on the same line.  When a heading appears both in a navigation bar
+        // (small Y at page top) and in the body (larger Y), this selects the
+        // body occurrence.  For normal wrapped text on the same page, entries
+        // have close Y values so the choice is inconsequential.
         if lo < byOffset.count && byOffset[lo].line == line {
-            return byOffset[lo]
+            var best = byOffset[lo]
+            var i = lo + 1
+            while i < byOffset.count && byOffset[i].line == line {
+                let candidate = byOffset[i]
+                if candidate.yPoints > best.yPoints {
+                    best = candidate
+                }
+                i += 1
+            }
+            return best
         } else if lo > 0 {
             return byOffset[lo - 1]
         }

@@ -582,11 +582,11 @@ struct PreviewPane: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Text(compiler.errorMessage == nil ? "Preview" : "Compilation Error")
+            Text(compiler.errorMessage == nil ? L10n.tr("Preview") : L10n.tr("Compilation Error"))
                 .font(.title2)
                 .foregroundStyle(.secondary)
             if compiler.errorMessage == nil {
-                Text("Start typing to see a live preview")
+                Text(L10n.tr("Start typing to see a live preview"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -710,7 +710,7 @@ struct PreviewPane: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Compilation Error")
+                    Text(L10n.tr("Compilation Error"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                     Text(presentation.summary)
@@ -755,7 +755,7 @@ struct PreviewPane: View {
                             isShowingErrorDetails.toggle()
                         }
                     } label: {
-                        Text(isShowingErrorDetails ? "Hide Details" : "Show Details")
+                        Text(isShowingErrorDetails ? L10n.tr("Hide Details") : L10n.tr("Show Details"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.red)
                             .padding(.horizontal, 10)

@@ -10,6 +10,16 @@ import UIKit
 import os.log
 
 enum FontManager {
+    private struct FontNameRecord {
+        let platformID: UInt16
+        let encodingID: UInt16
+        let nameID: UInt16
+        let value: String
+    }
+
+    /// Cache parsed font name records to avoid re-reading OTF binaries on every call.
+    private static var fontNameRecordCache: [String: [FontNameRecord]] = [:]
+
     private static let cachedBundledCJKFontPaths: [String] = [
         Bundle.main.path(forResource: "SourceHanSansSC-Regular", ofType: "otf"),
         Bundle.main.path(forResource: "SourceHanSerifSC-Regular", ofType: "otf"),
@@ -56,6 +66,7 @@ enum FontManager {
     }
 
     private static func fontNameRecords(forFontAtPath path: String) -> [FontNameRecord] {
+        if let cached = fontNameRecordCache[path] { return cached }
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               data.count > 12 else { return [] }
         // Read sfnt offset table to find the 'name' table.
@@ -90,6 +101,7 @@ enum FontManager {
             guard let value = String(bytes: strData, encoding: .utf16BigEndian) else { continue }
             records.append(FontNameRecord(platformID: pid, encodingID: enc, nameID: nid, value: value))
         }
+        fontNameRecordCache[path] = records
         return records
     }
 
@@ -285,15 +297,24 @@ enum FontManager {
     }
 
     /// Delete a font file from the document's project directory.
-    static func deleteFont(fileName: String, from document: TypistDocument) {
+    static func deleteFont(fileName: String, from document: TypistDocument) throws {
         let url = ProjectFileManager.fontsDirectory(for: document)
             .appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            os_log(.info, "FontManager: font %{public}@ already missing from project %{public}@", fileName, document.projectID)
+            return
+        }
         do {
-            try FileManager.default.removeItem(at: url)
+            if ProjectFileManager.useCoordination {
+                try CloudFileCoordinator.removeItem(at: url)
+            } else {
+                try FileManager.default.removeItem(at: url)
+            }
             os_log(.info, "FontManager: deleted %{public}@ from project %{public}@", fileName, document.projectID)
         } catch {
             os_log(.error, "FontManager: failed to delete %{public}@ from project %{public}@: %{public}@",
                    fileName, document.projectID, error.localizedDescription)
+            throw error
         }
     }
 
@@ -330,9 +351,3 @@ enum FontManager {
     }
 
 }
-    private struct FontNameRecord {
-        let platformID: UInt16
-        let encodingID: UInt16
-        let nameID: UInt16
-        let value: String
-    }

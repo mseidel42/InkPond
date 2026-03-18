@@ -544,7 +544,8 @@ final class CompletionEngine {
 
     /// Returns completion context for the given cursor position, or nil if none.
     func completions(for text: String, cursorOffset: Int) -> CompletionContext? {
-        guard cursorOffset > 0, cursorOffset <= text.count else { return nil }
+        let utf16 = text.utf16
+        guard cursorOffset > 0, cursorOffset <= utf16.count else { return nil }
 
         // Try image/file path completion (inside `image("...")` etc.)
         if let pathResult = pathCompletions(for: text, cursorOffset: cursorOffset) {
@@ -572,7 +573,6 @@ final class CompletionEngine {
         }
 
         // Fall back to `#` prefix completion
-        let utf16 = text.utf16
         let cursorIndex = utf16.index(utf16.startIndex, offsetBy: cursorOffset)
 
         var start = cursorIndex

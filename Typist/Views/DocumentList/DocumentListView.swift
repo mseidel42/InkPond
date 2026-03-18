@@ -46,6 +46,7 @@ struct DocumentListView: View {
         }
     }
 
+    @Environment(StorageManager.self) var storageManager
     @Environment(\.modelContext) var modelContext
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @Environment(\.scenePhase) var scenePhase

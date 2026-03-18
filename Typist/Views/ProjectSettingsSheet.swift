@@ -93,10 +93,16 @@ struct ProjectSettingsSheet: View {
                         onDeleteGroup: { group in
                             InteractionFeedback.notify(.warning)
                             let nameSet = Set(group.fileNames)
-                            document.fontFileNames.removeAll { nameSet.contains($0) }
+                            var removedNames = Set<String>()
                             for name in nameSet {
-                                FontManager.deleteFont(fileName: name, from: document)
+                                do {
+                                    try FontManager.deleteFont(fileName: name, from: document)
+                                    removedNames.insert(name)
+                                } catch {
+                                    actionError = actionError ?? error.localizedDescription
+                                }
                             }
+                            document.fontFileNames.removeAll { removedNames.contains($0) }
                         }
                     )
 

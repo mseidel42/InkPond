@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import os.log
+import os
 
 enum StorageMode: String {
     case local
@@ -26,8 +26,9 @@ final class StorageManager {
     private(set) var ubiquityURL: URL?
 
     /// Cached flag for cross-actor reads. Updated whenever mode or iCloudAvailable changes.
+    /// Protected by a lock for thread-safe access from any actor context.
     @ObservationIgnored
-    nonisolated(unsafe) private(set) var _isUsingiCloud: Bool = false
+    private let _isUsingiCloudLock = OSAllocatedUnfairLock<Bool>(initialState: false)
 
     init() {
         let raw = UserDefaults.standard.string(forKey: Self.storageKey) ?? StorageMode.local.rawValue
@@ -38,7 +39,8 @@ final class StorageManager {
         let url = FileManager.default.url(forUbiquityContainerIdentifier: "iCloud.P0int.Typist")
         self.ubiquityURL = url
         self.iCloudAvailable = url != nil
-        self._isUsingiCloud = self.mode == .iCloud && self.iCloudAvailable
+        let initialUsingiCloud = self.mode == .iCloud && self.iCloudAvailable
+        self._isUsingiCloudLock.withLock { $0 = initialUsingiCloud }
     }
 
     /// The active documents base URL, depending on current storage mode.
@@ -47,6 +49,17 @@ final class StorageManager {
             return ubiquityDocuments
         }
         return localDocumentsURL
+    }
+
+    /// The documents directory that can be safely enumerated for sync/monitoring.
+    /// Returns `nil` while iCloud mode is selected but the ubiquity container is unavailable.
+    var syncDocumentsURL: URL? {
+        switch mode {
+        case .local:
+            return localDocumentsURL
+        case .iCloud:
+            return ubiquityDocumentsURL
+        }
     }
 
     var localDocumentsURL: URL {
@@ -86,13 +99,7 @@ final class StorageManager {
             // Switching to local: iCloud container must still be reachable to copy files out.
             guard let iCloudDocs = ubiquityDocumentsURL,
                   iCloudDocs.standardizedFileURL != localDocumentsURL.standardizedFileURL else {
-                // iCloud container is gone (user signed out). We can only switch the mode
-                // without migration — user data remains in iCloud and will sync back if
-                // they sign in again.
-                mode = newMode
-                syncCachedFlag()
-                UserDefaults.standard.set(newMode.rawValue, forKey: Self.storageKey)
-                os_log(.info, "StorageManager: switched to local (iCloud container unavailable, no migration)")
+                migrationError = L10n.tr("icloud.error.unavailable")
                 return
             }
         }
@@ -148,12 +155,13 @@ final class StorageManager {
     /// Returns true if iCloud mode is active and available.
     /// Nonisolated so it can be read from any actor context (e.g. BackgroundDocumentFileWriter).
     nonisolated var isUsingiCloud: Bool {
-        _isUsingiCloud
+        _isUsingiCloudLock.withLock { $0 }
     }
 
     /// Call after changing mode or iCloudAvailable to update the cross-actor cache.
     private func syncCachedFlag() {
-        _isUsingiCloud = mode == .iCloud && iCloudAvailable
+        let value = mode == .iCloud && iCloudAvailable
+        _isUsingiCloudLock.withLock { $0 = value }
     }
 
     // MARK: - Migration

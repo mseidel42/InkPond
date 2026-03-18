@@ -7,21 +7,29 @@
 
 import SwiftUI
 import SwiftData
+import os
 
 @main
 struct TypistApp: App {
-    @State private var storageManager = StorageManager()
+    @State private var storageManager: StorageManager
+    @State private var modelContainer: ModelContainer?
+    @State private var containerIdentity = UUID()
+    @State private var snippetStore = SnippetStore()
 
-    private let sharedModelContainer: ModelContainer? = {
+    init() {
+        let manager = StorageManager()
+        ProjectFileManager.storageManager = manager
+        _storageManager = State(initialValue: manager)
+        _modelContainer = State(initialValue: Self.makeModelContainer(using: manager.mode))
+    }
+
+    private static func makeModelContainer(using mode: StorageMode) -> ModelContainer? {
         let processInfo = ProcessInfo.processInfo
         let useInMemoryStore = processInfo.arguments.contains("UITEST_IN_MEMORY_STORE")
             || processInfo.environment["UITEST_IN_MEMORY_STORE"] == "1"
         let schema = Schema([
             TypistDocument.self,
         ])
-
-        let storedMode = UserDefaults.standard.string(forKey: "storageMode") ?? StorageMode.local.rawValue
-        let iCloudEnabled = storedMode == StorageMode.iCloud.rawValue
 
         let modelConfiguration: ModelConfiguration
         if useInMemoryStore {
@@ -30,29 +38,41 @@ struct TypistApp: App {
             modelConfiguration = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
-                cloudKitDatabase: iCloudEnabled ? .automatic : .none
+                cloudKitDatabase: mode == .iCloud ? .automatic : .none
             )
         }
 
-        return try? ModelContainer(for: schema, configurations: [modelConfiguration])
-    }()
-
-    @State private var snippetStore = SnippetStore()
+        do {
+            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+        } catch {
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "Typist", category: "DataStore")
+                .error("Failed to create ModelContainer: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
 
     var body: some Scene {
+        let currentStorageMode = storageManager.mode
         WindowGroup {
-            if let container = sharedModelContainer {
-                ContentView()
-                    .modelContainer(container)
-                    .environment(snippetStore)
-                    .environment(storageManager)
-                    .task {
-                        ProjectFileManager.storageManager = storageManager
-                        ExportManager.cleanupTemporaryExports()
-                        FontManager.pruneRegistrationCache()
-                    }
-            } else {
-                DataStoreErrorView()
+            Group {
+                if let container = modelContainer {
+                    ContentView()
+                        .id(containerIdentity)
+                        .modelContainer(container)
+                        .environment(snippetStore)
+                        .environment(storageManager)
+                } else {
+                    DataStoreErrorView()
+                }
+            }
+            .task {
+                ExportManager.cleanupTemporaryExports()
+                FontManager.pruneRegistrationCache()
+            }
+            .onChange(of: currentStorageMode) { _, newMode in
+                ProjectFileManager.storageManager = storageManager
+                modelContainer = Self.makeModelContainer(using: newMode)
+                containerIdentity = UUID()
             }
         }
     }

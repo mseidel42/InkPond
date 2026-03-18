@@ -85,9 +85,29 @@ nonisolated enum CloudFileCoordinator {
             do {
                 let fm = FileManager.default
                 if fm.fileExists(atPath: coordinatedDestination.path) {
-                    try fm.removeItem(at: coordinatedDestination)
+                    // Back up existing destination so we can restore it if the copy fails.
+                    let backupURL = coordinatedDestination.deletingLastPathComponent()
+                        .appendingPathComponent(".backup-\(UUID().uuidString)-\(coordinatedDestination.lastPathComponent)")
+                    do {
+                        try fm.moveItem(at: coordinatedDestination, to: backupURL)
+                    } catch {
+                        // If backup fails, fall back to the old remove-then-copy behaviour.
+                        try fm.removeItem(at: coordinatedDestination)
+                        try fm.copyItem(at: coordinatedSource, to: coordinatedDestination)
+                        return
+                    }
+                    do {
+                        try fm.copyItem(at: coordinatedSource, to: coordinatedDestination)
+                        // Copy succeeded — remove backup.
+                        try? fm.removeItem(at: backupURL)
+                    } catch {
+                        // Copy failed — restore from backup.
+                        try? fm.moveItem(at: backupURL, to: coordinatedDestination)
+                        throw error
+                    }
+                } else {
+                    try fm.copyItem(at: coordinatedSource, to: coordinatedDestination)
                 }
-                try fm.copyItem(at: coordinatedSource, to: coordinatedDestination)
             } catch {
                 copyError = error
             }

@@ -107,7 +107,9 @@ extension CompletionPopupView: UITableViewDataSource, UITableViewDelegate {
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: Self.cellID, for: indexPath) as! CompletionCell
+        guard let cell = tableView.dequeueReusableCell(withIdentifier: Self.cellID, for: indexPath) as? CompletionCell else {
+            return tableView.dequeueReusableCell(withIdentifier: Self.cellID, for: indexPath)
+        }
         let item = items[indexPath.row]
         cell.configure(with: item)
         return cell

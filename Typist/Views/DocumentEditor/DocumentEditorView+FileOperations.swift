@@ -40,10 +40,11 @@ extension DocumentEditorView {
         }
 
         ProjectFileManager.migrateContentIfNeeded(for: document)
-        loadFile(named: document.entryFileName)
+        _ = loadFile(named: document.entryFileName)
     }
 
-    func loadFile(named name: String) {
+    @discardableResult
+    func loadFile(named name: String) -> Bool {
         saveTask?.cancel()
         saveTask = nil
 
@@ -53,7 +54,14 @@ extension DocumentEditorView {
             try? FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
         }
 
-        let text = (try? ProjectFileManager.readTypFile(named: name, for: document)) ?? ""
+        let text: String
+        do {
+            text = try ProjectFileManager.readTypFile(named: name, for: document)
+        } catch {
+            fileSaveError = error.localizedDescription
+            return false
+        }
+
         insertionRequest = nil
         pendingCursorJump = nil
         editorViewState = EditorViewState()
@@ -67,6 +75,7 @@ extension DocumentEditorView {
         }
         compilationErrorLines = recomputeCompilationErrorLines()
         pumpPendingInsertionsIfNeeded()
+        return true
     }
 
     func handleEditorTextChange(_ content: String) {
@@ -120,15 +129,17 @@ extension DocumentEditorView {
         }
     }
 
-    func flushPendingSave() {
+    @discardableResult
+    func flushPendingSave() -> Bool {
         saveTask?.cancel()
         saveTask = nil
-        persistCurrentFileImmediately(content: editorText)
+        return persistCurrentFileImmediately(content: editorText)
     }
 
-    func persistCurrentFileImmediately(content: String) {
-        guard !currentFileName.isEmpty else { return }
-        guard content != lastPersistedText else { return }
+    @discardableResult
+    func persistCurrentFileImmediately(content: String) -> Bool {
+        guard !currentFileName.isEmpty else { return true }
+        guard content != lastPersistedText else { return true }
 
         let shouldRefreshPreviewAfterSave = currentFileName != document.entryFileName
         let fileURL = ProjectFileManager.typFileURL(named: currentFileName, for: document)
@@ -144,8 +155,10 @@ extension DocumentEditorView {
             if shouldRefreshPreviewAfterSave {
                 compileToken = UUID()
             }
+            return true
         } catch {
             fileSaveError = error.localizedDescription
+            return false
         }
     }
 
@@ -205,7 +218,7 @@ extension DocumentEditorView {
     func restoreSavedPosition() {
         let savedFileName = document.lastEditedFileName
         if !savedFileName.isEmpty, savedFileName != currentFileName {
-            openFile(named: savedFileName)
+            guard openFileIfPossible(named: savedFileName) else { return }
         }
         pendingCursorJump = document.lastCursorLocation
         pendingPreviewSync = true
@@ -235,14 +248,55 @@ extension DocumentEditorView {
         syncCoordinator.endSync()
     }
 
-    func openFile(named name: String) {
-        flushPendingSave()
-        loadFile(named: name)
+    func handleOutlineJump(characterOffset offset: Int) {
+        // Always jump the editor cursor to the heading.
+        pendingCursorJump = offset
+
+        // Sync preview only when editing the entry file — the source map
+        // only covers entry-file lines, so non-entry offsets would map to
+        // wrong PDF positions.
+        guard isEditingEntryFile else { return }
+
+        if sizeClass == .regular {
+            // iPad: both panes visible, sync preview alongside editor.
+            syncPreviewToOffset(offset)
+        } else if selectedTab == 1 {
+            // iPhone preview tab: scroll the preview.
+            syncPreviewToOffset(offset)
+        }
+    }
+
+    private func syncPreviewToOffset(_ offset: Int) {
+        guard let sourceMap = compiler.sourceMap, !sourceMap.isEmpty else { return }
+
+        let text = editorText as NSString
+        let safeOffset = min(max(0, offset), text.length)
+        let prefix = text.substring(to: safeOffset)
+        let line = prefix.components(separatedBy: "\n").count
+
+        if let target = sourceMap.pdfPosition(forLine: line) {
+            syncCoordinator.previewScrollTarget = PreviewScrollTarget(
+                page: target.page,
+                yPoints: target.yPoints,
+                xPoints: target.xPoints
+            )
+        }
+    }
+
+    @discardableResult
+    func openFileIfPossible(named name: String) -> Bool {
+        guard flushPendingSave() else { return false }
+        guard loadFile(named: name) else { return false }
         InteractionFeedback.selection()
+        return true
+    }
+
+    func openFile(named name: String) {
+        _ = openFileIfPossible(named: name)
     }
 
     func compilePreviewNow() {
-        flushPendingSave()
+        guard flushPendingSave() else { return }
         pendingManualCompileFeedback = true
         compiler.compileNow(
             source: entrySource,
@@ -254,7 +308,7 @@ extension DocumentEditorView {
     }
 
     func clearCachesAndRecompile() {
-        flushPendingSave()
+        guard flushPendingSave() else { return }
         pendingManualCompileFeedback = true
         InteractionFeedback.notify(.warning)
         AccessibilitySupport.announce(L10n.a11yCacheRefreshStarted)
@@ -339,7 +393,7 @@ extension DocumentEditorView {
 
     func triggerZipExport() {
         if appFontLibrary.isEmpty {
-            flushPendingSave()
+            guard flushPendingSave() else { return }
             exporter.exportZip(for: document)
         } else {
             showingZipExportWarning = true
@@ -394,7 +448,7 @@ extension DocumentEditorView {
 
         // Open the file if it's not already open
         if resolvedFile != currentFileName {
-            openFile(named: resolvedFile)
+            guard openFileIfPossible(named: resolvedFile) else { return }
         }
 
         // Compute UTF-16 offset from line:column

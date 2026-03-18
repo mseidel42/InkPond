@@ -11,12 +11,13 @@ extension ProjectFileManager {
         "AppFonts"
     ]
 
-    static func untrackedFolderNames(knownProjectIDs: Set<String>) -> [String] {
+    static func untrackedFolderNames(knownProjectIDs: Set<String>) -> [String]? {
+        guard let rootURL = syncDocumentsURL else { return nil }
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: documentsURL,
+            at: rootURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: .skipsHiddenFiles
-        ) else { return [] }
+        ) else { return nil }
 
         return contents.compactMap { url -> String? in
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
@@ -26,12 +27,13 @@ extension ProjectFileManager {
         }.sorted()
     }
 
-    static func trackedFolderNames() -> Set<String> {
+    static func trackedFolderNames() -> Set<String>? {
+        guard let rootURL = syncDocumentsURL else { return nil }
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: documentsURL,
+            at: rootURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: .skipsHiddenFiles
-        ) else { return [] }
+        ) else { return nil }
 
         return Set(contents.compactMap { url -> String? in
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
@@ -42,14 +44,15 @@ extension ProjectFileManager {
 
     static func migrateLegacyStructure(documents: [TypistDocument]) {
         let fm = FileManager.default
-        let legacyRoot = documentsURL.appendingPathComponent("Projects", isDirectory: true)
+        guard let rootURL = syncDocumentsURL else { return }
+        let legacyRoot = rootURL.appendingPathComponent("Projects", isDirectory: true)
         guard fm.fileExists(atPath: legacyRoot.path) else { return }
 
         for doc in documents {
             guard UUID(uuidString: doc.projectID) != nil else { continue }
             let oldDir = legacyRoot.appendingPathComponent(doc.projectID, isDirectory: true)
             let newFolderName = uniqueFolderName(for: doc.title)
-            let newDir = documentsURL.appendingPathComponent(newFolderName, isDirectory: true)
+            let newDir = rootURL.appendingPathComponent(newFolderName, isDirectory: true)
             if fm.fileExists(atPath: oldDir.path) {
                 do {
                     try fm.moveItem(at: oldDir, to: newDir)

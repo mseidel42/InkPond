@@ -17,8 +17,8 @@
 "sort.menu.sort_by" = "排序方式";
 "sort.menu.order" = "排序順序";
 "sort.menu.button" = "排序";
-"doc.time.created" = "建立";
-"doc.time.modified" = "修改";
+"doc.time.created" = "建立於";
+"doc.time.modified" = "修改於";
 "doc.list.empty.title" = "尚無文件";
 "doc.list.empty.message" = "建立新文件，開始寫作。";
 "doc.list.empty.action" = "新增文件";
@@ -44,7 +44,7 @@
 "app_fonts.export_warning.title" = "不包含 App 字型";
 "app_fonts.export_warning.message" = "專案 ZIP 只會匯出專案目錄。已匯入的 App 字型不會被打包，目標裝置需另行提供這些字型。";
 "settings.version_format" = "版本 %@（%@）";
-"settings.typst_version_format" = "Typst-ios %@";
+"settings.typst_version_format" = "Typst iOS %@";
 
 "error.file.cannot_delete_entry" = "入口檔案不可刪除。";
 "error.file.already_exists" = "名為「%@」的檔案已存在。";
@@ -59,6 +59,7 @@
 
 "error.typst.compiler_not_linked" = "Typst 編譯器程式庫尚未連結，請執行 rust-ffi/build-ios.sh。";
 "error.typst.unknown_compilation" = "未知的編譯錯誤";
+"error.typst.compilation_timeout" = "編譯逾時。";
 "error.image.load_data_failed" = "載入圖片資料失敗。";
 "error.image.process_failed" = "無法處理圖片。";
 "error.datastore.title" = "無法開啟資料儲存";
@@ -99,6 +100,7 @@
 "Project Root" = "專案根目錄";
 "Selecting a font directory imports its font files into the project font library. You can also skip this step." = "選擇字型目錄後，會將其中的字型檔匯入專案字型庫。你也可以略過這一步。";
 "Image Import Error" = "圖片匯入錯誤";
+"File Error" = "檔案錯誤";
 "No .typ files" = "沒有 .typ 檔案";
 "Source Files" = "原始檔";
 "No images" = "沒有圖片";
