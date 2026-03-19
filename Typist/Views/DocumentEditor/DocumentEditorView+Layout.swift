@@ -351,7 +351,7 @@ extension DocumentEditorView {
                 positionSyncTask = nil
                 _ = flushPendingSave()
                 persistEditorPositionIfNeeded()
-                focusCoordinator.setResignSuppressed(false)
+                focusCoordinator.clearFocusPreservation()
                 compiler.cancel()
             }
             .onChange(of: editorText) { _, newText in

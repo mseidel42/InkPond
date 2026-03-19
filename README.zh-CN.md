@@ -105,6 +105,7 @@ xcodebuild test -project Typist.xcodeproj -scheme Typist -destination 'platform=
 ## Rust FFI 说明
 
 - `Frameworks/typst_ios.xcframework` 由 `rust-ffi/build-ios.sh` 生成。
+- `rust-ffi/build-ios.sh` 在打包 xcframework 后会删除 `rust-ffi/target/`，以尽量减少本地磁盘占用。
 - `Frameworks/typst_ios.xcframework/` 是本地构建产物，已在 git 中忽略。
 - 以下情况请重新执行 `rust-ffi/build-ios.sh`：
   - 升级 Typst / Rust 依赖

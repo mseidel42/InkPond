@@ -427,6 +427,54 @@ struct TypistTests {
     }
 
     @MainActor
+    @Test func editorFocusCoordinatorRestoresFocusAfterSuppressedLoss() async {
+        let coordinator = EditorFocusCoordinator()
+        let (window, textView) = makeHostedTextView()
+        defer { window.isHidden = true }
+        coordinator.register(textView)
+        _ = textView.becomeFirstResponder()
+        await waitUntil { textView.isFirstResponder }
+
+        coordinator.setResignSuppressed(true)
+        #expect(textView.suppressResignFirstResponder)
+
+        textView.suppressResignFirstResponder = false
+        _ = textView.resignFirstResponder()
+        #expect(!textView.isFirstResponder)
+        coordinator.setResignSuppressed(false)
+        await waitUntil { textView.isFirstResponder }
+
+        #expect(textView.isFirstResponder)
+        #expect(!textView.suppressResignFirstResponder)
+    }
+
+    @MainActor
+    @Test func editorFocusCoordinatorWaitsForAllSuppressionScopesBeforeRestoringFocus() async {
+        let coordinator = EditorFocusCoordinator()
+        let (window, textView) = makeHostedTextView()
+        defer { window.isHidden = true }
+        coordinator.register(textView)
+        _ = textView.becomeFirstResponder()
+        await waitUntil { textView.isFirstResponder }
+
+        coordinator.setResignSuppressed(true)
+        coordinator.setResignSuppressed(true)
+        textView.suppressResignFirstResponder = false
+        _ = textView.resignFirstResponder()
+        #expect(!textView.isFirstResponder)
+
+        coordinator.setResignSuppressed(false)
+        await Task.yield()
+        #expect(!textView.isFirstResponder)
+        #expect(textView.suppressResignFirstResponder)
+
+        coordinator.setResignSuppressed(false)
+        await waitUntil { textView.isFirstResponder }
+        #expect(textView.isFirstResponder)
+        #expect(!textView.suppressResignFirstResponder)
+    }
+
+    @MainActor
     @Test func typstCompilerDropsIntermediateDebouncedRequests() async {
         let probe = CompileProbe()
         probe.block("first")
@@ -1260,6 +1308,19 @@ struct TypistTests {
         while !condition() && ContinuousClock.now < deadline {
             try? await Task.sleep(for: pollInterval)
         }
+    }
+
+    @MainActor
+    private func makeHostedTextView() -> (window: UIWindow, textView: TypstTextView) {
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let viewController = UIViewController()
+        window.rootViewController = viewController
+        window.makeKeyAndVisible()
+
+        let textView = TypstTextView()
+        textView.frame = viewController.view.bounds
+        viewController.view.addSubview(textView)
+        return (window, textView)
     }
 
 }

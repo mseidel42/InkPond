@@ -65,6 +65,9 @@ xcodebuild -create-xcframework \
   -library "$SIM_UNIVERSAL_LIB" \
   -output "$XCFW_DIR"
 
+echo "▸ Cleaning Rust intermediate build artifacts..."
+rm -rf "$SCRIPT_DIR/target"
+
 echo ""
 echo "✅ Done! XCFramework at: $XCFW_DIR"
 echo ""

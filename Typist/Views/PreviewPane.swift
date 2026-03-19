@@ -135,7 +135,12 @@ final class PDFContainerView: UIView {
             pdfView.autoScales = true
             DispatchQueue.main.async { [weak self, weak focusCoordinator] in
                 guard let self, self.pdfView.document === document else { return }
-                focusCoordinator?.setResignSuppressed(false)
+                self.layoutIfNeeded()
+                self.pdfView.layoutIfNeeded()
+                DispatchQueue.main.async { [weak self, weak focusCoordinator] in
+                    guard let self, self.pdfView.document === document else { return }
+                    focusCoordinator?.setResignSuppressed(false)
+                }
             }
             return
         }
@@ -284,6 +289,9 @@ struct PDFKitView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> PDFContainerView {
+        focusCoordinator?.setResignSuppressed(true)
+        context.coordinator.isHoldingInitialMountSuppression = true
+
         let container = PDFContainerView()
         let pdfView = container.pdfView
         pdfView.autoScales = true
@@ -312,6 +320,15 @@ struct PDFKitView: UIViewRepresentable {
         container.accessibilityHint = L10n.a11yPreviewHint
         container.accessibilityValue = L10n.a11yPreviewValueReady
 
+        if context.coordinator.isHoldingInitialMountSuppression {
+            context.coordinator.isHoldingInitialMountSuppression = false
+            DispatchQueue.main.async { [weak focusCoordinator] in
+                DispatchQueue.main.async {
+                    focusCoordinator?.setResignSuppressed(false)
+                }
+            }
+        }
+
         let documentChanged = context.coordinator.lastDocument !== document
         if documentChanged {
             context.coordinator.lastDocument = document
@@ -339,6 +356,7 @@ struct PDFKitView: UIViewRepresentable {
         weak var lastDocument: PDFDocument?
         var lastAppliedScrollTarget: PreviewScrollTarget?
         var onTapLocation: ((_ page: Int, _ yPoints: Float) -> Void)?
+        var isHoldingInitialMountSuppression = false
 
         init(onTapLocation: ((_ page: Int, _ yPoints: Float) -> Void)?) {
             self.onTapLocation = onTapLocation
@@ -538,7 +556,7 @@ struct PreviewPane: View {
             }
         }
         .onDisappear {
-            focusCoordinator?.setResignSuppressed(false)
+            focusCoordinator?.clearFocusPreservation()
             compiler.cancel()
         }
         .animation(.easeInOut(duration: 0.2), value: compiler.errorMessage)
