@@ -53,6 +53,7 @@ struct EditorView: UIViewRepresentable {
         textView.accessibilityLabel = L10n.a11yEditorLabel
         textView.accessibilityHint = L10n.a11yEditorHint
         textView.accessibilityIdentifier = "editor.text-view"
+        context.coordinator.previousTextLength = text.utf16.count
         context.coordinator.restoreViewStateIfNeeded(in: textView)
         return textView
     }
@@ -136,6 +137,8 @@ struct EditorView: UIViewRepresentable {
         /// Set during `textViewDidChange` so the subsequent `textViewDidChangeSelection` knows
         /// the cursor moved because of typing, not a deliberate navigation.
         private var isProcessingTextChange = false
+        /// Track previous text length to detect deletion.
+        var previousTextLength: Int = 0
 
         init(_ parent: EditorView) {
             self.parent = parent
@@ -174,10 +177,20 @@ struct EditorView: UIViewRepresentable {
             guard let typstTextView = textView as? TypstTextView else { return }
             isProcessingTextChange = true
             defer { isProcessingTextChange = false }
+            let newLength = textView.text.utf16.count
+            let wasDeleting = newLength < previousTextLength
+            previousTextLength = newLength
             parent.text = textView.text
             captureViewState(from: typstTextView)
             typstTextView.scheduleHighlighting(.debounced, textChanged: true)
             typstTextView.updateCompletion()
+            // After deletion, center the cursor so the user can see content above.
+            // Deferred to next run loop so UITextView finishes its own layout first.
+            if wasDeleting {
+                DispatchQueue.main.async {
+                    typstTextView.scrollSelectionToCenterIfNeeded(animated: true)
+                }
+            }
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
@@ -186,6 +199,12 @@ struct EditorView: UIViewRepresentable {
             // After a tap-to-dismiss, skip re-triggering completion for this selection change
             if typstTextView.consumeSelectionSuppression() { return }
             typstTextView.updateCompletion()
+            // On deliberate cursor movement (tap, arrow keys), center the cursor.
+            if !isProcessingTextChange {
+                DispatchQueue.main.async {
+                    typstTextView.scrollSelectionToCenterIfNeeded(animated: true)
+                }
+            }
             // Only sync cursor to preview on deliberate navigation (tap, arrow keys),
             // not on every keystroke — typing causes noisy preview jumps.
             if !isProcessingTextChange,

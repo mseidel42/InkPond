@@ -51,6 +51,151 @@ struct TypistTests {
         #expect(FileManager.default.fileExists(atPath: image.path))
     }
 
+    @Test func localPackageStoreImportsZipArchiveWithConfiguredNamespaceFallback() throws {
+        let root = makeTempDirectory()
+        let archiveRoot = makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: archiveRoot)
+        }
+
+        let archiveURL = archiveRoot.appendingPathComponent("kit.zip")
+        let zip = makeStoredZip(entries: [
+            ("kit/typst.toml", Data("[package]\nname = \"kit\"\nversion = \"0.1.0\"\n".utf8)),
+            ("kit/lib.typ", Data("#let answer = 42".utf8))
+        ])
+        try zip.write(to: archiveURL)
+
+        let result = try LocalPackageStore(rootURL: root).importItem(at: archiveURL, defaultNamespace: "community")
+
+        #expect(result.spec == "@community/kit:0.1.0")
+        #expect(result.importedFromArchive)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root
+                    .appendingPathComponent("community/kit/0.1.0/lib.typ")
+                    .path
+            )
+        )
+    }
+
+    @Test func localPackageStoreImportsTarGzArchiveAndKeepsManifestNamespace() throws {
+        let root = makeTempDirectory()
+        let archiveRoot = makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: archiveRoot)
+        }
+
+        let archiveURL = archiveRoot.appendingPathComponent("poster.tar.gz")
+        let tarGz = try makeTarGz(entries: [
+            ("poster/typst.toml", Data("[package]\nname = \"poster\"\nversion = \"1.2.3\"\nnamespace = \"team\"\n".utf8)),
+            ("poster/src/lib.typ", Data("#let banner = true".utf8))
+        ])
+        try tarGz.write(to: archiveURL)
+
+        let result = try LocalPackageStore(rootURL: root).importItem(at: archiveURL, defaultNamespace: "community")
+
+        #expect(result.spec == "@team/poster:1.2.3")
+        #expect(result.importedFromArchive)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root
+                    .appendingPathComponent("team/poster/1.2.3/src/lib.typ")
+                    .path
+            )
+        )
+    }
+
+    @Test func localPackageStoreChangesNamespaceAfterImport() throws {
+        let root = makeTempDirectory()
+        let packageRoot = makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: packageRoot)
+        }
+
+        let source = packageRoot.appendingPathComponent("kit", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try Data("[package]\nname = \"kit\"\nversion = \"0.1.0\"\n".utf8)
+            .write(to: source.appendingPathComponent("typst.toml"))
+        try Data("#let answer = 42".utf8)
+            .write(to: source.appendingPathComponent("lib.typ"))
+
+        let store = LocalPackageStore(rootURL: root)
+        _ = try store.importItem(at: source, defaultNamespace: "local")
+
+        let importedEntry = try #require(store.snapshot().entries.first)
+        let updatedEntry = try store.changeNamespace(of: importedEntry, to: "community")
+
+        #expect(updatedEntry.spec == "@community/kit:0.1.0")
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("local/kit/0.1.0").path))
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("community/kit/0.1.0/lib.typ").path))
+
+        let manifest = try String(
+            contentsOf: root.appendingPathComponent("community/kit/0.1.0/typst.toml"),
+            encoding: .utf8
+        )
+        #expect(manifest.contains("namespace = \"community\""))
+    }
+
+    @Test func localPackageStoreImportsAllPackagesInsideChosenFolder() throws {
+        let root = makeTempDirectory()
+        let importRoot = makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: importRoot)
+        }
+
+        let folderPackage = importRoot.appendingPathComponent("kit", isDirectory: true)
+        try FileManager.default.createDirectory(at: folderPackage, withIntermediateDirectories: true)
+        try Data("[package]\nname = \"kit\"\nversion = \"0.1.0\"\n".utf8)
+            .write(to: folderPackage.appendingPathComponent("typst.toml"))
+        try Data("#let answer = 42".utf8)
+            .write(to: folderPackage.appendingPathComponent("lib.typ"))
+
+        let archiveURL = importRoot.appendingPathComponent("poster.zip")
+        let zip = makeStoredZip(entries: [
+            ("poster/typst.toml", Data("[package]\nname = \"poster\"\nversion = \"1.2.3\"\n".utf8)),
+            ("poster/src/lib.typ", Data("#let banner = true".utf8))
+        ])
+        try zip.write(to: archiveURL)
+
+        let results = try LocalPackageStore(rootURL: root).importContents(of: importRoot, defaultNamespace: "community")
+
+        #expect(results.map(\.spec).sorted() == ["@community/kit:0.1.0", "@community/poster:1.2.3"])
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("community/kit/0.1.0/lib.typ").path))
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("community/poster/1.2.3/src/lib.typ").path))
+    }
+
+    @Test func localPackageStoreSnapshotIngestsLooseDroppedPackageFromRoot() throws {
+        let root = makeTempDirectory()
+        let originalNamespace = UserDefaults.standard.object(forKey: LocalPackageStore.defaultNamespaceDefaultsKey)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            if let originalNamespace {
+                UserDefaults.standard.set(originalNamespace, forKey: LocalPackageStore.defaultNamespaceDefaultsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: LocalPackageStore.defaultNamespaceDefaultsKey)
+            }
+        }
+
+        UserDefaults.standard.set("community", forKey: LocalPackageStore.defaultNamespaceDefaultsKey)
+
+        let droppedPackage = root.appendingPathComponent("kit", isDirectory: true)
+        try FileManager.default.createDirectory(at: droppedPackage, withIntermediateDirectories: true)
+        try Data("[package]\nname = \"kit\"\nversion = \"0.1.0\"\n".utf8)
+            .write(to: droppedPackage.appendingPathComponent("typst.toml"))
+        try Data("#let answer = 42".utf8)
+            .write(to: droppedPackage.appendingPathComponent("lib.typ"))
+
+        let entries = try LocalPackageStore(rootURL: root).snapshot().entries
+
+        #expect(entries.map(\.spec) == ["@community/kit:0.1.0"])
+        #expect(!FileManager.default.fileExists(atPath: droppedPackage.path))
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("community/kit/0.1.0/lib.typ").path))
+    }
+
     @Test func projectFileManagerRejectsUnsafeRelativePaths() throws {
         let doc = makeDocument(projectID: "tests-\(UUID().uuidString)")
         ProjectFileManager.ensureProjectStructure(for: doc)
@@ -1296,6 +1441,135 @@ struct TypistTests {
         eocd.appendU16LE(0)
 
         return localSection + centralSection + eocd
+    }
+
+    private func makeTarGz(entries: [(name: String, data: Data)]) throws -> Data {
+        try gzip(makeTar(entries: entries))
+    }
+
+    private func makeTar(entries: [(name: String, data: Data)]) -> Data {
+        var archive = Data()
+
+        for entry in entries {
+            let dataBytes = [UInt8](entry.data)
+            var header = [UInt8](repeating: 0, count: 512)
+
+            writeTarString(entry.name, to: &header, offset: 0, length: 100)
+            writeTarOctal(0o644, to: &header, offset: 100, length: 8)
+            writeTarOctal(0, to: &header, offset: 108, length: 8)
+            writeTarOctal(0, to: &header, offset: 116, length: 8)
+            writeTarOctal(dataBytes.count, to: &header, offset: 124, length: 12)
+            writeTarOctal(0, to: &header, offset: 136, length: 12)
+            header.replaceSubrange(148..<156, with: repeatElement(UInt8(32), count: 8))
+            header[156] = 48
+            writeTarString("ustar", to: &header, offset: 257, length: 6)
+            writeTarString("00", to: &header, offset: 263, length: 2)
+
+            let checksum = header.reduce(0) { $0 + Int($1) }
+            writeTarChecksum(checksum, to: &header, offset: 148, length: 8)
+
+            archive.append(contentsOf: header)
+            archive.append(contentsOf: dataBytes)
+
+            let remainder = dataBytes.count % 512
+            if remainder != 0 {
+                archive.append(Data(repeating: 0, count: 512 - remainder))
+            }
+        }
+
+        archive.append(Data(repeating: 0, count: 1024))
+        return archive
+    }
+
+    private func gzip(_ data: Data) throws -> Data {
+        guard !data.isEmpty else { return Data() }
+
+        var stream = z_stream()
+        let initResult = deflateInit2_(
+            &stream,
+            Z_DEFAULT_COMPRESSION,
+            Z_DEFLATED,
+            MAX_WBITS + 16,
+            MAX_MEM_LEVEL,
+            Z_DEFAULT_STRATEGY,
+            ZLIB_VERSION,
+            Int32(MemoryLayout<z_stream>.size)
+        )
+        guard initResult == Z_OK else {
+            throw CocoaError(.coderInvalidValue)
+        }
+        defer { deflateEnd(&stream) }
+
+        var input = [UInt8](data)
+        var output = Data()
+        let chunkSize = 16_384
+        let inputCount = input.count
+
+        let deflateResult: Int32 = input.withUnsafeMutableBytes { inputBuffer in
+            guard let inputBaseAddress = inputBuffer.baseAddress else {
+                return Z_BUF_ERROR
+            }
+
+            stream.next_in = inputBaseAddress.assumingMemoryBound(to: Bytef.self)
+            stream.avail_in = uInt(inputCount)
+
+            var status: Int32 = Z_OK
+
+            repeat {
+                var chunk = [UInt8](repeating: 0, count: chunkSize)
+                let chunkCount = chunk.count
+                status = chunk.withUnsafeMutableBytes { outputBuffer in
+                    guard let outputBaseAddress = outputBuffer.baseAddress else {
+                        return Z_BUF_ERROR
+                    }
+
+                    stream.next_out = outputBaseAddress.assumingMemoryBound(to: Bytef.self)
+                    stream.avail_out = uInt(chunkCount)
+
+                    let result = deflate(&stream, Z_FINISH)
+                    let produced = chunkCount - Int(stream.avail_out)
+                    if produced > 0 {
+                        let producedBytes = UnsafeBufferPointer(
+                            start: outputBaseAddress.assumingMemoryBound(to: UInt8.self),
+                            count: produced
+                        )
+                        output.append(contentsOf: producedBytes)
+                    }
+                    return result
+                }
+            } while status == Z_OK
+
+            return status
+        }
+
+        guard deflateResult == Z_STREAM_END else {
+            throw CocoaError(.coderInvalidValue)
+        }
+
+        return output
+    }
+
+    private func writeTarString(_ value: String, to header: inout [UInt8], offset: Int, length: Int) {
+        let bytes = Array(value.utf8.prefix(max(0, length - 1)))
+        guard !bytes.isEmpty else { return }
+        header.replaceSubrange(offset..<(offset + bytes.count), with: bytes)
+    }
+
+    private func writeTarOctal(_ value: Int, to header: inout [UInt8], offset: Int, length: Int) {
+        let octal = String(value, radix: 8)
+        let padded = String(repeating: "0", count: max(0, length - octal.count - 1)) + octal
+        writeTarString(padded, to: &header, offset: offset, length: length)
+    }
+
+    private func writeTarChecksum(_ value: Int, to header: inout [UInt8], offset: Int, length: Int) {
+        let octal = String(value, radix: 8)
+        let padded = String(repeating: "0", count: max(0, length - octal.count - 2)) + octal
+        let bytes = Array(padded.utf8.prefix(max(0, length - 2)))
+        if !bytes.isEmpty {
+            header.replaceSubrange(offset..<(offset + bytes.count), with: bytes)
+        }
+        header[offset + max(0, length - 2)] = 0
+        header[offset + max(0, length - 1)] = 32
     }
 
     @MainActor

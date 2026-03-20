@@ -64,6 +64,12 @@
 "error.local_package.storage_unavailable" = "本地套件儲存目錄不可用。";
 "error.local_package.missing_manifest" = "資料夾中缺少 typst.toml 清單檔案。";
 "error.local_package.invalid_manifest" = "typst.toml 無效：%@";
+"error.local_package.invalid_namespace" = "命名空間無效。不能為空，也不能包含路徑分隔符。";
+"error.local_package.no_importable_items" = "所選資料夾中沒有可匯入的套件。";
+"error.local_package.unsupported_archive" = "不支援這種套件匯入方式。請選擇資料夾、.zip、.tar、.tar.gz 或 .tgz 壓縮檔。";
+"error.local_package.invalid_archive" = "無法解壓這個套件壓縮檔。";
+"error.local_package.multiple_package_roots" = "壓縮檔中包含多個套件清單。";
+"error.local_package.package_exists" = "%@ 已存在同名套件。";
 
 "error.image.load_data_failed" = "載入圖片資料失敗。";
 "error.image.process_failed" = "無法處理圖片。";
@@ -159,12 +165,29 @@
 
 "local_packages.title" = "本地套件";
 "local_packages.import" = "匯入套件";
+"local_packages.import_detail" = "同時選取多個資料夾或壓縮檔。";
+"local_packages.import_folder" = "匯入整個資料夾";
+"local_packages.import_folder_detail" = "選一個資料夾，把裡面的所有套件都匯入。";
 "local_packages.section_title" = "已安裝的套件";
 "local_packages.empty" = "沒有已安裝的本地套件";
 "local_packages.info_title" = "關於本地套件";
-"local_packages.info_body" = "匯入包含 typst.toml 清單檔案的套件資料夾。在文件中透過 #import \"@local/name:version\" 使用，支援 @local 及自訂命名空間。";
+"local_packages.info_body" = "匯入包含 typst.toml 清單檔案的套件資料夾，或 .zip、.tar、.tar.gz、.tgz 壓縮檔。在文件中透過 #import \"@namespace/name:version\" 使用。在下方設定命名空間，或在 typst.toml 中加入 namespace 欄位來個別覆寫。";
+"local_packages.namespace" = "預設命名空間";
+"local_packages.namespace_hint" = "當匯入的套件沒有在 typst.toml 中宣告 namespace 時，會使用這裡的值。";
+"local_packages.success_title" = "本地套件";
 "local_packages.imported" = "套件已匯入";
 "local_packages.imported_message" = "已成功匯入 %@，現在可以在文件中使用。";
+"local_packages.imported_archive_note" = "已解壓 %d 個壓縮檔匯入項目。";
+"local_packages.imported_downloaded_note" = "匯入前已從 iCloud 下載 %d 個項目。";
+"local_packages.actions" = "套件操作";
+"local_packages.change_namespace" = "更改命名空間";
+"local_packages.change_namespace_title" = "更改套件命名空間";
+"local_packages.change_namespace_placeholder" = "命名空間";
+"local_packages.change_namespace_body" = "將這個套件移到新的命名空間，之後就可以用新的 @namespace/name 路徑匯入。";
+"local_packages.namespace_updated_message" = "已將 %@ 移動到 %@。";
+"local_packages.status.scanning" = "正在掃描 %@⋯";
+"local_packages.status.importing" = "正在匯入 %@⋯";
+"local_packages.status.changing_namespace" = "正在更改 %@ 的命名空間⋯";
 "local_packages.clear_all_title" = "移除所有本地套件？";
 "local_packages.clear_all_button" = "全部移除";
 "local_packages.clear_all_message" = "這會移除所有已安裝的本地套件。使用這些套件的文件將無法編譯，直到重新匯入。";
@@ -336,9 +359,11 @@
 "onboarding.action.get_started" = "開始使用";
 
 "icloud.title" = "iCloud";
-"icloud.sync_toggle" = "iCloud 同步";
-"icloud.sync_footer.on" = "文件和專案檔案透過 iCloud 在你的裝置間同步。";
-"icloud.sync_footer.off" = "文件和專案檔案僅儲存在本裝置上。";
+"icloud.sync_toggle" = "同步專案";
+"icloud.sync_fonts_toggle" = "同步字型";
+"icloud.sync_packages_toggle" = "同步套件";
+"icloud.sync_footer.on" = "專案會透過 iCloud 同步。字型和套件是否同步由上方開關決定。";
+"icloud.sync_footer.off" = "專案會保留在本機。你可以先設定好字型和套件的同步偏好，再開啟專案同步。";
 "icloud.error.unavailable" = "iCloud 不可用。請在系統設定中登入 iCloud。";
 "icloud.migrating" = "正在遷移檔案⋯";
 "icloud.restart_title" = "需要重新啟動";

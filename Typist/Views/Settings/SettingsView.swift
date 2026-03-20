@@ -156,20 +156,18 @@ extension SettingsView {
                         .tint(.accentColor)
                 }
             } else {
-                Toggle(isOn: Binding(
-                    get: { storageManager.mode == .iCloud },
-                    set: { newValue in
-                        let targetMode: StorageMode = newValue ? .iCloud : .local
-                        let descriptor = FetchDescriptor<TypistDocument>()
-                        let documents = (try? modelContext.fetch(descriptor)) ?? []
-                        Task {
-                            await storageManager.setMode(targetMode, documents: documents)
-                        }
-                    }
-                )) {
-                    Label(L10n.tr("icloud.sync_toggle"), systemImage: "icloud")
+                Toggle(isOn: projectSyncBinding) {
+                    Label(L10n.tr("icloud.sync_toggle"), systemImage: "doc.text")
                 }
                 .disabled(!storageManager.iCloudAvailable && storageManager.mode != .iCloud)
+
+                Toggle(isOn: fontSyncBinding) {
+                    Label(L10n.tr("icloud.sync_fonts_toggle"), systemImage: "character.textbox")
+                }
+
+                Toggle(isOn: packageSyncBinding) {
+                    Label(L10n.tr("icloud.sync_packages_toggle"), systemImage: "shippingbox")
+                }
             }
 
             if let error = storageManager.migrationError {
@@ -193,9 +191,7 @@ extension SettingsView {
         } header: {
             Text(L10n.tr("icloud.title"))
         } footer: {
-            Text(storageManager.mode == .iCloud
-                 ? L10n.tr("icloud.sync_footer.on")
-                 : L10n.tr("icloud.sync_footer.off"))
+            Text(storageManager.mode == .iCloud ? L10n.tr("icloud.sync_footer.on") : L10n.tr("icloud.sync_footer.off"))
         }
     }
 
@@ -252,6 +248,42 @@ extension SettingsView {
             }
         }
         .foregroundStyle(.secondary)
+    }
+
+    private var projectSyncBinding: Binding<Bool> {
+        Binding(
+            get: { storageManager.mode == .iCloud },
+            set: { newValue in
+                let targetMode: StorageMode = newValue ? .iCloud : .local
+                let descriptor = FetchDescriptor<TypistDocument>()
+                let documents = (try? modelContext.fetch(descriptor)) ?? []
+                Task {
+                    await storageManager.setMode(targetMode, documents: documents)
+                }
+            }
+        )
+    }
+
+    private var fontSyncBinding: Binding<Bool> {
+        Binding(
+            get: { storageManager.syncFontsInICloud },
+            set: { newValue in
+                Task {
+                    await storageManager.setSyncFontsInICloud(newValue)
+                }
+            }
+        )
+    }
+
+    private var packageSyncBinding: Binding<Bool> {
+        Binding(
+            get: { storageManager.syncPackagesInICloud },
+            set: { newValue in
+                Task {
+                    await storageManager.setSyncPackagesInICloud(newValue)
+                }
+            }
+        )
     }
 
     var appearanceSection: some View {

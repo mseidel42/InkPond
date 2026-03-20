@@ -7,18 +7,30 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LocalPackageManagementView: View {
+    @Environment(StorageManager.self) private var storageManager
+
     @State private var snapshot = LocalPackageSnapshot(entries: [])
     @State private var isLoading = true
+    @State private var isImporting = false
+    @State private var isChangingNamespace = false
     @State private var errorMessage: String?
-    @State private var showingFolderImporter = false
+    @State private var showingImporter = false
     @State private var showingClearAllConfirmation = false
-    @State private var importedSpec: String?
+    @State private var successMessage: String?
+    @State private var statusMessage: String?
+    @State private var editingNamespaceEntry: LocalPackageEntry?
+    @State private var editingNamespaceValue: String = ""
+    @State private var directoryMonitor = DirectoryMonitor()
+    @AppStorage("localPackageDefaultNamespace") private var defaultNamespace: String = "local"
 
-    private let store = LocalPackageStore()
+    private var store: LocalPackageStore { LocalPackageStore() }
 
     var body: some View {
         List {
             infoSection
+            if isPerformingOperation || statusMessage != nil {
+                statusSection
+            }
             packagesSection
             actionsSection
         }
@@ -28,27 +40,44 @@ struct LocalPackageManagementView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    showingFolderImporter = true
+                    showingImporter = true
                 } label: {
-                    Image(systemName: "plus")
+                    Image(systemName: "square.and.arrow.down")
                 }
+                .disabled(isPerformingOperation)
                 .accessibilityLabel(L10n.tr("local_packages.import"))
             }
         }
-        .task { await refresh() }
-        .refreshable { await refresh() }
-        .fileImporter(
-            isPresented: $showingFolderImporter,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
-                Task { await importFolder(at: url) }
-            case .failure(let error):
-                errorMessage = error.localizedDescription
+        .task {
+            try? store.ensureRootDirectory()
+            await refresh()
+            await MainActor.run {
+                startMonitoringPackagesDirectory()
             }
+        }
+        .refreshable { await refresh() }
+        .onAppear {
+            startMonitoringPackagesDirectory()
+        }
+        .onDisappear {
+            directoryMonitor.stop()
+        }
+        .onChange(of: storageManager.mode) { _, _ in
+            try? store.ensureRootDirectory()
+            startMonitoringPackagesDirectory()
+            Task { await refresh() }
+        }
+        .onChange(of: storageManager.syncPackagesInICloud) { _, _ in
+            try? store.ensureRootDirectory()
+            startMonitoringPackagesDirectory()
+            Task { await refresh() }
+        }
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: Self.supportedImportTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            handleItemsImport(result)
         }
         .alert(L10n.tr("Error"), isPresented: Binding(
             get: { errorMessage != nil },
@@ -59,16 +88,16 @@ struct LocalPackageManagementView: View {
             Text(errorMessage ?? "")
         }
         .alert(
-            L10n.tr("local_packages.imported"),
+            L10n.tr("local_packages.success_title"),
             isPresented: Binding(
-                get: { importedSpec != nil },
-                set: { if !$0 { importedSpec = nil } }
+                get: { successMessage != nil },
+                set: { if !$0 { successMessage = nil } }
             )
         ) {
-            Button(L10n.tr("OK")) { importedSpec = nil }
+            Button(L10n.tr("OK")) { successMessage = nil }
         } message: {
-            if let spec = importedSpec {
-                Text(L10n.format("local_packages.imported_message", spec))
+            if let successMessage {
+                Text(successMessage)
             }
         }
         .alert(L10n.tr("local_packages.clear_all_title"), isPresented: $showingClearAllConfirmation) {
@@ -79,15 +108,128 @@ struct LocalPackageManagementView: View {
         } message: {
             Text(L10n.tr("local_packages.clear_all_message"))
         }
+        .sheet(item: $editingNamespaceEntry) { entry in
+            namespaceEditorSheet(for: entry)
+        }
     }
 
     private var infoSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Label(L10n.tr("local_packages.info_title"), systemImage: "info.circle")
-                    .font(.subheadline.weight(.medium))
-                Text(L10n.tr("local_packages.info_body"))
-                    .font(.caption)
+                Text(L10n.tr("local_packages.namespace"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 12) {
+                    Text("@")
+                        .font(.subheadline.monospaced().weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.accentColor.opacity(0.14), in: Capsule())
+                        .accessibilityHidden(true)
+
+                    TextField("local", text: $defaultNamespace)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.body.monospaced())
+                        .textFieldStyle(.plain)
+                        .submitLabel(.done)
+                        .accessibilityLabel(L10n.tr("local_packages.namespace"))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .systemFloatingSurface(cornerRadius: 16)
+            }
+            .padding(.vertical, 4)
+        } footer: {
+            Text(L10n.tr("local_packages.namespace_hint"))
+        }
+    }
+
+    private func packageRow(_ entry: LocalPackageEntry) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.displayName)
+                    .font(.body.weight(.medium))
+                HStack(spacing: 8) {
+                    Text(entry.version)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                    Text(formattedSize(entry.sizeInBytes))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 12)
+            Menu {
+                Button {
+                    beginNamespaceEdit(for: entry)
+                } label: {
+                    Label(L10n.tr("local_packages.change_namespace"), systemImage: "arrow.left.arrow.right")
+                }
+
+                Button(L10n.tr("Delete"), role: .destructive) {
+                    Task { await delete(entry) }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 2)
+            }
+            .disabled(isPerformingOperation)
+            .accessibilityLabel(L10n.tr("local_packages.actions"))
+        }
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                beginNamespaceEdit(for: entry)
+            } label: {
+                Label(L10n.tr("local_packages.change_namespace"), systemImage: "arrow.left.arrow.right")
+            }
+
+            Button(L10n.tr("Delete"), role: .destructive) {
+                Task { await delete(entry) }
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(L10n.tr("Delete"), role: .destructive) {
+                Task { await delete(entry) }
+            }
+            .disabled(isPerformingOperation)
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button {
+                beginNamespaceEdit(for: entry)
+            } label: {
+                Label(L10n.tr("local_packages.change_namespace"), systemImage: "arrow.left.arrow.right")
+            }
+            .tint(.blue)
+            .disabled(isPerformingOperation)
+        }
+        .accessibilityLabel(entry.spec)
+        .accessibilityValue(formattedSize(entry.sizeInBytes))
+    }
+
+    private func beginNamespaceEdit(for entry: LocalPackageEntry) {
+        editingNamespaceValue = entry.namespace
+        editingNamespaceEntry = entry
+    }
+
+    private var statusSection: some View {
+        Section {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                if isPerformingOperation {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                } else {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(statusMessage ?? "")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, 4)
@@ -105,26 +247,7 @@ struct LocalPackageManagementView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(snapshot.entries) { entry in
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(entry.displayName)
-                                .font(.body.weight(.medium))
-                            Text(entry.version)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(formattedSize(entry.sizeInBytes))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(L10n.tr("Delete"), role: .destructive) {
-                            Task { await delete(entry) }
-                        }
-                    }
-                    .accessibilityLabel(entry.spec)
-                    .accessibilityValue(formattedSize(entry.sizeInBytes))
+                    packageRow(entry)
                 }
             }
         }
@@ -135,7 +258,7 @@ struct LocalPackageManagementView: View {
             Button(L10n.tr("local_packages.clear_all_button"), role: .destructive) {
                 showingClearAllConfirmation = true
             }
-            .disabled(isLoading || snapshot.entries.isEmpty)
+            .disabled(isLoading || snapshot.entries.isEmpty || isPerformingOperation)
         }
     }
 
@@ -154,16 +277,74 @@ struct LocalPackageManagementView: View {
         }
     }
 
-    private func importFolder(at url: URL) async {
-        do {
-            let rootURL = store.rootURL
-            let spec = try await Task.detached(priority: .userInitiated) {
-                try LocalPackageStore(rootURL: rootURL).importFolder(at: url)
-            }.value
-            importedSpec = spec
-            await refresh()
-        } catch {
-            errorMessage = error.localizedDescription
+    private func importFolders(_ urls: [URL]) async {
+        guard !urls.isEmpty else { return }
+
+        isImporting = true
+        successMessage = nil
+        statusMessage = nil
+        defer { isImporting = false }
+
+        let rootURL = store.rootURL
+        let namespace = normalizedNamespace
+        var importedResults: [LocalPackageImportResult] = []
+        var errors: [String] = []
+
+        for url in urls {
+            statusMessage = L10n.format("local_packages.status.importing", url.lastPathComponent)
+            do {
+                let result = try await Task.detached(priority: .userInitiated) {
+                    try LocalPackageStore(rootURL: rootURL).importItem(at: url, defaultNamespace: namespace)
+                }.value
+                importedResults.append(result)
+            } catch {
+                errors.append("\(url.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+
+        consumeImportResults(importedResults, errors: errors)
+        await refresh()
+    }
+
+    private func handleItemsImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result else {
+            if case .failure(let error) = result {
+                errorMessage = error.localizedDescription
+            }
+            return
+        }
+
+        guard !urls.isEmpty else { return }
+        Task { await importFolders(urls) }
+    }
+
+    private func consumeImportResults(_ results: [LocalPackageImportResult], errors: [String]) {
+        if !results.isEmpty {
+            let importedSpecs = results.map(\.spec)
+            let downloadedItemCount = results.reduce(0) { $0 + $1.downloadedItemCount }
+            let archiveImportCount = results.filter(\.importedFromArchive).count
+
+            var message = L10n.format("local_packages.imported_message", importedSpecs.joined(separator: "\n"))
+            var notes: [String] = []
+            if archiveImportCount > 0 {
+                notes.append(L10n.format("local_packages.imported_archive_note", archiveImportCount))
+            }
+            if downloadedItemCount > 0 {
+                notes.append(L10n.format("local_packages.imported_downloaded_note", downloadedItemCount))
+            }
+            if !notes.isEmpty {
+                message += "\n\n" + notes.joined(separator: "\n")
+                statusMessage = notes.joined(separator: " ")
+            } else {
+                statusMessage = nil
+            }
+            successMessage = message
+        } else {
+            statusMessage = nil
+        }
+
+        if !errors.isEmpty {
+            errorMessage = errors.joined(separator: "\n")
         }
     }
 
@@ -175,6 +356,32 @@ struct LocalPackageManagementView: View {
             }.value
             await refresh()
         } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func changeNamespace(for entry: LocalPackageEntry) async {
+        isChangingNamespace = true
+        statusMessage = L10n.format("local_packages.status.changing_namespace", entry.spec)
+        defer { isChangingNamespace = false }
+
+        do {
+            let rootURL = store.rootURL
+            let targetNamespace = normalizedEditingNamespace
+            let updatedEntry = try await Task.detached(priority: .userInitiated) {
+                try LocalPackageStore(rootURL: rootURL).changeNamespace(of: entry, to: targetNamespace)
+            }.value
+
+            statusMessage = nil
+            successMessage = L10n.format(
+                "local_packages.namespace_updated_message",
+                entry.spec,
+                updatedEntry.spec
+            )
+            editingNamespaceEntry = nil
+            await refresh()
+        } catch {
+            statusMessage = nil
             errorMessage = error.localizedDescription
         }
     }
@@ -193,5 +400,86 @@ struct LocalPackageManagementView: View {
 
     private func formattedSize(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private var normalizedNamespace: String {
+        let trimmed = defaultNamespace.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "local" : trimmed
+    }
+
+    private var normalizedEditingNamespace: String {
+        editingNamespaceValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isPerformingOperation: Bool {
+        isImporting || isChangingNamespace
+    }
+
+    private static var supportedImportTypes: [UTType] {
+        var types: [UTType] = [.folder, .zip]
+        if let tar = UTType(filenameExtension: "tar") {
+            types.append(tar)
+        }
+        if let gzip = UTType(filenameExtension: "gz") {
+            types.append(gzip)
+        }
+        if let tgz = UTType(filenameExtension: "tgz") {
+            types.append(tgz)
+        }
+        return Array(Set(types))
+    }
+
+    @MainActor
+    private func startMonitoringPackagesDirectory() {
+        guard let directoryURL = store.rootURL else { return }
+        try? store.ensureRootDirectory()
+
+        directoryMonitor.stop()
+        directoryMonitor.onChange = {
+            Task { await refresh() }
+        }
+        directoryMonitor.start(url: directoryURL)
+    }
+
+    @ViewBuilder
+    private func namespaceEditorSheet(for entry: LocalPackageEntry) -> some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(entry.spec)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
+                    TextField(
+                        L10n.tr("local_packages.change_namespace_placeholder"),
+                        text: $editingNamespaceValue
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                } footer: {
+                    Text(L10n.tr("local_packages.change_namespace_body"))
+                }
+            }
+            .navigationTitle(L10n.tr("local_packages.change_namespace_title"))
+            .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(isChangingNamespace)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.tr("Cancel")) {
+                        editingNamespaceEntry = nil
+                    }
+                    .disabled(isChangingNamespace)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.tr("Save")) {
+                        Task { await changeNamespace(for: entry) }
+                    }
+                    .disabled(
+                        isChangingNamespace ||
+                        normalizedEditingNamespace.isEmpty ||
+                        normalizedEditingNamespace == entry.namespace
+                    )
+                }
+            }
+        }
     }
 }

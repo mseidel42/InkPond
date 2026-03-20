@@ -8,7 +8,8 @@ import os.log
 
 extension ProjectFileManager {
     private static let reservedDocumentDirectoryNames: Set<String> = [
-        "AppFonts"
+        "AppFonts",
+        "LocalPackages"
     ]
 
     static func untrackedFolderNames(knownProjectIDs: Set<String>) -> [String]? {

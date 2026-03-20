@@ -24,13 +24,13 @@ enum ZipImporterError: LocalizedError {
 struct ZipImporter {
     /// Extract a ZIP archive to `destDir`. Returns the relative paths of extracted files.
     @discardableResult
-    static func extract(from zipURL: URL, to destDir: URL) throws -> [String] {
+    nonisolated static func extract(from zipURL: URL, to destDir: URL) throws -> [String] {
         let data = try Data(contentsOf: zipURL)
         return try extract(data: data, to: destDir)
     }
 
     @discardableResult
-    static func extract(data: Data, to destDir: URL) throws -> [String] {
+    nonisolated static func extract(data: Data, to destDir: URL) throws -> [String] {
         let bytes = [UInt8](data)
         let count = bytes.count
         guard count >= 22 else { throw ZipImporterError.invalidData }
@@ -138,15 +138,15 @@ struct ZipImporter {
 
     // MARK: - Helpers
 
-    private static func u16(_ b: [UInt8], _ i: Int) -> UInt16 {
+    private nonisolated static func u16(_ b: [UInt8], _ i: Int) -> UInt16 {
         UInt16(b[i]) | (UInt16(b[i+1]) << 8)
     }
-    private static func u32(_ b: [UInt8], _ i: Int) -> UInt32 {
+    private nonisolated static func u32(_ b: [UInt8], _ i: Int) -> UInt32 {
         UInt32(b[i]) | (UInt32(b[i+1]) << 8) | (UInt32(b[i+2]) << 16) | (UInt32(b[i+3]) << 24)
     }
 
     /// Returns the common single top-level directory prefix if all non-MACOSX names share one.
-    private static func topLevelPrefix(_ names: [String]) -> String? {
+    private nonisolated static func topLevelPrefix(_ names: [String]) -> String? {
         let relevant = names.filter { !$0.hasPrefix("__MACOSX/") && !$0.isEmpty }
         guard !relevant.isEmpty else { return nil }
 
@@ -169,7 +169,7 @@ struct ZipImporter {
     }
 
     /// Ensure a ZIP entry path is relative and cannot escape destination root.
-    private static func sanitizedRelativePath(_ path: String) throws -> String {
+    private nonisolated static func sanitizedRelativePath(_ path: String) throws -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               !trimmed.hasPrefix("/"),
@@ -189,7 +189,7 @@ struct ZipImporter {
     }
 
     /// Decompress raw DEFLATE data (no zlib wrapper) using zlib.
-    private static func decompressDeflate(_ compressed: Data, uncompressedSize: Int) throws -> Data {
+    private nonisolated static func decompressDeflate(_ compressed: Data, uncompressedSize: Int) throws -> Data {
         let bufSize = max(uncompressedSize, 1)
         var result = Data(count: bufSize)
         var stream = z_stream()

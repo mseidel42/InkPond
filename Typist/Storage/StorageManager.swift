@@ -11,9 +11,34 @@ enum StorageMode: String {
     case iCloud
 }
 
+enum SyncContentCategory {
+    case appFonts
+    case localPackages
+
+    nonisolated var directoryName: String {
+        switch self {
+        case .appFonts:
+            return "AppFonts"
+        case .localPackages:
+            return "LocalPackages"
+        }
+    }
+
+    nonisolated var localRootURL: URL? {
+        switch self {
+        case .appFonts:
+            return FontManager.localAppFontsRootURL
+        case .localPackages:
+            return TypstBridge.localPackagesRootURL
+        }
+    }
+}
+
 @Observable
 final class StorageManager {
-    private static let storageKey = "storageMode"
+    private static let storageKey = StorageSyncPreferences.storageModeKey
+    private static let syncFontsKey = StorageSyncPreferences.syncFontsKey
+    private static let syncPackagesKey = StorageSyncPreferences.syncPackagesKey
 
     private(set) var mode: StorageMode
     private(set) var iCloudAvailable: Bool = false
@@ -21,6 +46,8 @@ final class StorageManager {
     private(set) var migrationError: String?
     /// Migration progress (0.0–1.0) for UI feedback.
     private(set) var migrationProgress: Double = 0
+    private(set) var syncFontsInICloud: Bool
+    private(set) var syncPackagesInICloud: Bool
 
     /// The ubiquity container URL, if iCloud is available.
     private(set) var ubiquityURL: URL?
@@ -33,6 +60,8 @@ final class StorageManager {
     init() {
         let raw = UserDefaults.standard.string(forKey: Self.storageKey) ?? StorageMode.local.rawValue
         self.mode = StorageMode(rawValue: raw) ?? .local
+        self.syncFontsInICloud = StorageSyncPreferences.fontPreferenceEnabled
+        self.syncPackagesInICloud = StorageSyncPreferences.packagePreferenceEnabled
         // Perform initial availability check. url(forUbiquityContainerIdentifier:)
         // may trigger a first-time container setup, so keep it synchronous at launch
         // to ensure the URL is ready before any file operations.
@@ -80,6 +109,14 @@ final class StorageManager {
         syncCachedFlag()
     }
 
+    func setSyncFontsInICloud(_ enabled: Bool) async {
+        await setAuxiliarySync(enabled, for: .appFonts)
+    }
+
+    func setSyncPackagesInICloud(_ enabled: Bool) async {
+        await setAuxiliarySync(enabled, for: .localPackages)
+    }
+
     func setMode(_ newMode: StorageMode, documents: [TypistDocument]) async {
         guard newMode != mode else { return }
         guard !isMigrating else { return }
@@ -121,6 +158,12 @@ final class StorageManager {
 
         let projectIDs = documents.map(\.projectID)
         let toiCloud = newMode == .iCloud
+        let syncFontsInICloud = self.syncFontsInICloud
+        let syncPackagesInICloud = self.syncPackagesInICloud
+        let appFontsDirectoryName = SyncContentCategory.appFonts.directoryName
+        let appFontsLocalRootURL = SyncContentCategory.appFonts.localRootURL
+        let localPackagesDirectoryName = SyncContentCategory.localPackages.directoryName
+        let localPackagesRootURL = SyncContentCategory.localPackages.localRootURL
 
         do {
             try await Task.detached {
@@ -134,11 +177,25 @@ final class StorageManager {
                             self.migrationProgress = progress
                         }
                     }
-                try self.migrateAppFonts(
-                    from: toiCloud ? FontManager.localAppFontsRootURL : sourceBase,
-                    to: toiCloud ? destBase : FontManager.localAppFontsRootURL,
-                    toiCloud: toiCloud
-                )
+                if syncFontsInICloud, let localFontsRoot = appFontsLocalRootURL {
+                    try self.migrateAuxiliaryDirectory(
+                        named: appFontsDirectoryName,
+                        from: toiCloud ? localFontsRoot : sourceBase,
+                        to: toiCloud ? destBase : localFontsRoot,
+                        sourceIsICloud: !toiCloud,
+                        destinationIsICloud: toiCloud
+                    )
+                }
+
+                if syncPackagesInICloud, let localPackagesRoot = localPackagesRootURL {
+                    try self.migrateAuxiliaryDirectory(
+                        named: localPackagesDirectoryName,
+                        from: toiCloud ? localPackagesRoot : sourceBase,
+                        to: toiCloud ? destBase : localPackagesRoot,
+                        sourceIsICloud: !toiCloud,
+                        destinationIsICloud: toiCloud
+                    )
+                }
             }.value
             mode = newMode
             syncCachedFlag()
@@ -162,6 +219,68 @@ final class StorageManager {
     private func syncCachedFlag() {
         let value = mode == .iCloud && iCloudAvailable
         _isUsingiCloudLock.withLock { $0 = value }
+    }
+
+    private func setAuxiliarySync(_ enabled: Bool, for category: SyncContentCategory) async {
+        guard !isMigrating else { return }
+        guard auxiliarySyncState(for: category) != enabled else { return }
+
+        guard mode == .iCloud else {
+            persistAuxiliarySync(enabled, for: category)
+            return
+        }
+
+        refreshICloudAvailability()
+        guard iCloudAvailable, let iCloudDocumentsURL = ubiquityDocumentsURL else {
+            migrationError = L10n.tr("icloud.error.unavailable")
+            return
+        }
+        let directoryName = category.directoryName
+        guard let localRootURL = category.localRootURL else { return }
+
+        isMigrating = true
+        migrationError = nil
+        migrationProgress = 0.1
+
+        do {
+            try await Task.detached {
+                try self.migrateAuxiliaryDirectory(
+                    named: directoryName,
+                    from: enabled ? localRootURL : iCloudDocumentsURL,
+                    to: enabled ? iCloudDocumentsURL : localRootURL,
+                    sourceIsICloud: !enabled,
+                    destinationIsICloud: enabled
+                )
+            }.value
+
+            migrationProgress = 1
+            persistAuxiliarySync(enabled, for: category)
+        } catch {
+            migrationError = error.localizedDescription
+            os_log(.error, "StorageManager: auxiliary migration failed: %{public}@", error.localizedDescription)
+        }
+
+        isMigrating = false
+    }
+
+    private func auxiliarySyncState(for category: SyncContentCategory) -> Bool {
+        switch category {
+        case .appFonts:
+            return syncFontsInICloud
+        case .localPackages:
+            return syncPackagesInICloud
+        }
+    }
+
+    private func persistAuxiliarySync(_ enabled: Bool, for category: SyncContentCategory) {
+        switch category {
+        case .appFonts:
+            syncFontsInICloud = enabled
+            UserDefaults.standard.set(enabled, forKey: Self.syncFontsKey)
+        case .localPackages:
+            syncPackagesInICloud = enabled
+            UserDefaults.standard.set(enabled, forKey: Self.syncPackagesKey)
+        }
     }
 
     // MARK: - Migration
@@ -232,14 +351,7 @@ final class StorageManager {
 
             // Clean up source after successful copy & verification
             do {
-                if toiCloud {
-                    // Moving to iCloud: remove local copy
-                    try fm.removeItem(at: sourceDir)
-                } else {
-                    // Moving to local: use eviction to free local iCloud cache
-                    // The file stays in iCloud but the local cached copy is released.
-                    try fm.evictUbiquitousItem(at: sourceDir)
-                }
+                try removeMigratedSourceDirectory(at: sourceDir, isICloud: !toiCloud)
             } catch {
                 // Cleanup failure is non-fatal — log but continue
                 os_log(.error, "StorageManager: cleanup failed for %{public}@: %{public}@",
@@ -296,36 +408,53 @@ final class StorageManager {
         throw MigrationError.downloadTimeout
     }
 
-    private nonisolated func migrateAppFonts(
+    private nonisolated func migrateAuxiliaryDirectory(
+        named directoryName: String,
         from sourceRoot: URL,
         to destinationRoot: URL,
-        toiCloud: Bool
+        sourceIsICloud: Bool,
+        destinationIsICloud: Bool
     ) throws {
         let fm = FileManager.default
-        let sourceDir = FontManager.appFontsDirectory(rootURL: sourceRoot)
-        let destinationDir = FontManager.appFontsDirectory(rootURL: destinationRoot)
+        let sourceDir = sourceRoot.appendingPathComponent(directoryName, isDirectory: true)
+        let destinationDir = destinationRoot.appendingPathComponent(directoryName, isDirectory: true)
 
         guard fm.fileExists(atPath: sourceDir.path) else { return }
 
-        if !toiCloud {
+        if sourceIsICloud {
             try ensureDownloaded(directory: sourceDir)
         }
 
         if !fm.fileExists(atPath: destinationRoot.path) {
-            try fm.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+            if destinationIsICloud {
+                try CloudFileCoordinator.createDirectory(at: destinationRoot)
+            } else {
+                try fm.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+            }
         }
 
-        if toiCloud {
-            try CloudFileCoordinator.createDirectory(at: destinationDir)
-            try CloudFileCoordinator.copyItem(from: sourceDir, to: destinationDir)
-            try? fm.removeItem(at: sourceDir)
-        } else {
-            try fm.createDirectory(at: destinationDir, withIntermediateDirectories: true)
-            if fm.fileExists(atPath: destinationDir.path) {
-                try? fm.removeItem(at: destinationDir)
+        if fm.fileExists(atPath: destinationDir.path) {
+            if destinationIsICloud {
+                try CloudFileCoordinator.removeItem(at: destinationDir)
+            } else {
+                try fm.removeItem(at: destinationDir)
             }
+        }
+
+        if sourceIsICloud || destinationIsICloud {
             try CloudFileCoordinator.copyItem(from: sourceDir, to: destinationDir)
-            try? fm.evictUbiquitousItem(at: sourceDir)
+        } else {
+            try fm.copyItem(at: sourceDir, to: destinationDir)
+        }
+
+        try removeMigratedSourceDirectory(at: sourceDir, isICloud: sourceIsICloud)
+    }
+
+    private nonisolated func removeMigratedSourceDirectory(at sourceDir: URL, isICloud: Bool) throws {
+        if isICloud {
+            try CloudFileCoordinator.removeItem(at: sourceDir)
+        } else {
+            try FileManager.default.removeItem(at: sourceDir)
         }
     }
 

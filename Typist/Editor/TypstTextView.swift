@@ -404,6 +404,11 @@ final class TypstTextView: UITextView {
         )
     }
 
+    /// Extra bottom padding (in points) added on top of the keyboard overlap.
+    /// This gives UITextView's native scroll-to-cursor enough breathing room
+    /// so the cursor never sits right at the keyboard edge.
+    private static let keyboardBottomPadding: CGFloat = 80
+
     @objc private func keyboardFrameWillChange(_ notification: Notification) {
         guard window != nil,
               let userInfo = notification.userInfo,
@@ -412,6 +417,9 @@ final class TypstTextView: UITextView {
         // How much does the keyboard overlap the bottom of this view (in window coordinates)?
         let viewBottomY = convert(CGPoint(x: 0, y: bounds.maxY), to: nil).y
         let overlap = max(0, viewBottomY - endFrame.minY)
+        // Add extra padding so UITextView's native scrolling keeps the cursor
+        // comfortably above the keyboard, not right at the edge.
+        let totalInset = overlap > 0 ? overlap + Self.keyboardBottomPadding : 0
 
         let duration = (userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
         let curveRaw = (userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
@@ -420,10 +428,12 @@ final class TypstTextView: UITextView {
             withDuration: duration, delay: 0,
             options: [.beginFromCurrentState, UIView.AnimationOptions(rawValue: curveRaw << 16)]
         ) {
-            self.contentInset.bottom = overlap
+            self.contentInset.bottom = totalInset
             self.verticalScrollIndicatorInsets.bottom = overlap
-        } completion: { _ in
-            if overlap > 0 { self.scrollSelectionToUpperThird(animated: true) }
+            if overlap > 0 {
+                self.layoutIfNeeded()
+                self.scrollSelectionToUpperThird(animated: false)
+            }
         }
     }
 
@@ -438,6 +448,32 @@ final class TypstTextView: UITextView {
         }
 
         let desiredOffsetY = caret.minY - visibleHeight * anchorRatio - textContainerInset.top
+        let minOffsetY = -adjustedContentInset.top
+        let maxOffsetY = max(minOffsetY, contentSize.height - bounds.height + adjustedContentInset.bottom)
+        setContentOffset(
+            CGPoint(x: contentOffset.x, y: min(max(desiredOffsetY, minOffsetY), maxOffsetY)),
+            animated: animated
+        )
+    }
+
+    /// Scroll the cursor to the center of the visible area, but only if
+    /// it is outside a comfortable zone (top 25% or bottom 25%).
+    /// Uses animated scroll to avoid fighting UITextView's own scrolling.
+    func scrollSelectionToCenterIfNeeded(animated: Bool) {
+        guard isFirstResponder else { return }
+        guard let range = selectedTextRange else { return }
+        let caret = caretRect(for: range.end)
+        let visibleHeight = bounds.height - adjustedContentInset.top - adjustedContentInset.bottom
+        guard visibleHeight > 0 else { return }
+
+        let caretInVisible = caret.midY - contentOffset.y - adjustedContentInset.top
+        let topThreshold = visibleHeight * 0.25
+        let bottomThreshold = visibleHeight * 0.75
+
+        // Cursor is in the comfortable zone — do nothing.
+        guard caretInVisible < topThreshold || caretInVisible > bottomThreshold else { return }
+
+        let desiredOffsetY = caret.midY - visibleHeight * 0.4 - adjustedContentInset.top
         let minOffsetY = -adjustedContentInset.top
         let maxOffsetY = max(minOffsetY, contentSize.height - bounds.height + adjustedContentInset.bottom)
         setContentOffset(

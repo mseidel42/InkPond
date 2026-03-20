@@ -64,6 +64,12 @@
 "error.local_package.storage_unavailable" = "本地包存储目录不可用。";
 "error.local_package.missing_manifest" = "文件夹中缺少 typst.toml 清单文件。";
 "error.local_package.invalid_manifest" = "typst.toml 无效：%@";
+"error.local_package.invalid_namespace" = "命名空间无效。不能为空，也不能包含路径分隔符。";
+"error.local_package.no_importable_items" = "所选文件夹里没有可导入的包。";
+"error.local_package.unsupported_archive" = "不支持这种包导入方式。请选择文件夹、.zip、.tar、.tar.gz 或 .tgz 压缩包。";
+"error.local_package.invalid_archive" = "无法解压这个包压缩文件。";
+"error.local_package.multiple_package_roots" = "压缩包中包含多个包清单。";
+"error.local_package.package_exists" = "%@ 已存在同名包。";
 
 "error.image.load_data_failed" = "加载图片数据失败。";
 "error.image.process_failed" = "图片处理失败。";
@@ -159,12 +165,29 @@
 
 "local_packages.title" = "本地包";
 "local_packages.import" = "导入包";
+"local_packages.import_detail" = "同时选择多个文件夹或压缩包。";
+"local_packages.import_folder" = "导入整个文件夹";
+"local_packages.import_folder_detail" = "选一个文件夹，把里面所有包都导入。";
 "local_packages.section_title" = "已安装的包";
 "local_packages.empty" = "没有已安装的本地包";
 "local_packages.info_title" = "关于本地包";
-"local_packages.info_body" = "导入包含 typst.toml 清单文件的包文件夹。在文档中通过 #import \"@local/name:version\" 使用，支持 @local 及自定义命名空间。";
+"local_packages.info_body" = "导入包含 typst.toml 清单文件的包文件夹，或 .zip、.tar、.tar.gz、.tgz 压缩包。在文档中通过 #import \"@namespace/name:version\" 使用。在下方设置命名空间，或在 typst.toml 中添加 namespace 字段来单独覆盖。";
+"local_packages.namespace" = "默认命名空间";
+"local_packages.namespace_hint" = "当导入的包没有在 typst.toml 中声明 namespace 时，会使用这里的值。";
+"local_packages.success_title" = "本地包";
 "local_packages.imported" = "包已导入";
 "local_packages.imported_message" = "已成功导入 %@，现在可以在文档中使用了。";
+"local_packages.imported_archive_note" = "已解压 %d 个压缩包导入项。";
+"local_packages.imported_downloaded_note" = "导入前已从 iCloud 下载 %d 个项目。";
+"local_packages.actions" = "包操作";
+"local_packages.change_namespace" = "修改命名空间";
+"local_packages.change_namespace_title" = "修改包命名空间";
+"local_packages.change_namespace_placeholder" = "命名空间";
+"local_packages.change_namespace_body" = "把这个包移动到新的命名空间，这样你就可以用新的 @namespace/name 路径导入它。";
+"local_packages.namespace_updated_message" = "已将 %@ 移动到 %@。";
+"local_packages.status.scanning" = "正在扫描 %@…";
+"local_packages.status.importing" = "正在导入 %@…";
+"local_packages.status.changing_namespace" = "正在修改 %@ 的命名空间…";
 "local_packages.clear_all_title" = "移除所有本地包？";
 "local_packages.clear_all_button" = "全部移除";
 "local_packages.clear_all_message" = "这会移除所有已安装的本地包。使用这些包的文档将无法编译，直到重新导入。";
@@ -336,9 +359,11 @@
 "onboarding.action.get_started" = "开始使用";
 
 "icloud.title" = "iCloud";
-"icloud.sync_toggle" = "iCloud 同步";
-"icloud.sync_footer.on" = "文档和项目文件通过 iCloud 在你的设备间同步。";
-"icloud.sync_footer.off" = "文档和项目文件仅存储在本设备上。";
+"icloud.sync_toggle" = "同步项目";
+"icloud.sync_fonts_toggle" = "同步字体";
+"icloud.sync_packages_toggle" = "同步包";
+"icloud.sync_footer.on" = "项目会通过 iCloud 同步。字体和包是否同步由上面的开关决定。";
+"icloud.sync_footer.off" = "项目会保留在本机。你可以先设置好字体和包的同步偏好，再开启项目同步。";
 "icloud.error.unavailable" = "iCloud 不可用。请在系统设置中登录 iCloud。";
 "icloud.migrating" = "正在迁移文件…";
 "icloud.restart_title" = "需要重启";

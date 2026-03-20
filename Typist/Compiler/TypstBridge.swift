@@ -28,11 +28,42 @@ struct TypstBridge {
             .appendingPathComponent("typst-packages", isDirectory: true)
     }
 
+    private nonisolated static var localDocumentsURL: URL? {
+        ExposedAuxiliaryDirectory.localDocumentsURL
+    }
+
+    nonisolated static var localPackagesRootURL: URL? {
+        localDocumentsURL
+    }
+
+    private nonisolated static var legacyLocalPackagesRootURL: URL? {
+        ExposedAuxiliaryDirectory.applicationSupportURL
+    }
+
+    private nonisolated static var defaultLocalPackagesRootURL: URL? {
+        guard StorageSyncPreferences.syncPackages,
+              let ubiquityDocumentsURL = FileManager.default
+                .url(forUbiquityContainerIdentifier: "iCloud.P0int.Typist")?
+                .appendingPathComponent("Documents", isDirectory: true) else {
+            return localPackagesRootURL
+        }
+        return ubiquityDocumentsURL
+    }
+
+    nonisolated static func packagesDirectory(rootURL: URL) -> URL {
+        rootURL.appendingPathComponent("LocalPackages", isDirectory: true)
+    }
+
     nonisolated static var localPackagesDirectoryURL: URL? {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first?
-            .appendingPathComponent("LocalPackages", isDirectory: true)
+        guard let rootURL = defaultLocalPackagesRootURL else { return nil }
+        if rootURL.standardizedFileURL == localPackagesRootURL?.standardizedFileURL {
+            ExposedAuxiliaryDirectory.migrateLegacyDirectoryIfNeeded(
+                named: "LocalPackages",
+                from: legacyLocalPackagesRootURL,
+                to: localPackagesRootURL
+            )
+        }
+        return packagesDirectory(rootURL: rootURL)
     }
 
     nonisolated static var runtimeVersion: String? {
@@ -61,6 +92,11 @@ struct TypstBridge {
 
         // App caches directory for @preview package downloads.
         let cacheDir = packageCacheDirectoryURL?.path
+        if let localPackagesDirectoryURL {
+            let store = LocalPackageStore(rootURL: localPackagesDirectoryURL)
+            try? store.ensureRootDirectory()
+            _ = try? store.snapshot()
+        }
         let localPkgDir = localPackagesDirectoryURL?.path
 
         // Hold C strings alive for the duration of the FFI call.
@@ -107,6 +143,11 @@ struct TypstBridge {
     nonisolated static func compileWithSourceMap(source: String, fontPaths: [String], rootDir: String? = nil) -> Result<(Data, SourceMap), TypstBridgeError> {
 #if TYPST_FFI_AVAILABLE
         let cacheDir = packageCacheDirectoryURL?.path
+        if let localPackagesDirectoryURL {
+            let store = LocalPackageStore(rootURL: localPackagesDirectoryURL)
+            try? store.ensureRootDirectory()
+            _ = try? store.snapshot()
+        }
         let localPkgDir = localPackagesDirectoryURL?.path
 
         return source.withCString { cSource in

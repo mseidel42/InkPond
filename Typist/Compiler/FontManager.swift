@@ -150,20 +150,23 @@ enum FontManager {
 
     // MARK: - App-level fonts
 
-    private nonisolated static var applicationSupportURL: URL {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            fatalError("ApplicationSupportDirectory unavailable — this should never happen in a sandboxed app")
+    private nonisolated static var documentsURL: URL {
+        guard let documentsURL = ExposedAuxiliaryDirectory.localDocumentsURL else {
+            fatalError("DocumentDirectory unavailable — this should never happen in a sandboxed app")
         }
-        return appSupport
+        return documentsURL
     }
 
     nonisolated static var localAppFontsRootURL: URL {
-        applicationSupportURL
+        documentsURL
+    }
+
+    private nonisolated static var legacyLocalAppFontsRootURL: URL? {
+        ExposedAuxiliaryDirectory.applicationSupportURL
     }
 
     private nonisolated static var defaultAppFontsRootURL: URL {
-        let storedMode = UserDefaults.standard.string(forKey: "storageMode")
-        guard storedMode == StorageMode.iCloud.rawValue,
+        guard StorageSyncPreferences.syncFonts,
               let ubiquityDocumentsURL = FileManager.default
                 .url(forUbiquityContainerIdentifier: "iCloud.P0int.Typist")?
                 .appendingPathComponent("Documents", isDirectory: true) else {
@@ -173,8 +176,15 @@ enum FontManager {
     }
 
     nonisolated static func appFontsDirectory(rootURL: URL? = nil) -> URL {
-        (rootURL ?? defaultAppFontsRootURL)
-            .appendingPathComponent("AppFonts", isDirectory: true)
+        let resolvedRootURL = rootURL ?? defaultAppFontsRootURL
+        if resolvedRootURL.standardizedFileURL == localAppFontsRootURL.standardizedFileURL {
+            ExposedAuxiliaryDirectory.migrateLegacyDirectoryIfNeeded(
+                named: "AppFonts",
+                from: legacyLocalAppFontsRootURL,
+                to: localAppFontsRootURL
+            )
+        }
+        return resolvedRootURL.appendingPathComponent("AppFonts", isDirectory: true)
     }
 
     static func createAppFontsDirectory(rootURL: URL? = nil) throws {

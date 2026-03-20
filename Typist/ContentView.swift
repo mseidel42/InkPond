@@ -83,12 +83,22 @@ struct ContentView: View {
         .task {
             appFontLibrary.reload()
             appFontLibrary.startMonitoring()
+            try? LocalPackageStore().ensureRootDirectory()
             seedUITestDocumentIfNeeded()
         }
         .onChange(of: storageManager.mode) { _, _ in
             appFontLibrary.stopMonitoring()
             appFontLibrary.reload()
             appFontLibrary.startMonitoring()
+            try? LocalPackageStore().ensureRootDirectory()
+        }
+        .onChange(of: storageManager.syncFontsInICloud) { _, _ in
+            appFontLibrary.stopMonitoring()
+            appFontLibrary.reload()
+            appFontLibrary.startMonitoring()
+        }
+        .onChange(of: storageManager.syncPackagesInICloud) { _, _ in
+            try? LocalPackageStore().ensureRootDirectory()
         }
         .onDisappear {
             appFontLibrary.stopMonitoring()

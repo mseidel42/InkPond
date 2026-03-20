@@ -25,7 +25,15 @@ struct LocalPackageSnapshot: Equatable, Sendable {
     }
 }
 
+struct LocalPackageImportResult: Equatable, Sendable {
+    let spec: String
+    let downloadedItemCount: Int
+    let importedFromArchive: Bool
+}
+
 struct LocalPackageStore: Sendable {
+    nonisolated static let defaultNamespaceDefaultsKey = "localPackageDefaultNamespace"
+
     let rootURL: URL?
 
     nonisolated init(rootURL: URL? = TypstBridge.localPackagesDirectoryURL) {
@@ -38,9 +46,8 @@ struct LocalPackageStore: Sendable {
             return LocalPackageSnapshot(entries: [])
         }
 
-        guard fileManager.fileExists(atPath: rootURL.path) else {
-            return LocalPackageSnapshot(entries: [])
-        }
+        try ensureRootDirectory()
+        try integrateLooseRootItems(defaultNamespace: Self.storedDefaultNamespace)
 
         let namespaceURLs = try fileManager.contentsOfDirectory(
             at: rootURL,
@@ -90,8 +97,13 @@ struct LocalPackageStore: Sendable {
 
     /// Import a folder as a local package. The folder must contain a `typst.toml`
     /// with `[package]` metadata (name, version). Returns the imported entry spec.
-    nonisolated func importFolder(at sourceURL: URL) throws -> String {
-        let fileManager = FileManager.default
+    /// If `defaultNamespace` is provided, it overrides the fallback when `typst.toml`
+    /// does not contain a `namespace` field.
+    nonisolated func importFolder(at sourceURL: URL, defaultNamespace: String = "local") throws -> String {
+        try importItem(at: sourceURL, defaultNamespace: defaultNamespace).spec
+    }
+
+    nonisolated func importItem(at sourceURL: URL, defaultNamespace: String = "local") throws -> LocalPackageImportResult {
         guard let rootURL else {
             throw LocalPackageError.storageUnavailable
         }
@@ -99,41 +111,77 @@ struct LocalPackageStore: Sendable {
         let securedAccess = sourceURL.startAccessingSecurityScopedResource()
         defer { if securedAccess { sourceURL.stopAccessingSecurityScopedResource() } }
 
-        let manifestURL = sourceURL.appendingPathComponent("typst.toml")
-        guard fileManager.fileExists(atPath: manifestURL.path) else {
-            throw LocalPackageError.missingManifest
+        let preparation = try CloudItemAvailability.prepareForAccess(at: sourceURL)
+        let sourceValues = try sourceURL.resourceValues(forKeys: [.isDirectoryKey])
+
+        if sourceValues.isDirectory == true {
+            let spec = try importResolvedFolder(
+                at: sourceURL,
+                rootURL: rootURL,
+                defaultNamespace: defaultNamespace
+            )
+            return LocalPackageImportResult(
+                spec: spec,
+                downloadedItemCount: preparation.downloadedItemCount,
+                importedFromArchive: false
+            )
         }
 
-        let manifest = try String(contentsOf: manifestURL, encoding: .utf8)
-        let (name, version, namespace) = try parseManifest(manifest)
-
-        let destDir = rootURL
-            .appendingPathComponent(namespace, isDirectory: true)
-            .appendingPathComponent(name, isDirectory: true)
-            .appendingPathComponent(version, isDirectory: true)
-
-        if fileManager.fileExists(atPath: destDir.path) {
-            try fileManager.removeItem(at: destDir)
+        guard PackageArchiveImporter.archiveKind(for: sourceURL) != nil else {
+            throw LocalPackageError.unsupportedArchive
         }
-        try fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)
 
-        let contents = try fileManager.contentsOfDirectory(
-            at: sourceURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LocalPackageImport-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        _ = try PackageArchiveImporter.extract(from: sourceURL, to: temporaryRoot)
+        let packageRoot = try PackageArchiveImporter.locatePackageRoot(in: temporaryRoot)
+        let spec = try importResolvedFolder(
+            at: packageRoot,
+            rootURL: rootURL,
+            defaultNamespace: defaultNamespace
         )
-        for item in contents {
-            let dest = destDir.appendingPathComponent(item.lastPathComponent)
-            try fileManager.copyItem(at: item, to: dest)
+
+        return LocalPackageImportResult(
+            spec: spec,
+            downloadedItemCount: preparation.downloadedItemCount,
+            importedFromArchive: true
+        )
+    }
+
+    nonisolated func importContents(
+        of sourceDirectoryURL: URL,
+        defaultNamespace: String = "local"
+    ) throws -> [LocalPackageImportResult] {
+        guard let rootURL else {
+            throw LocalPackageError.storageUnavailable
         }
 
-        return "@\(namespace)/\(name):\(version)"
+        let securedAccess = sourceDirectoryURL.startAccessingSecurityScopedResource()
+        defer { if securedAccess { sourceDirectoryURL.stopAccessingSecurityScopedResource() } }
+
+        _ = try CloudItemAvailability.prepareForAccess(at: sourceDirectoryURL)
+        let values = try sourceDirectoryURL.resourceValues(forKeys: [.isDirectoryKey])
+        guard values.isDirectory == true else {
+            return [try LocalPackageStore(rootURL: rootURL).importItem(at: sourceDirectoryURL, defaultNamespace: defaultNamespace)]
+        }
+
+        let candidates = try discoverImportableItems(in: sourceDirectoryURL, maxDepth: 3)
+        guard !candidates.isEmpty else {
+            throw LocalPackageError.noImportableItems
+        }
+
+        return try candidates.map {
+            try LocalPackageStore(rootURL: rootURL).importItem(at: $0, defaultNamespace: defaultNamespace)
+        }
     }
 
     nonisolated func remove(_ entry: LocalPackageEntry) throws {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: entry.url.path) else { return }
-        try fileManager.removeItem(at: entry.url)
+        try removeItem(at: entry.url)
         // Clean up empty parent directories
         try removeIfEmpty(entry.url.deletingLastPathComponent())
         try removeIfEmpty(entry.url.deletingLastPathComponent().deletingLastPathComponent())
@@ -143,18 +191,130 @@ struct LocalPackageStore: Sendable {
         let fileManager = FileManager.default
         guard let rootURL else { return }
         if fileManager.fileExists(atPath: rootURL.path) {
-            try fileManager.removeItem(at: rootURL)
+            try removeItem(at: rootURL)
         }
-        try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        try createDirectory(at: rootURL)
+    }
+
+    nonisolated func ensureRootDirectory() throws {
+        guard let rootURL else { return }
+        guard !FileManager.default.fileExists(atPath: rootURL.path) else { return }
+        try createDirectory(at: rootURL)
+    }
+
+    nonisolated func changeNamespace(
+        of entry: LocalPackageEntry,
+        to requestedNamespace: String
+    ) throws -> LocalPackageEntry {
+        guard let rootURL else {
+            throw LocalPackageError.storageUnavailable
+        }
+
+        let namespace = try validatedNamespace(requestedNamespace)
+        guard namespace != entry.namespace else { return entry }
+
+        let manifestURL = entry.url.appendingPathComponent("typst.toml")
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+            throw LocalPackageError.missingManifest
+        }
+
+        let manifest = try readString(at: manifestURL)
+        let updatedManifest = try updatingManifestNamespace(in: manifest, to: namespace)
+        let destinationDirectory = rootURL
+            .appendingPathComponent(namespace, isDirectory: true)
+            .appendingPathComponent(entry.name, isDirectory: true)
+            .appendingPathComponent(entry.version, isDirectory: true)
+
+        guard entry.url.standardizedFileURL != destinationDirectory.standardizedFileURL else {
+            return entry
+        }
+
+        let fileManager = FileManager.default
+        guard !fileManager.fileExists(atPath: destinationDirectory.path) else {
+            throw LocalPackageError.packageExists("@\(namespace)/\(entry.name):\(entry.version)")
+        }
+
+        let usesCoordination = isUsingICloudStorage(at: destinationDirectory)
+        try createDirectory(at: destinationDirectory)
+
+        do {
+            let contents = try fileManager.contentsOfDirectory(
+                at: entry.url,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            for item in contents {
+                let destination = destinationDirectory.appendingPathComponent(item.lastPathComponent)
+                if item.lastPathComponent == "typst.toml" {
+                    try writeString(updatedManifest, to: destination)
+                } else {
+                    try copyItemReplacingSafely(from: item, to: destination, usesCoordination: usesCoordination)
+                }
+            }
+        } catch {
+            try? removeItem(at: destinationDirectory)
+            try? removeIfEmpty(destinationDirectory.deletingLastPathComponent())
+            try? removeIfEmpty(destinationDirectory.deletingLastPathComponent().deletingLastPathComponent())
+            throw error
+        }
+
+        try removeItem(at: entry.url)
+        try removeIfEmpty(entry.url.deletingLastPathComponent())
+        try removeIfEmpty(entry.url.deletingLastPathComponent().deletingLastPathComponent())
+
+        return LocalPackageEntry(
+            namespace: namespace,
+            name: entry.name,
+            version: entry.version,
+            sizeInBytes: try directorySize(at: destinationDirectory),
+            url: destinationDirectory
+        )
     }
 
     // MARK: - Private
 
-    private nonisolated func parseManifest(_ content: String) throws -> (name: String, version: String, namespace: String) {
+    private nonisolated func importResolvedFolder(
+        at sourceURL: URL,
+        rootURL: URL,
+        defaultNamespace: String
+    ) throws -> String {
+        let fileManager = FileManager.default
+        let manifestURL = sourceURL.appendingPathComponent("typst.toml")
+        guard fileManager.fileExists(atPath: manifestURL.path) else {
+            throw LocalPackageError.missingManifest
+        }
+
+        let manifest = try String(contentsOf: manifestURL, encoding: .utf8)
+        let (name, version, namespace) = try parseManifest(manifest, defaultNamespace: defaultNamespace)
+        let destinationDirectory = rootURL
+            .appendingPathComponent(namespace, isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+            .appendingPathComponent(version, isDirectory: true)
+        let usesCoordination = isUsingICloudStorage(at: destinationDirectory)
+
+        if fileManager.fileExists(atPath: destinationDirectory.path) {
+            try removeItem(at: destinationDirectory)
+        }
+        try createDirectory(at: destinationDirectory)
+
+        let contents = try fileManager.contentsOfDirectory(
+            at: sourceURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        for item in contents {
+            let destination = destinationDirectory.appendingPathComponent(item.lastPathComponent)
+            try copyItemReplacingSafely(from: item, to: destination, usesCoordination: usesCoordination)
+        }
+
+        return "@\(namespace)/\(name):\(version)"
+    }
+
+    private nonisolated func parseManifest(_ content: String, defaultNamespace: String = "local") throws -> (name: String, version: String, namespace: String) {
         // Minimal TOML parsing for [package] section
         var name: String?
         var version: String?
-        var namespace: String = "local"
+        var namespace = try validatedNamespace(defaultNamespace)
         var inPackageSection = false
 
         for line in content.components(separatedBy: .newlines) {
@@ -174,7 +334,7 @@ struct LocalPackageStore: Sendable {
             } else if let value = extractTomlValue(from: trimmed, key: "version") {
                 version = value
             } else if let value = extractTomlValue(from: trimmed, key: "namespace") {
-                namespace = value
+                namespace = try validatedNamespace(value)
             }
         }
 
@@ -194,6 +354,164 @@ struct LocalPackageStore: Sendable {
               let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
               let range = Range(match.range(at: 1), in: line) else { return nil }
         return String(line[range])
+    }
+
+    private nonisolated static var storedDefaultNamespace: String {
+        let defaults = UserDefaults.standard
+        let configured = defaults.string(forKey: defaultNamespaceDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return configured?.isEmpty == false ? configured! : "local"
+    }
+
+    private nonisolated func updatingManifestNamespace(in content: String, to namespace: String) throws -> String {
+        let lines = content.components(separatedBy: .newlines)
+        var updatedLines: [String] = []
+        var foundPackageSection = false
+        var inPackageSection = false
+        var insertedNamespace = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed == "[package]" {
+                if inPackageSection && !insertedNamespace {
+                    updatedLines.append("namespace = \"\(namespace)\"")
+                    insertedNamespace = true
+                }
+                foundPackageSection = true
+                inPackageSection = true
+                updatedLines.append(line)
+                continue
+            }
+
+            if trimmed.hasPrefix("[") {
+                if inPackageSection && !insertedNamespace {
+                    updatedLines.append("namespace = \"\(namespace)\"")
+                    insertedNamespace = true
+                }
+                inPackageSection = false
+                updatedLines.append(line)
+                continue
+            }
+
+            guard inPackageSection else {
+                updatedLines.append(line)
+                continue
+            }
+
+            if extractTomlValue(from: trimmed, key: "namespace") != nil {
+                let indentation = String(line.prefix { $0 == " " || $0 == "\t" })
+                updatedLines.append("\(indentation)namespace = \"\(namespace)\"")
+                insertedNamespace = true
+            } else {
+                updatedLines.append(line)
+            }
+        }
+
+        guard foundPackageSection else {
+            throw LocalPackageError.invalidManifest("missing [package] section")
+        }
+
+        if !insertedNamespace {
+            updatedLines.append("namespace = \"\(namespace)\"")
+        }
+
+        return updatedLines.joined(separator: "\n")
+    }
+
+    private nonisolated func validatedNamespace(_ value: String) throws -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw LocalPackageError.invalidNamespace
+        }
+        guard trimmed != ".", trimmed != ".." else {
+            throw LocalPackageError.invalidNamespace
+        }
+        guard !trimmed.contains("/"), !trimmed.contains("\\") else {
+            throw LocalPackageError.invalidNamespace
+        }
+        return trimmed
+    }
+
+    private nonisolated func integrateLooseRootItems(defaultNamespace: String) throws {
+        guard let rootURL else { return }
+
+        let candidates = try looseRootImportItems(in: rootURL)
+        guard !candidates.isEmpty else { return }
+
+        for candidate in candidates {
+            do {
+                _ = try importItem(at: candidate, defaultNamespace: defaultNamespace)
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    try removeItem(at: candidate)
+                }
+            } catch {
+                // Leave unprocessed items in place so the user can inspect or retry them manually.
+                continue
+            }
+        }
+    }
+
+    private nonisolated func looseRootImportItems(in directoryURL: URL) throws -> [URL] {
+        let fileManager = FileManager.default
+        let contents = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        return try contents.filter { candidate in
+            let values = try candidate.resourceValues(forKeys: [.isDirectoryKey])
+            if values.isDirectory == true {
+                return fileManager.fileExists(
+                    atPath: candidate.appendingPathComponent("typst.toml").path
+                )
+            }
+            return PackageArchiveImporter.archiveKind(for: candidate) != nil
+        }
+        .sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
+    }
+
+    private nonisolated func discoverImportableItems(in directoryURL: URL, maxDepth: Int) throws -> [URL] {
+        var results: [URL] = []
+        var seenPaths: Set<String> = []
+
+        func visit(_ url: URL, depth: Int) throws {
+            let standardized = url.standardizedFileURL
+            let standardizedPath = standardized.path
+            guard !seenPaths.contains(standardizedPath) else { return }
+
+            let values = try standardized.resourceValues(forKeys: [.isDirectoryKey])
+            if values.isDirectory == true {
+                let manifestURL = standardized.appendingPathComponent("typst.toml")
+                if FileManager.default.fileExists(atPath: manifestURL.path) {
+                    seenPaths.insert(standardizedPath)
+                    results.append(standardized)
+                    return
+                }
+
+                guard depth < maxDepth else { return }
+
+                let children = try FileManager.default.contentsOfDirectory(
+                    at: standardized,
+                    includingPropertiesForKeys: [.isDirectoryKey],
+                    options: [.skipsHiddenFiles]
+                )
+                for child in children.sorted(by: {
+                    $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+                }) {
+                    try visit(child, depth: depth + 1)
+                }
+            } else if PackageArchiveImporter.archiveKind(for: standardized) != nil {
+                seenPaths.insert(standardizedPath)
+                results.append(standardized)
+            }
+        }
+
+        try visit(directoryURL, depth: 0)
+        return results
     }
 
     private nonisolated func isDirectory(_ url: URL) throws -> Bool {
@@ -224,8 +542,79 @@ struct LocalPackageStore: Sendable {
         guard url.path.hasPrefix(rootURL.path), url != rootURL else { return }
         let contents = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
         if contents.isEmpty {
-            try fileManager.removeItem(at: url)
+            try removeItem(at: url)
         }
+    }
+
+    private nonisolated func createDirectory(at url: URL) throws {
+        if isUsingICloudStorage(at: url) {
+            try CloudFileCoordinator.createDirectory(at: url)
+        } else {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+    }
+
+    private nonisolated func removeItem(at url: URL) throws {
+        if isUsingICloudStorage(at: url) {
+            try CloudFileCoordinator.removeItem(at: url)
+        } else {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private nonisolated func readString(at url: URL) throws -> String {
+        if isUsingICloudStorage(at: url) {
+            return try CloudFileCoordinator.readString(from: url)
+        }
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    private nonisolated func writeString(_ string: String, to url: URL) throws {
+        if isUsingICloudStorage(at: url) {
+            try CloudFileCoordinator.writeString(string, to: url)
+        } else {
+            try string.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private nonisolated func copyItemReplacingSafely(from sourceURL: URL, to destinationURL: URL, usesCoordination: Bool) throws {
+        guard sourceURL.standardizedFileURL != destinationURL.standardizedFileURL else { return }
+
+        if usesCoordination {
+            try CloudFileCoordinator.copyItem(from: sourceURL, to: destinationURL)
+            return
+        }
+
+        let fileManager = FileManager.default
+        let temporaryURL = destinationURL.deletingLastPathComponent().appendingPathComponent(
+            ".replace-\(UUID().uuidString)-\(destinationURL.lastPathComponent)"
+        )
+        defer { try? fileManager.removeItem(at: temporaryURL) }
+
+        try fileManager.copyItem(at: sourceURL, to: temporaryURL)
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            _ = try fileManager.replaceItemAt(
+                destinationURL,
+                withItemAt: temporaryURL,
+                backupItemName: nil,
+                options: [.usingNewMetadataOnly]
+            )
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+        }
+    }
+
+    private nonisolated func isUsingICloudStorage(at url: URL) -> Bool {
+        guard let documentsURL = FileManager.default
+            .url(forUbiquityContainerIdentifier: "iCloud.P0int.Typist")?
+            .appendingPathComponent("Documents", isDirectory: true)
+            .standardizedFileURL else {
+            return false
+        }
+
+        let candidatePath = url.standardizedFileURL.path
+        let documentsPath = documentsURL.path
+        return candidatePath == documentsPath || candidatePath.hasPrefix(documentsPath + "/")
     }
 }
 
@@ -233,6 +622,12 @@ enum LocalPackageError: Error, LocalizedError {
     case storageUnavailable
     case missingManifest
     case invalidManifest(String)
+    case invalidNamespace
+    case noImportableItems
+    case unsupportedArchive
+    case invalidArchive
+    case multiplePackageRoots
+    case packageExists(String)
 
     var errorDescription: String? {
         switch self {
@@ -242,6 +637,18 @@ enum LocalPackageError: Error, LocalizedError {
             return L10n.tr("error.local_package.missing_manifest")
         case .invalidManifest(let detail):
             return L10n.format("error.local_package.invalid_manifest", detail)
+        case .invalidNamespace:
+            return L10n.tr("error.local_package.invalid_namespace")
+        case .noImportableItems:
+            return L10n.tr("error.local_package.no_importable_items")
+        case .unsupportedArchive:
+            return L10n.tr("error.local_package.unsupported_archive")
+        case .invalidArchive:
+            return L10n.tr("error.local_package.invalid_archive")
+        case .multiplePackageRoots:
+            return L10n.tr("error.local_package.multiple_package_roots")
+        case .packageExists(let spec):
+            return L10n.format("error.local_package.package_exists", spec)
         }
     }
 }
