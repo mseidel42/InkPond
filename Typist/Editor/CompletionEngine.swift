@@ -384,6 +384,9 @@ final class CompletionEngine {
     /// Image file paths relative to the project root, for path completion inside `image("")`.
     var imageFiles: [String] = []
 
+    /// Available package specs for import completion (e.g. "@local/mypackage:1.0.0").
+    var packageSpecs: [String] = []
+
     /// Typst font weight names.
     private let weightValues: [(String, String)] = [
         ("thin", "100"), ("extralight", "200"), ("light", "300"),
@@ -547,6 +550,11 @@ final class CompletionEngine {
         let utf16 = text.utf16
         guard cursorOffset > 0, cursorOffset <= utf16.count else { return nil }
 
+        // Try import/package completion (inside `#import "@..."`)
+        if let importResult = importCompletions(for: text, cursorOffset: cursorOffset) {
+            return importResult
+        }
+
         // Try image/file path completion (inside `image("...")` etc.)
         if let pathResult = pathCompletions(for: text, cursorOffset: cursorOffset) {
             return pathResult
@@ -594,6 +602,72 @@ final class CompletionEngine {
             }
         }
         return nil
+    }
+
+    // MARK: - Import / Package Completion
+
+    /// Detects `#import "@partial` or `#import "@local/partial` and suggests package specs.
+    private func importCompletions(for text: String, cursorOffset: Int) -> CompletionContext? {
+        let utf16 = text.utf16
+        guard cursorOffset > 0, cursorOffset <= utf16.count else { return nil }
+        let cursorIndex = utf16.index(utf16.startIndex, offsetBy: cursorOffset)
+
+        // Walk backwards from cursor to find the opening `"`
+        var probe = cursorIndex
+        var quotePos: String.Index?
+        while probe > utf16.startIndex {
+            let prev = utf16.index(before: probe)
+            let ch = text[prev]
+            if ch == "\"" {
+                quotePos = prev
+                break
+            }
+            if ch == "\n" || ch == "\r" { return nil }
+            probe = prev
+        }
+        guard let openQuote = quotePos else { return nil }
+
+        let valueStart = utf16.index(after: openQuote)
+        let typed = String(text[valueStart..<cursorIndex])
+
+        // Must start with `@` to be a package import
+        guard typed.hasPrefix("@") else { return nil }
+
+        // Verify this is an import/include context: walk backwards from `"` past whitespace
+        // and check for `import` or `include` keyword
+        var scan = openQuote
+        while scan > utf16.startIndex {
+            let prev = utf16.index(before: scan)
+            let ch = text[prev]
+            if ch == " " || ch == "\t" { scan = prev; continue }
+            break
+        }
+
+        // Collect the keyword before the quote
+        let kwEnd = scan
+        var kwStart = kwEnd
+        while kwStart > utf16.startIndex {
+            let prev = utf16.index(before: kwStart)
+            let c = text[prev]
+            if c.isLetter || c == "#" { kwStart = prev } else { break }
+        }
+        let keyword = String(text[kwStart..<kwEnd]).replacingOccurrences(of: "#", with: "")
+        guard keyword == "import" || keyword == "include" else { return nil }
+
+        guard !packageSpecs.isEmpty else { return nil }
+
+        let query = typed.lowercased()
+        let filtered = packageSpecs.filter { spec in
+            spec.lowercased().hasPrefix(query) || spec.lowercased().contains(query.dropFirst()) // drop @
+        }
+
+        guard !filtered.isEmpty else { return nil }
+        if filtered.count == 1, filtered[0] == typed { return nil }
+
+        let items = filtered.map { spec in
+            CompletionItem(label: spec, insertText: spec, kind: .value, detail: "Package")
+        }
+        return .value(prefix: typed, isQuoted: true, items: items)
     }
 
     // MARK: - Path Completion (image/include/import)

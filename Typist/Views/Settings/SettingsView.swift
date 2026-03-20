@@ -41,6 +41,7 @@ struct SettingsView: View {
                 appearanceSection
                 keyboardShortcutsSection
                 projectsSection
+                packagesSection
                 fontsSection
                 cacheSection
                 aboutSection
@@ -308,6 +309,18 @@ extension SettingsView {
                     .foregroundStyle(.primary)
             }
             .accessibilityIdentifier("settings.import-zip")
+        }
+    }
+
+    var packagesSection: some View {
+        Section(L10n.tr("Packages")) {
+            NavigationLink {
+                LocalPackageManagementView()
+            } label: {
+                Label(L10n.tr("local_packages.title"), systemImage: "shippingbox")
+                    .foregroundStyle(.primary)
+            }
+            .accessibilityIdentifier("settings.local-packages")
         }
     }
 

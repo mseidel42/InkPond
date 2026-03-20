@@ -38,6 +38,7 @@ struct EditorView: UIViewRepresentable {
     var bibEntries: [(key: String, type: String)] = []
     var externalLabels: [(name: String, kind: String)] = []
     var imageFiles: [String] = []
+    var packageSpecs: [String] = []
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -71,6 +72,7 @@ struct EditorView: UIViewRepresentable {
         textView.updateBibEntries(bibEntries)
         textView.updateExternalLabels(externalLabels)
         textView.updateImageFiles(imageFiles)
+        textView.updatePackageSpecs(packageSpecs)
 
         // Consume pending find request — defer mutation to avoid writing state during view update.
         if findRequested {

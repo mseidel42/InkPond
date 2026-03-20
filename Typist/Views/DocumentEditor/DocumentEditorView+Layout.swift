@@ -54,7 +54,8 @@ extension DocumentEditorView {
             fontFamilies: completionFontFamilies,
             bibEntries: cachedBibEntries,
             externalLabels: cachedExternalLabels,
-            imageFiles: cachedImageFiles
+            imageFiles: cachedImageFiles,
+            packageSpecs: cachedPackageSpecs
         )
         .onDrop(of: [UTType.image.identifier, UTType.fileURL.identifier],
                 isTargeted: $isImageDropTarget,

@@ -423,14 +423,8 @@ final class TypstTextView: UITextView {
             self.contentInset.bottom = overlap
             self.verticalScrollIndicatorInsets.bottom = overlap
         } completion: { _ in
-            if overlap > 0 { self.scrollCursorToVisible() }
+            if overlap > 0 { self.scrollSelectionToUpperThird(animated: true) }
         }
-    }
-
-    private func scrollCursorToVisible() {
-        guard let range = selectedTextRange else { return }
-        let rect = caretRect(for: range.end).insetBy(dx: 0, dy: -8)
-        scrollRectToVisible(rect, animated: true)
     }
 
     func scrollSelectionToUpperThird(animated: Bool) {
@@ -888,6 +882,11 @@ final class TypstTextView: UITextView {
     /// Update labels from other project files.
     func updateExternalLabels(_ labels: [(name: String, kind: String)]) {
         completionEngine.externalLabels = labels
+    }
+
+    /// Update available package specs for import completion.
+    func updatePackageSpecs(_ specs: [String]) {
+        completionEngine.packageSpecs = specs
     }
 
     func updateCompletion() {

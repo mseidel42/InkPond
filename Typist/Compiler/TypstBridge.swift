@@ -28,6 +28,13 @@ struct TypstBridge {
             .appendingPathComponent("typst-packages", isDirectory: true)
     }
 
+    nonisolated static var localPackagesDirectoryURL: URL? {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("LocalPackages", isDirectory: true)
+    }
+
     nonisolated static var runtimeVersion: String? {
 #if TYPST_FFI_AVAILABLE
         guard let cVersion = typst_version() else { return nil }
@@ -54,6 +61,7 @@ struct TypstBridge {
 
         // App caches directory for @preview package downloads.
         let cacheDir = packageCacheDirectoryURL?.path
+        let localPkgDir = localPackagesDirectoryURL?.path
 
         // Hold C strings alive for the duration of the FFI call.
         return source.withCString { cSource in
@@ -66,21 +74,24 @@ struct TypstBridge {
 
                 return (cacheDir ?? "").withCString { cCacheDir in
                   return (rootDir ?? "").withCString { cRootDir in
-                    var opts = TypstOptions(
-                        font_paths: constBuf.baseAddress,
-                        font_path_count: buf.count,
-                        cache_dir: cCacheDir,
-                        root_dir: rootDir != nil ? cRootDir : nil
-                    )
-                    let result = typst_compile(cSource, &opts)
-                    defer { typst_free_result(result) }
+                    return (localPkgDir ?? "").withCString { cLocalPkgDir in
+                      var opts = TypstOptions(
+                          font_paths: constBuf.baseAddress,
+                          font_path_count: buf.count,
+                          cache_dir: cCacheDir,
+                          root_dir: rootDir != nil ? cRootDir : nil,
+                          local_packages_dir: localPkgDir != nil ? cLocalPkgDir : nil
+                      )
+                      let result = typst_compile(cSource, &opts)
+                      defer { typst_free_result(result) }
 
-                    if result.success, let ptr = result.pdf_data {
-                        return .success(Data(bytes: ptr, count: Int(result.pdf_len)))
-                    } else if let errPtr = result.error_message {
-                        return .failure(.compilationFailed(String(cString: errPtr)))
-                    } else {
-                        return .failure(.compilationFailed(L10n.tr("error.typst.unknown_compilation")))
+                      if result.success, let ptr = result.pdf_data {
+                          return .success(Data(bytes: ptr, count: Int(result.pdf_len)))
+                      } else if let errPtr = result.error_message {
+                          return .failure(.compilationFailed(String(cString: errPtr)))
+                      } else {
+                          return .failure(.compilationFailed(L10n.tr("error.typst.unknown_compilation")))
+                      }
                     }
                   }
                 }
@@ -96,6 +107,7 @@ struct TypstBridge {
     nonisolated static func compileWithSourceMap(source: String, fontPaths: [String], rootDir: String? = nil) -> Result<(Data, SourceMap), TypstBridgeError> {
 #if TYPST_FFI_AVAILABLE
         let cacheDir = packageCacheDirectoryURL?.path
+        let localPkgDir = localPackagesDirectoryURL?.path
 
         return source.withCString { cSource in
             let mutablePtrs: [UnsafeMutablePointer<CChar>?] = fontPaths.map { strdup($0) }
@@ -107,23 +119,26 @@ struct TypstBridge {
 
                 return (cacheDir ?? "").withCString { cCacheDir in
                   return (rootDir ?? "").withCString { cRootDir in
-                    var opts = TypstOptions(
-                        font_paths: constBuf.baseAddress,
-                        font_path_count: buf.count,
-                        cache_dir: cCacheDir,
-                        root_dir: rootDir != nil ? cRootDir : nil
-                    )
-                    let result = typst_compile_with_source_map(cSource, &opts)
-                    defer { typst_free_result_with_map(result) }
+                    return (localPkgDir ?? "").withCString { cLocalPkgDir in
+                      var opts = TypstOptions(
+                          font_paths: constBuf.baseAddress,
+                          font_path_count: buf.count,
+                          cache_dir: cCacheDir,
+                          root_dir: rootDir != nil ? cRootDir : nil,
+                          local_packages_dir: localPkgDir != nil ? cLocalPkgDir : nil
+                      )
+                      let result = typst_compile_with_source_map(cSource, &opts)
+                      defer { typst_free_result_with_map(result) }
 
-                    if result.success, let pdfPtr = result.pdf_data {
-                        let pdfData = Data(bytes: pdfPtr, count: Int(result.pdf_len))
-                        let sourceMap = Self.parseSourceMap(result)
-                        return .success((pdfData, sourceMap))
-                    } else if let errPtr = result.error_message {
-                        return .failure(.compilationFailed(String(cString: errPtr)))
-                    } else {
-                        return .failure(.compilationFailed(L10n.tr("error.typst.unknown_compilation")))
+                      if result.success, let pdfPtr = result.pdf_data {
+                          let pdfData = Data(bytes: pdfPtr, count: Int(result.pdf_len))
+                          let sourceMap = Self.parseSourceMap(result)
+                          return .success((pdfData, sourceMap))
+                      } else if let errPtr = result.error_message {
+                          return .failure(.compilationFailed(String(cString: errPtr)))
+                      } else {
+                          return .failure(.compilationFailed(L10n.tr("error.typst.unknown_compilation")))
+                      }
                     }
                   }
                 }

@@ -60,6 +60,11 @@
 "error.typst.compiler_not_linked" = "Typst 編譯器程式庫尚未連結，請執行 rust-ffi/build-ios.sh。";
 "error.typst.unknown_compilation" = "未知的編譯錯誤";
 "error.typst.compilation_timeout" = "編譯逾時。";
+
+"error.local_package.storage_unavailable" = "本地套件儲存目錄不可用。";
+"error.local_package.missing_manifest" = "資料夾中缺少 typst.toml 清單檔案。";
+"error.local_package.invalid_manifest" = "typst.toml 無效：%@";
+
 "error.image.load_data_failed" = "載入圖片資料失敗。";
 "error.image.process_failed" = "無法處理圖片。";
 "error.datastore.title" = "無法開啟資料儲存";
@@ -151,6 +156,18 @@
 "Packages" = "套件";
 "No cached document previews" = "沒有已快取的文件預覽";
 "No cached @preview packages" = "沒有已快取的 @preview 套件";
+
+"local_packages.title" = "本地套件";
+"local_packages.import" = "匯入套件";
+"local_packages.section_title" = "已安裝的套件";
+"local_packages.empty" = "沒有已安裝的本地套件";
+"local_packages.info_title" = "關於本地套件";
+"local_packages.info_body" = "匯入包含 typst.toml 清單檔案的套件資料夾。在文件中透過 #import \"@local/name:version\" 使用，支援 @local 及自訂命名空間。";
+"local_packages.imported" = "套件已匯入";
+"local_packages.imported_message" = "已成功匯入 %@，現在可以在文件中使用。";
+"local_packages.clear_all_title" = "移除所有本地套件？";
+"local_packages.clear_all_button" = "全部移除";
+"local_packages.clear_all_message" = "這會移除所有已安裝的本地套件。使用這些套件的文件將無法編譯，直到重新匯入。";
 "Compile Now" = "立即編譯";
 "Recompile" = "重新編譯";
 "Cache Error" = "快取錯誤";

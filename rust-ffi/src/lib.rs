@@ -50,6 +50,9 @@ pub struct TypstOptions {
     pub cache_dir: *const c_char,
     /// Root directory for resolving local file references (e.g. #image("images/photo.jpg")).
     pub root_dir: *const c_char,
+    /// Root directory for local packages (e.g. @local/mypackage:1.0.0).
+    /// Expected layout: {local_packages_dir}/{namespace}/{name}/{version}/
+    pub local_packages_dir: *const c_char,
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +69,8 @@ struct SimpleWorld {
     pkg_cache_root: Option<PathBuf>,
     /// Root directory for resolving local file references (images, imports).
     root_dir: Option<PathBuf>,
+    /// Root directory for local packages (checked before downloading).
+    local_packages_root: Option<PathBuf>,
     /// Maps "ns/name/ver" → Ok(extracted dir) | Err(message).
     pkg_dirs: Mutex<HashMap<String, Result<PathBuf, PackageError>>>,
     /// Per-request source cache (avoids re-reading the same file).
@@ -94,6 +99,7 @@ impl SimpleWorld {
 
         let mut pkg_cache_root: Option<PathBuf> = None;
         let mut root_dir: Option<PathBuf> = None;
+        let mut local_packages_root: Option<PathBuf> = None;
         let mut font_paths: Vec<String> = Vec::new();
 
         if !options.is_null() {
@@ -138,6 +144,16 @@ impl SimpleWorld {
                     }
                 }
             }
+
+            // --- Local packages directory ---
+            if !opts.local_packages_dir.is_null() {
+                if let Ok(s) = CStr::from_ptr(opts.local_packages_dir).to_str() {
+                    if !s.is_empty() {
+                        local_packages_root = Some(PathBuf::from(s));
+                        debug_log!("[typst-ffi] local_packages_dir: {}", s);
+                    }
+                }
+            }
         }
 
         // --- Extra font paths (system CJK fonts from Swift/CoreText) ---
@@ -165,6 +181,7 @@ impl SimpleWorld {
             source,
             pkg_cache_root,
             root_dir,
+            local_packages_root,
             pkg_dirs: Mutex::new(HashMap::new()),
             source_cache: Mutex::new(HashMap::new()),
             file_cache: Mutex::new(HashMap::new()),
@@ -179,6 +196,20 @@ impl SimpleWorld {
             let guard = self.pkg_dirs.lock().unwrap();
             if let Some(result) = guard.get(&key) {
                 return result.clone().map_err(FileError::Package);
+            }
+        }
+
+        // Check local packages directory first (supports @local and any custom namespace).
+        if let Some(local_root) = &self.local_packages_root {
+            let local_dir = local_root
+                .join(spec.namespace.as_str())
+                .join(spec.name.as_str())
+                .join(spec.version.to_string());
+            if local_dir.exists() {
+                debug_log!("[typst-ffi] resolved local package: {}", key);
+                let result = Ok(local_dir);
+                self.pkg_dirs.lock().unwrap().insert(key, result.clone());
+                return result.map_err(FileError::Package);
             }
         }
 
@@ -1056,6 +1087,7 @@ mod tests {
             font_path_count: 1,
             cache_dir: std::ptr::null(),
             root_dir: std::ptr::null(),
+            local_packages_dir: std::ptr::null(),
         };
 
         let world = unsafe { SimpleWorld::new("= Hello", &options) };
@@ -1072,6 +1104,7 @@ mod tests {
             font_path_count: 0,
             cache_dir: empty_cache.as_ptr(),
             root_dir: std::ptr::null(),
+            local_packages_dir: std::ptr::null(),
         };
 
         let world = unsafe { SimpleWorld::new("= Hello", &options) };

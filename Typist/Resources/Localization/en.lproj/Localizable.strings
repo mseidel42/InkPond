@@ -60,6 +60,10 @@
 "error.typst.compiler_not_linked" = "Typst compiler library not linked. Run rust-ffi/build-ios.sh.";
 "error.typst.unknown_compilation" = "Unknown compilation error";
 "error.typst.compilation_timeout" = "Compilation timed out.";
+
+"error.local_package.storage_unavailable" = "Local packages storage directory is unavailable.";
+"error.local_package.missing_manifest" = "The folder does not contain a typst.toml manifest.";
+"error.local_package.invalid_manifest" = "Invalid typst.toml: %@";
 "error.image.load_data_failed" = "Failed to load image data.";
 "error.image.process_failed" = "Could not process image.";
 "error.datastore.title" = "Unable to Open Data Store";
@@ -173,6 +177,18 @@
 "Packages" = "Packages";
 "No cached document previews" = "No cached document previews";
 "No cached @preview packages" = "No cached @preview packages";
+
+"local_packages.title" = "Local Packages";
+"local_packages.import" = "Import Package";
+"local_packages.section_title" = "Installed Packages";
+"local_packages.empty" = "No local packages installed";
+"local_packages.info_title" = "About Local Packages";
+"local_packages.info_body" = "Import package folders containing a typst.toml manifest. Use them in your documents with #import \"@local/name:version\". Supports @local and custom namespaces.";
+"local_packages.imported" = "Package Imported";
+"local_packages.imported_message" = "Successfully imported %@. You can now use it in your documents.";
+"local_packages.clear_all_title" = "Remove All Local Packages?";
+"local_packages.clear_all_button" = "Remove All";
+"local_packages.clear_all_message" = "This removes all installed local packages. Documents using them will fail to compile until the packages are re-imported.";
 "Compile Now" = "Compile Now";
 "Recompile" = "Recompile";
 "Cache Error" = "Cache Error";

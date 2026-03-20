@@ -60,6 +60,11 @@
 "error.typst.compiler_not_linked" = "Typst 编译器库未链接，请运行 rust-ffi/build-ios.sh。";
 "error.typst.unknown_compilation" = "未知编译错误";
 "error.typst.compilation_timeout" = "编译超时。";
+
+"error.local_package.storage_unavailable" = "本地包存储目录不可用。";
+"error.local_package.missing_manifest" = "文件夹中缺少 typst.toml 清单文件。";
+"error.local_package.invalid_manifest" = "typst.toml 无效：%@";
+
 "error.image.load_data_failed" = "加载图片数据失败。";
 "error.image.process_failed" = "图片处理失败。";
 "error.datastore.title" = "无法打开数据存储";
@@ -151,6 +156,18 @@
 "Packages" = "包";
 "No cached document previews" = "没有已缓存的文档预览";
 "No cached @preview packages" = "没有已缓存的 @preview 包";
+
+"local_packages.title" = "本地包";
+"local_packages.import" = "导入包";
+"local_packages.section_title" = "已安装的包";
+"local_packages.empty" = "没有已安装的本地包";
+"local_packages.info_title" = "关于本地包";
+"local_packages.info_body" = "导入包含 typst.toml 清单文件的包文件夹。在文档中通过 #import \"@local/name:version\" 使用，支持 @local 及自定义命名空间。";
+"local_packages.imported" = "包已导入";
+"local_packages.imported_message" = "已成功导入 %@，现在可以在文档中使用了。";
+"local_packages.clear_all_title" = "移除所有本地包？";
+"local_packages.clear_all_button" = "全部移除";
+"local_packages.clear_all_message" = "这会移除所有已安装的本地包。使用这些包的文档将无法编译，直到重新导入。";
 "Compile Now" = "立即编译";
 "Recompile" = "重新编译";
 "Cache Error" = "缓存错误";

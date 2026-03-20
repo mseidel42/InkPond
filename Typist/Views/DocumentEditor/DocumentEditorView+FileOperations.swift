@@ -380,6 +380,17 @@ extension DocumentEditorView {
         cachedExternalLabels = labels
 
         refreshImageFiles()
+        refreshPackageSpecs()
+    }
+
+    func refreshPackageSpecs() {
+        let store = LocalPackageStore()
+        Task.detached(priority: .utility) {
+            let snapshot = try? store.snapshot()
+            await MainActor.run { [snapshot] in
+                cachedPackageSpecs = snapshot?.entries.map { $0.spec } ?? []
+            }
+        }
     }
 
     func refreshImageFiles() {

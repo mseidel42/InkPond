@@ -12,6 +12,8 @@ typedef struct {
     const char         *cache_dir;
     /// Root directory for resolving local file references (e.g. images).
     const char         *root_dir;
+    /// Root directory for local packages (@local and custom namespaces).
+    const char         *local_packages_dir;
 } TypstOptions;
 
 /// Result returned by typst_compile. Free with typst_free_result.

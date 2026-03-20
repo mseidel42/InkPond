@@ -73,6 +73,7 @@ struct DocumentEditorView: View {
     @State var cachedBibEntries: [(key: String, type: String)] = []
     @State var cachedExternalLabels: [(name: String, kind: String)] = []
     @State var cachedImageFiles: [String] = []
+    @State var cachedPackageSpecs: [String] = []
     @State var showingPositionRestore = false
     @State var pendingPreviewSync = false
     @State var compilationErrorLines: Set<Int> = []
