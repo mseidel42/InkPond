@@ -16,7 +16,7 @@ if find \
   "$REPO_ROOT/rust-ffi/Cargo.toml" \
   "$REPO_ROOT/rust-ffi/Cargo.lock" \
   "$REPO_ROOT/rust-ffi/build-ios.sh" \
-  "$REPO_ROOT/Typist/Bridging/typst_ffi.h" \
+  "$REPO_ROOT/InkPond/Bridging/typst_ffi.h" \
   -newer "$OUTPUT_MARKER" \
   -print -quit | grep -q .; then
   echo "Rust FFI inputs changed. Rebuilding typst_ios.xcframework..."

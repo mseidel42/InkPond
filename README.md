@@ -1,6 +1,6 @@
-# Typist
+# InkPond
 
-Typist is a native iOS/iPadOS editor for [Typst](https://typst.app/), with live preview and PDF export powered by a Rust FFI bridge.
+InkPond (墨池) is a native iOS/iPadOS editor for [Typst](https://typst.app/), with live preview and PDF export powered by a Rust FFI bridge.
 
 <p align="center">
   <a href="https://testflight.apple.com/join/w5jmkR2T"><img src="https://img.shields.io/badge/TestFlight-Beta-0D96F6?logo=apple&logoColor=white" alt="TestFlight"></a>
@@ -24,7 +24,7 @@ Typist is a native iOS/iPadOS editor for [Typst](https://typst.app/), with live 
 |---|---|
 | Join beta | [testflight.apple.com/join/w5jmkR2T](https://testflight.apple.com/join/w5jmkR2T) |
 | Build Rust FFI | `cd rust-ffi && ./build-ios.sh` |
-| Simulator debug build | `xcodebuild -project Typist.xcodeproj -scheme Typist -configuration Debug -destination 'generic/platform=iOS Simulator' build` |
+| Simulator debug build | `xcodebuild -project InkPond.xcodeproj -scheme InkPond -configuration Debug -destination 'generic/platform=iOS Simulator' build` |
 | Export options file | `release/ExportOptions.plist` |
 
 ## Features
@@ -74,7 +74,7 @@ Typist is a native iOS/iPadOS editor for [Typst](https://typst.app/), with live 
 1. Clone repo:
    ```bash
    git clone <your-fork-or-origin-url>
-   cd Typist
+   cd InkPond
    ```
 2. Make sure the native toolchain is ready:
    ```bash
@@ -92,22 +92,22 @@ Typist is a native iOS/iPadOS editor for [Typst](https://typst.app/), with live 
    This generates `Frameworks/typst_ios.xcframework`, which is not committed to git.
 4. Build and run in Xcode:
    ```bash
-   open Typist.xcodeproj
+   open InkPond.xcodeproj
    ```
 
 ## Build Commands
 
 ```bash
 # Simulator debug build
-xcodebuild -project Typist.xcodeproj -scheme Typist -configuration Debug -destination 'generic/platform=iOS Simulator' build
+xcodebuild -project InkPond.xcodeproj -scheme InkPond -configuration Debug -destination 'generic/platform=iOS Simulator' build
 
 # Device release archive
-xcodebuild -project Typist.xcodeproj -scheme Typist -configuration Release -destination 'generic/platform=iOS' archive
+xcodebuild -project InkPond.xcodeproj -scheme InkPond -configuration Release -destination 'generic/platform=iOS' archive
 
 # Tests
-xcodebuild test -project Typist.xcodeproj -scheme Typist -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
+xcodebuild test -project InkPond.xcodeproj -scheme InkPond -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 # If your local simulator list differs, inspect available destinations first:
-# xcodebuild -showdestinations -project Typist.xcodeproj -scheme Typist
+# xcodebuild -showdestinations -project InkPond.xcodeproj -scheme InkPond
 ```
 
 ## Rust FFI Notes
@@ -129,13 +129,13 @@ Typical flow:
 
 ```bash
 # 1) Archive
-xcodebuild -project Typist.xcodeproj -scheme Typist -configuration Release -destination 'generic/platform=iOS' -archivePath /private/tmp/Typist.xcarchive archive
+xcodebuild -project InkPond.xcodeproj -scheme InkPond -configuration Release -destination 'generic/platform=iOS' -archivePath /private/tmp/InkPond.xcarchive archive
 
 # 2) Export IPA (using your ExportOptions.plist)
-xcodebuild -exportArchive -archivePath /private/tmp/Typist.xcarchive -exportPath /private/tmp/Typist-export -exportOptionsPlist release/ExportOptions.plist
+xcodebuild -exportArchive -archivePath /private/tmp/InkPond.xcarchive -exportPath /private/tmp/InkPond-export -exportOptionsPlist release/ExportOptions.plist
 
 # 3) Upload (example app id)
-asc --profile default builds upload --app 6760032537 --ipa /private/tmp/Typist-export/Typist.ipa --output table
+asc --profile default builds upload --app 6760032537 --ipa /private/tmp/InkPond-export/InkPond.ipa --output table
 ```
 
 After upload, wait for processing, then distribute build to TestFlight groups.
@@ -143,12 +143,12 @@ After upload, wait for processing, then distribute build to TestFlight groups.
 ## Project Layout
 
 ```text
-Typist/
-├── Typist/
-│   ├── TypistApp.swift                 # @main entry point, SwiftData ModelContainer
+InkPond/
+├── InkPond/
+│   ├── InkPondApp.swift                 # @main entry point, SwiftData ModelContainer
 │   ├── ContentView.swift               # NavigationSplitView shell, environment setup
 │   ├── Models/
-│   │   └── TypistDocument.swift        # @Model: document data + project config
+│   │   └── InkPondDocument.swift        # @Model: document data + project config
 │   ├── Editor/
 │   │   ├── TypstTextView.swift         # UITextView subclass (TextKit 1)
 │   │   ├── SyntaxHighlighter.swift     # 15-rule highlighting + rainbow brackets
@@ -197,7 +197,7 @@ Typist/
 │   └── typst_ios.xcframework/          # Generated build artifact (not committed)
 ├── release/
 │   └── ExportOptions.plist
-└── Typist.xcodeproj
+└── InkPond.xcodeproj
 ```
 
 ## Troubleshooting

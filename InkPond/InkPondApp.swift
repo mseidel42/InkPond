@@ -1,0 +1,97 @@
+//
+//  InkPondApp.swift
+//  InkPond
+//
+//  Created by Lin Qidi on 2026/3/2.
+//
+
+import SwiftUI
+import SwiftData
+import os
+
+@main
+struct InkPondApp: App {
+    @State private var storageManager: StorageManager
+    @State private var modelContainer: ModelContainer?
+    @State private var containerIdentity = UUID()
+    @State private var snippetStore = SnippetStore()
+
+    init() {
+        let manager = StorageManager()
+        ProjectFileManager.storageManager = manager
+        _storageManager = State(initialValue: manager)
+        _modelContainer = State(initialValue: Self.makeModelContainer(using: manager.mode))
+    }
+
+    private static func makeModelContainer(using mode: StorageMode) -> ModelContainer? {
+        let processInfo = ProcessInfo.processInfo
+        let useInMemoryStore = processInfo.arguments.contains("UITEST_IN_MEMORY_STORE")
+            || processInfo.environment["UITEST_IN_MEMORY_STORE"] == "1"
+        let schema = Schema([
+            InkPondDocument.self,
+        ])
+
+        let modelConfiguration: ModelConfiguration
+        if useInMemoryStore {
+            modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        } else {
+            modelConfiguration = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: false,
+                cloudKitDatabase: mode == .iCloud ? .automatic : .none
+            )
+        }
+
+        do {
+            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+        } catch {
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "InkPond", category: "DataStore")
+                .error("Failed to create ModelContainer: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    var body: some Scene {
+        let currentStorageMode = storageManager.mode
+        WindowGroup {
+            Group {
+                if let container = modelContainer {
+                    ContentView()
+                        .id(containerIdentity)
+                        .modelContainer(container)
+                        .environment(snippetStore)
+                        .environment(storageManager)
+                } else {
+                    DataStoreErrorView()
+                }
+            }
+            .task {
+                ExportManager.cleanupTemporaryExports()
+                FontManager.pruneRegistrationCache()
+            }
+            .onChange(of: currentStorageMode) { _, newMode in
+                ProjectFileManager.storageManager = storageManager
+                modelContainer = Self.makeModelContainer(using: newMode)
+                containerIdentity = UUID()
+            }
+        }
+    }
+}
+
+/// Shown when the SwiftData store cannot be opened.
+private struct DataStoreErrorView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text(L10n.tr("error.datastore.title"))
+                .font(.title2.bold())
+            Text(L10n.tr("error.datastore.message"))
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+    }
+}
