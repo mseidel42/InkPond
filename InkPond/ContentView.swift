@@ -63,7 +63,10 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 320, ideal: 340)
         } detail: {
             if let document = selectedDocument {
-                DocumentEditorView(document: document, isSidebarVisible: columnVisibility != .detailOnly)
+                DocumentEditorView(
+                    document: document,
+                    isSidebarVisible: columnVisibility != .detailOnly
+                )
                     .id(document.persistentModelID)
             } else {
                 ContentUnavailableView(

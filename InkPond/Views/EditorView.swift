@@ -26,6 +26,7 @@ struct EditorView: UIViewRepresentable {
     @Binding var viewState: EditorViewState
     @Binding var cursorJumpOffset: Int?
     var focusCoordinator: EditorFocusCoordinator? = nil
+    var topViewportInset: CGFloat = 0
     var sourceMap: SourceMap?
     var syncCoordinator: SyncCoordinator?
     var theme: EditorTheme = .system
@@ -50,6 +51,7 @@ struct EditorView: UIViewRepresentable {
         context.coordinator.textView = textView
         focusCoordinator?.register(textView)
         textView.applyTheme(theme)
+        textView.topViewportInset = topViewportInset
         textView.accessibilityLabel = L10n.a11yEditorLabel
         textView.accessibilityHint = L10n.a11yEditorHint
         textView.accessibilityIdentifier = "editor.text-view"
@@ -62,6 +64,7 @@ struct EditorView: UIViewRepresentable {
         context.coordinator.parent = self
         focusCoordinator?.register(textView)
         textView.applyTheme(theme)
+        textView.topViewportInset = topViewportInset
         textView.setErrorLines(errorLines)
         textView.accessibilityLabel = L10n.a11yEditorLabel
         textView.accessibilityHint = L10n.a11yEditorHint

@@ -45,16 +45,18 @@ struct DocumentEditorView: View {
     @State var lastPersistedFileDate: Date?
     @State var saveTask: Task<Void, Never>?
     @State var backgroundFileWriter = BackgroundDocumentFileWriter()
-    @State var showingConflictWarning = false
-    @State var conflictFileName: String = ""
     @State var compileFontPaths: [String]
 
-    @State var selectedTab: Int = 0
+    let editorTab:Int = 0
+    let previewTab:Int = 1
+    @State var selectedTab:Int = 0
     @State var showingSlideshow = false
     @State var editorFraction: CGFloat = 0.5
     @State var showingPhotoPicker = false
     @State var showingFileBrowser = false
     @State var showingProjectSettings = false
+    @State var showingConflictWarning = false
+    @State var conflictFileName: String = ""
     @State var selectedPhotoItems: [PhotosPickerItem] = []
     @State var insertionRequest: EditorInsertionRequest?
     @State var findRequested = false
@@ -87,7 +89,9 @@ struct DocumentEditorView: View {
     @State var positionSyncTask: Task<Void, Never>?
 
     var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
+    
     var isEditingEntryFile: Bool { currentFileName == document.entryFileName }
+    
     var compiledPreviewCacheDescriptor: CompiledPreviewCacheDescriptor {
         CompiledPreviewCacheDescriptor(
             projectID: document.projectID,
@@ -100,7 +104,10 @@ struct DocumentEditorView: View {
         FontManager.completionFamilyNames(from: compileFontPaths)
     }
 
-    init(document: InkPondDocument, isSidebarVisible: Bool = false) {
+    init(
+        document: InkPondDocument,
+        isSidebarVisible: Bool = false
+    ) {
         self.document = document
         self.isSidebarVisible = isSidebarVisible
         _compileFontPaths = State(initialValue: FontManager.allFontPaths(for: document))

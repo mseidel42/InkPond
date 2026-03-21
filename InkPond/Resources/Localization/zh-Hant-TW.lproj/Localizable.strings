@@ -91,6 +91,7 @@
 "Delete Document" = "刪除文件";
 "Delete" = "刪除";
 "Import Error" = "匯入錯誤";
+"Share" = "分享";
 "Share PDF" = "分享 PDF";
 "Export .typ" = "匯出 .typ";
 "Mode" = "模式";
@@ -329,6 +330,9 @@
 "resume.alert.message_with_file" = "返回上次在 %@ 中離開的位置？";
 "resume.alert.action.resume" = "繼續";
 "resume.alert.action.start_from_top" = "從頭開始";
+"resume.banner.label" = "返回上次編輯位置";
+"resume.banner.label_with_file" = "返回 %@ 繼續編輯";
+"resume.banner.a11y_hint" = "點擊跳轉到上次編輯位置";
 
 "resume.banner.label" = "返回上次編輯位置";
 "resume.banner.label_with_file" = "返回 %@ 繼續編輯";

@@ -10,6 +10,16 @@ import SwiftUI
 import PDFKit
 import NaturalLanguage
 
+private struct SoftScrollEdgeEffect: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .all)
+        } else {
+            content
+        }
+    }
+}
+
 private struct CompilationErrorPresentation {
     let summary: String
     let detail: String
@@ -90,6 +100,12 @@ final class PDFContainerView: UIView {
     /// When true, `reloadDocument` skips scroll restoration so that
     /// a pending `scrollToPosition` call can take priority.
     var suppressScrollRestoration = false
+    var topViewportInset: CGFloat = 0 {
+        didSet {
+            guard oldValue != topViewportInset else { return }
+            updateScrollInsetsIfNeeded()
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -101,7 +117,7 @@ final class PDFContainerView: UIView {
         NSLayoutConstraint.activate([
             pdfView.leadingAnchor.constraint(equalTo: leadingAnchor),
             pdfView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            pdfView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            pdfView.topAnchor.constraint(equalTo: topAnchor),
             pdfView.bottomAnchor.constraint(equalTo: bottomAnchor),
             syncMarkerView.leadingAnchor.constraint(equalTo: leadingAnchor),
             syncMarkerView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -137,6 +153,7 @@ final class PDFContainerView: UIView {
                 guard let self, self.pdfView.document === document else { return }
                 self.layoutIfNeeded()
                 self.pdfView.layoutIfNeeded()
+                self.updateScrollInsetsIfNeeded(forcePinnedTop: true)
                 DispatchQueue.main.async { [weak self, weak focusCoordinator] in
                     guard let self, self.pdfView.document === document else { return }
                     focusCoordinator?.setResignSuppressed(false)
@@ -169,6 +186,7 @@ final class PDFContainerView: UIView {
                     }
                 }
             }
+            self.updateScrollInsetsIfNeeded()
             self.suppressScrollRestoration = false
 
             focusCoordinator?.setResignSuppressed(false)
@@ -199,6 +217,32 @@ final class PDFContainerView: UIView {
         }
 
         return nil
+    }
+
+    private func updateScrollInsetsIfNeeded(forcePinnedTop: Bool = false) {
+        guard let scrollView = findScrollView(in: pdfView) else { return }
+
+        let previousAdjustedTop = scrollView.adjustedContentInset.top
+        let wasPinnedToTop = forcePinnedTop || abs(scrollView.contentOffset.y + previousAdjustedTop) < 2
+
+        if scrollView.contentInset.top != topViewportInset {
+            var insets = scrollView.contentInset
+            insets.top = topViewportInset
+            scrollView.contentInset = insets
+        }
+
+        if scrollView.verticalScrollIndicatorInsets.top != topViewportInset {
+            var indicatorInsets = scrollView.verticalScrollIndicatorInsets
+            indicatorInsets.top = topViewportInset
+            scrollView.verticalScrollIndicatorInsets = indicatorInsets
+        }
+
+        if wasPinnedToTop {
+            scrollView.setContentOffset(
+                CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top),
+                animated: false
+            )
+        }
     }
 
     private func clampedContentOffset(_ contentOffset: CGPoint, in scrollView: UIScrollView) -> CGPoint {
@@ -281,6 +325,7 @@ private final class PreviewSyncMarkerView: UIView {
 struct PDFKitView: UIViewRepresentable {
     let document: PDFDocument
     let focusCoordinator: EditorFocusCoordinator?
+    var topViewportInset: CGFloat = 0
     var scrollTarget: PreviewScrollTarget?
     var onTapLocation: ((_ page: Int, _ yPoints: Float) -> Void)?
 
@@ -316,6 +361,7 @@ struct PDFKitView: UIViewRepresentable {
     func updateUIView(_ container: PDFContainerView, context: Context) {
         context.coordinator.onTapLocation = onTapLocation
         context.coordinator.pdfView = container.pdfView
+        container.topViewportInset = topViewportInset
         container.accessibilityLabel = L10n.a11yPreviewLabel
         container.accessibilityHint = L10n.a11yPreviewHint
         container.accessibilityValue = L10n.a11yPreviewValueReady
@@ -458,6 +504,7 @@ struct PreviewPane: View {
     var syncCoordinator: SyncCoordinator? = nil
     /// The actual entry file name — Typst FFI internally reports it as "main.typ".
     var entryFileName: String = "main.typ"
+    var topViewportInset: CGFloat = 0
     var onGoToError: ((_ file: String, _ line: Int, _ column: Int) -> Void)? = nil
     @ScaledMetric(relativeTo: .caption2) private var previewStatsCardWidth = 126
     @ScaledMetric(relativeTo: .caption2) private var previewStatsMinHeight = 34
@@ -481,13 +528,14 @@ struct PreviewPane: View {
     private var prefersChineseStatistics: Bool {
         cachedIsCJK
     }
-
+    
     var body: some View {
         ZStack(alignment: .bottom) {
             if let pdf = compiler.pdfDocument {
                 PDFKitView(
                     document: pdf,
                     focusCoordinator: focusCoordinator,
+                    topViewportInset: topViewportInset,
                     scrollTarget: syncCoordinator?.previewScrollTarget,
                     onTapLocation: { page, yPoints in
                         guard let syncCoordinator,
@@ -503,15 +551,17 @@ struct PreviewPane: View {
                         )
                     }
                 )
-                    .ignoresSafeArea(edges: .bottom)
-                    .accessibilityLabel(L10n.a11yPreviewLabel)
-                    .accessibilityHint(L10n.a11yPreviewHint)
-                    .accessibilityValue(
-                        compiler.errorMessage == nil ? L10n.a11yPreviewValueReady : L10n.a11yPreviewValueError
-                    )
-                    .accessibilityIdentifier("editor.preview")
+                .ignoresSafeArea(edges: .bottom)
+                .modifier(SoftScrollEdgeEffect())
+                .accessibilityLabel(L10n.a11yPreviewLabel)
+                .accessibilityHint(L10n.a11yPreviewHint)
+                .accessibilityValue(
+                    compiler.errorMessage == nil ? L10n.a11yPreviewValueReady : L10n.a11yPreviewValueError
+                )
+                .accessibilityIdentifier("editor.preview")
             } else {
                 placeholderView
+                    .padding(.top, topViewportInset)
             }
 
             if let error = compiler.errorMessage {
@@ -522,11 +572,19 @@ struct PreviewPane: View {
             }
 
             if compiler.isCompiling {
-                ProgressView()
-                    .padding(8)
-                    .systemFloatingSurface(cornerRadius: 8)
-                    .padding()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                GeometryReader { geometry in
+                    let topPadding = topViewportInset > 0
+                        ? topViewportInset + 8
+                        : geometry.safeAreaInsets.top + 12
+                    ProgressView()
+                        .padding(8)
+                        .systemFloatingSurface(cornerRadius: 8)
+                        .padding(.top, topPadding)
+                        .padding(.trailing, 16)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                }
+                .allowsHitTesting(false)
+                .zIndex(1)
             }
 
             if let stats = previewStatistics {
@@ -537,30 +595,30 @@ struct PreviewPane: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .onChange(of: source, initial: true) {
-            compileIfNeeded()
-            recomputeTextStatistics()
-        }
-        .onChange(of: fontPaths) { compileIfNeeded() }
-        .onChange(of: rootDir) { compileIfNeeded() }
-        .onChange(of: compileToken) { compileIfNeeded() }
-        .onChange(of: compiler.pdfDocument != nil) { _, hasPreview in
-            guard !hasPreview else { return }
-            isShowingStatsDetails = false
-        }
-        .onChange(of: compiler.errorMessage, initial: true) { _, newValue in
-            let shouldExpand = (newValue != nil) && (compiler.pdfDocument == nil)
-            guard shouldExpand != isShowingErrorDetails else { return }
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isShowingErrorDetails = shouldExpand
+            .onChange(of: source, initial: true) {
+                compileIfNeeded()
+                recomputeTextStatistics()
             }
-        }
-        .onDisappear {
-            focusCoordinator?.clearFocusPreservation()
-            compiler.cancel()
-        }
-        .animation(.easeInOut(duration: 0.2), value: compiler.errorMessage)
-        .animation(.easeInOut(duration: 0.2), value: isShowingErrorDetails)
+            .onChange(of: fontPaths) { compileIfNeeded() }
+            .onChange(of: rootDir) { compileIfNeeded() }
+            .onChange(of: compileToken) { compileIfNeeded() }
+            .onChange(of: compiler.pdfDocument != nil) { _, hasPreview in
+                guard !hasPreview else { return }
+                isShowingStatsDetails = false
+            }
+            .onChange(of: compiler.errorMessage, initial: true) { _, newValue in
+                let shouldExpand = (newValue != nil) && (compiler.pdfDocument == nil)
+                guard shouldExpand != isShowingErrorDetails else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isShowingErrorDetails = shouldExpand
+                }
+            }
+            .onDisappear {
+                focusCoordinator?.clearFocusPreservation()
+                compiler.cancel()
+            }
+            .animation(.easeInOut(duration: 0.2), value: compiler.errorMessage)
+            .animation(.easeInOut(duration: 0.2), value: isShowingErrorDetails)
     }
 
     private func recomputeTextStatistics() {
