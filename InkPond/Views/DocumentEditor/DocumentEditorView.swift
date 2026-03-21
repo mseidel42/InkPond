@@ -42,8 +42,11 @@ struct DocumentEditorView: View {
     @State var compileToken: UUID = UUID()
     @State var isLoadingFileContent = false
     @State var lastPersistedText: String = ""
+    @State var lastPersistedFileDate: Date?
     @State var saveTask: Task<Void, Never>?
     @State var backgroundFileWriter = BackgroundDocumentFileWriter()
+    @State var showingConflictWarning = false
+    @State var conflictFileName: String = ""
     @State var compileFontPaths: [String]
 
     @State var selectedTab: Int = 0
@@ -75,6 +78,7 @@ struct DocumentEditorView: View {
     @State var cachedImageFiles: [String] = []
     @State var cachedPackageSpecs: [String] = []
     @State var showingPositionRestore = false
+    @State var positionRestoreDismissTask: Task<Void, Never>?
     @State var pendingPreviewSync = false
     @State var compilationErrorLines: Set<Int> = []
     @State var showingKeyboardShortcuts = false

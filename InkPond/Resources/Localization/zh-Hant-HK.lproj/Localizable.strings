@@ -165,7 +165,8 @@
 
 "local_packages.title" = "本地套件";
 "local_packages.import" = "匯入套件";
-"local_packages.import_detail" = "同時選取多個資料夾或壓縮檔。";
+"local_packages.import_detail" = "選取一個或多個套件壓縮檔來匯入。";
+"local_packages.import_tips.footer" = "可一次選取多個壓縮檔（.zip、.tar、.tar.gz）批次匯入，或選取單個資料夾。每個套件必須包含 typst.toml 清單檔案。\n\n你亦可透過「檔案」App 將未壓縮的套件資料夾直接放入 LocalPackages 目錄，應用會自動識別。";
 "local_packages.import_folder" = "匯入整個資料夾";
 "local_packages.import_folder_detail" = "選一個資料夾，把裡面的所有套件都匯入。";
 "local_packages.section_title" = "已安裝的套件";
@@ -329,6 +330,10 @@
 "resume.alert.action.resume" = "繼續";
 "resume.alert.action.start_from_top" = "從頭開始";
 
+"resume.banner.label" = "返回上次編輯位置";
+"resume.banner.label_with_file" = "返回 %@ 繼續編輯";
+"resume.banner.a11y_hint" = "點擊跳轉到上次編輯位置";
+
 "snippet.title" = "代碼片段";
 "snippet.search.prompt" = "搜尋代碼片段";
 "snippet.action.new" = "新增片段";
@@ -358,12 +363,21 @@
 "onboarding.projects.subtitle" = "在獨立的專案目錄中管理原始檔、圖片和字型。\n支援 ZIP 匯入匯出。";
 "onboarding.action.get_started" = "開始使用";
 
+"network.status.connected" = "已連線";
+"network.status.disconnected" = "無網絡連線";
+"network.status.expensive" = "已連線（流動數據）";
+"network.status.constrained" = "已連線（受限）";
+
 "icloud.title" = "iCloud";
+"icloud.summary.on" = "已開啟";
+"icloud.summary.off" = "未開啟";
+"icloud.status_section" = "同步狀態";
 "icloud.sync_toggle" = "同步專案";
 "icloud.sync_fonts_toggle" = "同步字型";
 "icloud.sync_packages_toggle" = "同步套件";
-"icloud.sync_footer.on" = "專案會透過 iCloud 同步。字型和套件是否同步由上方開關決定。";
-"icloud.sync_footer.off" = "專案會保留在本機。你可以先設定好字型和套件的同步偏好，再開啟專案同步。";
+"icloud.sync_snippets_toggle" = "同步程式碼片段";
+"icloud.sync_footer.on" = "專案會透過 iCloud 同步。字型、套件和程式碼片段是否同步由上方開關決定。";
+"icloud.sync_footer.off" = "專案會保留在本機。你可以先設定好字型、套件和程式碼片段的同步偏好，再開啟專案同步。";
 "icloud.error.unavailable" = "iCloud 不可用。請在系統設定中登入 iCloud。";
 "icloud.migrating" = "正在遷移檔案⋯";
 "icloud.restart_title" = "需要重新啟動";
@@ -381,3 +395,13 @@
 "icloud.status.syncing" = "正在同步 %d 個檔案⋯";
 "icloud.status.not_downloaded" = "%d 個檔案未下載";
 "icloud.status.error" = "%d 個檔案同步出錯";
+"icloud.error.no_network" = "沒有網絡連線。請檢查網絡後重試。";
+"icloud.error.partial_migration" = "%d 個專案未能遷移。你可以在設定中重試。";
+"icloud.error.sync_issues_title" = "偵測到同步問題";
+"icloud.error.sync_issues_body" = "部分檔案同步 iCloud 失敗。可能是 iCloud 儲存空間不足、網絡問題或伺服器暫時故障。請在系統設定中檢查 iCloud 儲存空間。";
+"icloud.error.and_more" = "以及其他 %d 個⋯";
+"icloud.retry_migration" = "重試遷移（%d 個失敗）";
+"icloud.conflict.title" = "檔案在其他裝置上被修改";
+"icloud.conflict.message" = "「%@」在你編輯期間被其他裝置修改了。請選擇保留哪個版本。";
+"icloud.conflict.keep_local" = "保留我的修改";
+"icloud.conflict.keep_remote" = "使用其他裝置的版本";

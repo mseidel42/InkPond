@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Network
 import os
 
 enum StorageMode: String {
@@ -14,6 +15,7 @@ enum StorageMode: String {
 enum SyncContentCategory {
     case appFonts
     case localPackages
+    case snippets
 
     nonisolated var directoryName: String {
         switch self {
@@ -21,6 +23,8 @@ enum SyncContentCategory {
             return "AppFonts"
         case .localPackages:
             return "LocalPackages"
+        case .snippets:
+            return "Snippets"
         }
     }
 
@@ -30,6 +34,9 @@ enum SyncContentCategory {
             return FontManager.localAppFontsRootURL
         case .localPackages:
             return TypstBridge.localPackagesRootURL
+        case .snippets:
+            return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent(AppIdentity.snippetStoreDirectoryName, isDirectory: true)
         }
     }
 }
@@ -39,6 +46,7 @@ final class StorageManager {
     private static let storageKey = StorageSyncPreferences.storageModeKey
     private static let syncFontsKey = StorageSyncPreferences.syncFontsKey
     private static let syncPackagesKey = StorageSyncPreferences.syncPackagesKey
+    private static let syncSnippetsKey = StorageSyncPreferences.syncSnippetsKey
 
     private(set) var mode: StorageMode
     private(set) var iCloudAvailable: Bool = false
@@ -48,6 +56,14 @@ final class StorageManager {
     private(set) var migrationProgress: Double = 0
     private(set) var syncFontsInICloud: Bool
     private(set) var syncPackagesInICloud: Bool
+    private(set) var syncSnippetsInICloud: Bool
+
+    /// Project IDs that failed during the last migration attempt.
+    /// Non-empty means the migration partially succeeded and can be retried.
+    private(set) var failedProjectIDs: [String] = []
+
+    /// Whether a partial migration can be retried.
+    var canRetryMigration: Bool { !failedProjectIDs.isEmpty && !isMigrating }
 
     /// The ubiquity container URL, if iCloud is available.
     private(set) var ubiquityURL: URL?
@@ -62,6 +78,7 @@ final class StorageManager {
         self.mode = StorageMode(rawValue: raw) ?? .local
         self.syncFontsInICloud = StorageSyncPreferences.fontPreferenceEnabled
         self.syncPackagesInICloud = StorageSyncPreferences.packagePreferenceEnabled
+        self.syncSnippetsInICloud = StorageSyncPreferences.snippetPreferenceEnabled
         // Perform initial availability check. url(forUbiquityContainerIdentifier:)
         // may trigger a first-time container setup, so keep it synchronous at launch
         // to ensure the URL is ready before any file operations.
@@ -117,9 +134,19 @@ final class StorageManager {
         await setAuxiliarySync(enabled, for: .localPackages)
     }
 
+    func setSyncSnippetsInICloud(_ enabled: Bool) async {
+        await setAuxiliarySync(enabled, for: .snippets)
+    }
+
     func setMode(_ newMode: StorageMode, documents: [InkPondDocument]) async {
         guard newMode != mode else { return }
         guard !isMigrating else { return }
+
+        // Verify network connectivity before attempting migration
+        guard NetworkReachability.currentlyReachable() else {
+            migrationError = L10n.tr("icloud.error.no_network")
+            return
+        }
 
         if newMode == .iCloud {
             refreshICloudAvailability()
@@ -160,14 +187,17 @@ final class StorageManager {
         let toiCloud = newMode == .iCloud
         let syncFontsInICloud = self.syncFontsInICloud
         let syncPackagesInICloud = self.syncPackagesInICloud
+        let syncSnippetsInICloud = self.syncSnippetsInICloud
         let appFontsDirectoryName = SyncContentCategory.appFonts.directoryName
         let appFontsLocalRootURL = SyncContentCategory.appFonts.localRootURL
         let localPackagesDirectoryName = SyncContentCategory.localPackages.directoryName
         let localPackagesRootURL = SyncContentCategory.localPackages.localRootURL
+        let snippetsDirectoryName = SyncContentCategory.snippets.directoryName
+        let snippetsLocalRootURL = SyncContentCategory.snippets.localRootURL
 
         do {
-            try await Task.detached {
-                try self.migrateFiles(
+            let failures = try await Task.detached {
+                let failed = self.migrateFiles(
                     projectIDs: projectIDs,
                     from: sourceBase,
                     to: destBase,
@@ -196,14 +226,96 @@ final class StorageManager {
                         destinationIsICloud: toiCloud
                     )
                 }
+
+                if syncSnippetsInICloud, let snippetsRoot = snippetsLocalRootURL {
+                    try self.migrateAuxiliaryDirectory(
+                        named: snippetsDirectoryName,
+                        from: toiCloud ? snippetsRoot : sourceBase,
+                        to: toiCloud ? destBase : snippetsRoot,
+                        sourceIsICloud: !toiCloud,
+                        destinationIsICloud: toiCloud
+                    )
+                }
+                return failed
             }.value
+
+            // Switch mode even with partial failures — successfully migrated projects
+            // are already at the destination. Failed ones can be retried.
             mode = newMode
             syncCachedFlag()
             UserDefaults.standard.set(newMode.rawValue, forKey: Self.storageKey)
-            os_log(.info, "StorageManager: switched to %{public}@", newMode.rawValue)
+            failedProjectIDs = failures
+
+            if failures.isEmpty {
+                os_log(.info, "StorageManager: switched to %{public}@", newMode.rawValue)
+            } else {
+                let failedList = failures.joined(separator: ", ")
+                migrationError = L10n.format("icloud.error.partial_migration", failures.count)
+                os_log(.error, "StorageManager: partial migration, failed projects: %{public}@", failedList)
+            }
         } catch {
             migrationError = error.localizedDescription
             os_log(.error, "StorageManager: migration failed: %{public}@", error.localizedDescription)
+        }
+
+        isMigrating = false
+    }
+
+    /// Retry migrating projects that failed during the last migration attempt.
+    func retryFailedMigration(documents: [InkPondDocument]) async {
+        guard !failedProjectIDs.isEmpty else { return }
+        guard !isMigrating else { return }
+
+        guard NetworkReachability.currentlyReachable() else {
+            migrationError = L10n.tr("icloud.error.no_network")
+            return
+        }
+
+        refreshICloudAvailability()
+        guard iCloudAvailable, let iCloudDocs = ubiquityDocumentsURL,
+              iCloudDocs.standardizedFileURL != localDocumentsURL.standardizedFileURL else {
+            migrationError = L10n.tr("icloud.error.unavailable")
+            return
+        }
+
+        isMigrating = true
+        migrationError = nil
+        migrationProgress = 0
+
+        let sourceBase: URL
+        let destBase: URL
+        let toiCloud = mode == .iCloud
+
+        if toiCloud {
+            sourceBase = localDocumentsURL
+            destBase = iCloudDocs
+        } else {
+            sourceBase = iCloudDocs
+            destBase = localDocumentsURL
+        }
+
+        let retryIDs = failedProjectIDs
+
+        let failures = await Task.detached {
+            self.migrateFiles(
+                projectIDs: retryIDs,
+                from: sourceBase,
+                to: destBase,
+                toiCloud: toiCloud
+            ) { progress in
+                Task { @MainActor in
+                    self.migrationProgress = progress
+                }
+            }
+        }.value
+
+        failedProjectIDs = failures
+        if failures.isEmpty {
+            migrationError = nil
+            os_log(.info, "StorageManager: retry migration succeeded")
+        } else {
+            migrationError = L10n.format("icloud.error.partial_migration", failures.count)
+            os_log(.error, "StorageManager: retry still has %d failed projects", failures.count)
         }
 
         isMigrating = false
@@ -227,6 +339,11 @@ final class StorageManager {
 
         guard mode == .iCloud else {
             persistAuxiliarySync(enabled, for: category)
+            return
+        }
+
+        guard NetworkReachability.currentlyReachable() else {
+            migrationError = L10n.tr("icloud.error.no_network")
             return
         }
 
@@ -269,6 +386,8 @@ final class StorageManager {
             return syncFontsInICloud
         case .localPackages:
             return syncPackagesInICloud
+        case .snippets:
+            return syncSnippetsInICloud
         }
     }
 
@@ -280,37 +399,42 @@ final class StorageManager {
         case .localPackages:
             syncPackagesInICloud = enabled
             UserDefaults.standard.set(enabled, forKey: Self.syncPackagesKey)
+        case .snippets:
+            syncSnippetsInICloud = enabled
+            UserDefaults.standard.set(enabled, forKey: Self.syncSnippetsKey)
         }
     }
 
     // MARK: - Migration
 
+    /// Migrates project directories, collecting failures instead of aborting.
+    /// Returns the list of project IDs that failed to migrate.
     private nonisolated func migrateFiles(
         projectIDs: [String],
         from sourceBase: URL,
         to destBase: URL,
         toiCloud: Bool,
         onProgress: @Sendable (Double) -> Void
-    ) throws {
+    ) -> [String] {
         let fm = FileManager.default
 
         // Ensure destination base exists
-        if !fm.fileExists(atPath: destBase.path) {
-            try fm.createDirectory(at: destBase, withIntermediateDirectories: true)
+        do {
+            if !fm.fileExists(atPath: destBase.path) {
+                try fm.createDirectory(at: destBase, withIntermediateDirectories: true)
+            }
+        } catch {
+            os_log(.error, "StorageManager: cannot create destination: %{public}@", error.localizedDescription)
+            return projectIDs
         }
 
-        // When migrating FROM iCloud, ensure each project directory is fully downloaded first.
-        if !toiCloud {
-            for projectID in projectIDs {
-                let sourceDir = sourceBase.appendingPathComponent(projectID, isDirectory: true)
-                guard fm.fileExists(atPath: sourceDir.path) else { continue }
-                try ensureDownloaded(directory: sourceDir)
-            }
-        }
+        // When migrating FROM iCloud, attempt download for each project individually
+        // so that a single download failure doesn't block the rest.
 
         let coordinator = NSFileCoordinator()
         let total = projectIDs.count
         var completed = 0
+        var failedIDs: [String] = []
 
         for projectID in projectIDs {
             let sourceDir = sourceBase.appendingPathComponent(projectID, isDirectory: true)
@@ -322,46 +446,59 @@ final class StorageManager {
                 continue
             }
 
-            // Copy using NSFileCoordinator
-            var coordinationError: NSError?
-            var copyError: Error?
-
-            coordinator.coordinate(
-                readingItemAt: sourceDir, options: [],
-                writingItemAt: destDir, options: .forReplacing,
-                error: &coordinationError
-            ) { coordinatedSource, coordinatedDest in
-                do {
-                    if fm.fileExists(atPath: coordinatedDest.path) {
-                        try fm.removeItem(at: coordinatedDest)
-                    }
-                    try fm.copyItem(at: coordinatedSource, to: coordinatedDest)
-                } catch {
-                    copyError = error
-                }
-            }
-
-            if let coordinationError { throw coordinationError }
-            if let copyError { throw copyError }
-
-            // Verify the copy by checking the destination exists
-            guard fm.fileExists(atPath: destDir.path) else {
-                throw MigrationError.verificationFailed(projectID)
-            }
-
-            // Clean up source after successful copy & verification
             do {
-                try removeMigratedSourceDirectory(at: sourceDir, isICloud: !toiCloud)
+                // Download from iCloud if needed
+                if !toiCloud {
+                    try ensureDownloaded(directory: sourceDir)
+                }
+
+                // Copy using NSFileCoordinator
+                var coordinationError: NSError?
+                var copyError: Error?
+
+                coordinator.coordinate(
+                    readingItemAt: sourceDir, options: [],
+                    writingItemAt: destDir, options: .forReplacing,
+                    error: &coordinationError
+                ) { coordinatedSource, coordinatedDest in
+                    do {
+                        if fm.fileExists(atPath: coordinatedDest.path) {
+                            try fm.removeItem(at: coordinatedDest)
+                        }
+                        try fm.copyItem(at: coordinatedSource, to: coordinatedDest)
+                    } catch {
+                        copyError = error
+                    }
+                }
+
+                if let coordinationError { throw coordinationError }
+                if let copyError { throw copyError }
+
+                // Verify the copy
+                guard fm.fileExists(atPath: destDir.path) else {
+                    throw MigrationError.verificationFailed(projectID)
+                }
+
+                // Clean up source after successful copy & verification
+                do {
+                    try removeMigratedSourceDirectory(at: sourceDir, isICloud: !toiCloud)
+                } catch {
+                    os_log(.error, "StorageManager: cleanup failed for %{public}@: %{public}@",
+                           projectID, error.localizedDescription)
+                }
+
+                os_log(.info, "StorageManager: migrated project %{public}@", projectID)
             } catch {
-                // Cleanup failure is non-fatal — log but continue
-                os_log(.error, "StorageManager: cleanup failed for %{public}@: %{public}@",
+                failedIDs.append(projectID)
+                os_log(.error, "StorageManager: failed to migrate %{public}@: %{public}@",
                        projectID, error.localizedDescription)
             }
 
             completed += 1
             onProgress(Double(completed) / Double(max(total, 1)))
-            os_log(.info, "StorageManager: migrated project %{public}@", projectID)
         }
+
+        return failedIDs
     }
 
     /// Recursively triggers download of all files in an iCloud directory and waits

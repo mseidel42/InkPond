@@ -70,6 +70,7 @@ extension DocumentEditorView {
         editorText = text
         isLoadingFileContent = false
         lastPersistedText = text
+        lastPersistedFileDate = Self.fileModificationDate(for: fileURL)
         if name == document.entryFileName {
             entrySource = text
         }
@@ -96,6 +97,7 @@ extension DocumentEditorView {
 
         let fileURL = ProjectFileManager.typFileURL(named: fileName, for: document)
         let shouldRefreshPreviewAfterSave = fileName != document.entryFileName
+        let savedFileDate = lastPersistedFileDate
 
         saveTask?.cancel()
         saveTask = Task {
@@ -107,12 +109,24 @@ extension DocumentEditorView {
 
             guard !Task.isCancelled else { return }
 
+            // Check for external modifications (another device via iCloud)
+            let currentFileDate = Self.fileModificationDate(for: fileURL)
+            if let saved = savedFileDate, let current = currentFileDate,
+               current.timeIntervalSince(saved) > 1.0 {
+                await MainActor.run {
+                    self.conflictFileName = fileName
+                    self.showingConflictWarning = true
+                }
+                return
+            }
+
             do {
                 try await backgroundFileWriter.write(content, to: fileURL)
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     if self.currentFileName == fileName, self.editorText == content {
                         self.lastPersistedText = content
+                        self.lastPersistedFileDate = Self.fileModificationDate(for: fileURL)
                         self.document.modifiedAt = Date()
                         if shouldRefreshPreviewAfterSave {
                             self.compileToken = UUID()
@@ -127,6 +141,36 @@ extension DocumentEditorView {
                 }
             }
         }
+    }
+
+    /// Returns the file modification date, or nil if the file doesn't exist.
+    static func fileModificationDate(for url: URL) -> Date? {
+        try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
+    }
+
+    /// Resolve a conflict by keeping the local version (overwrite disk).
+    func resolveConflictKeepLocal() {
+        showingConflictWarning = false
+        let content = editorText
+        let fileURL = ProjectFileManager.typFileURL(named: currentFileName, for: document)
+        do {
+            if ProjectFileManager.useCoordination {
+                try CloudFileCoordinator.writeString(content, to: fileURL)
+            } else {
+                try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            }
+            lastPersistedText = content
+            lastPersistedFileDate = Self.fileModificationDate(for: fileURL)
+            document.modifiedAt = Date()
+        } catch {
+            fileSaveError = error.localizedDescription
+        }
+    }
+
+    /// Resolve a conflict by reloading the remote version from disk.
+    func resolveConflictKeepRemote() {
+        showingConflictWarning = false
+        _ = loadFile(named: currentFileName)
     }
 
     @discardableResult
@@ -221,17 +265,25 @@ extension DocumentEditorView {
             guard openFileIfPossible(named: savedFileName) else { return }
         }
         pendingCursorJump = document.lastCursorLocation
-        pendingPreviewSync = true
+
+        // If the compiler already has a PDF and source map (e.g. from cache),
+        // defer the sync until after the cursor jump lands.  Otherwise, wait
+        // for the next compilation to finish via onChange(of: compiler.pdfDocument).
+        if compiler.pdfDocument != nil, let sourceMap = compiler.sourceMap, !sourceMap.isEmpty {
+            // Sync after the cursor jump is applied in the next run-loop cycle.
+            Task { @MainActor in
+                syncCursorToPreview(at: document.lastCursorLocation)
+            }
+        } else {
+            pendingPreviewSync = true
+        }
     }
 
-    func syncCursorToPreviewIfPending() {
-        guard pendingPreviewSync else { return }
-        pendingPreviewSync = false
-
+    /// Immediately sync the preview to a known cursor location.
+    func syncCursorToPreview(at cursorLocation: Int) {
         guard let sourceMap = compiler.sourceMap, !sourceMap.isEmpty else { return }
         guard syncCoordinator.beginSync(.editorToPreview) else { return }
 
-        let cursorLocation = editorViewState.selectedLocation
         let text = editorText as NSString
         let prefix = cursorLocation <= text.length
             ? text.substring(to: cursorLocation)
@@ -246,6 +298,12 @@ extension DocumentEditorView {
             )
         }
         syncCoordinator.endSync()
+    }
+
+    func syncCursorToPreviewIfPending() {
+        guard pendingPreviewSync else { return }
+        pendingPreviewSync = false
+        syncCursorToPreview(at: editorViewState.selectedLocation)
     }
 
     func handleOutlineJump(characterOffset offset: Int) {

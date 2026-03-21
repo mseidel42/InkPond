@@ -18,7 +18,6 @@ struct SettingsView: View {
 
     @State var showingZipImporter = false
     @State var zipImportError: String?
-    @State private var cloudSyncMonitor = CloudSyncMonitor()
 
     var onImport: (URL) -> Void
 
@@ -75,22 +74,6 @@ struct SettingsView: View {
             } message: {
                 Text(zipImportError ?? "")
             }
-            .onAppear {
-                storageManager.refreshICloudAvailability()
-                if storageManager.isUsingiCloud {
-                    cloudSyncMonitor.startMonitoringAll()
-                }
-            }
-            .onChange(of: storageManager.mode) { _, newMode in
-                if newMode == .iCloud {
-                    cloudSyncMonitor.startMonitoringAll()
-                } else {
-                    cloudSyncMonitor.stopMonitoring()
-                }
-            }
-            .onDisappear {
-                cloudSyncMonitor.stopMonitoring()
-            }
         }
     }
 }
@@ -144,146 +127,25 @@ extension SettingsView {
     }
 
     var iCloudSection: some View {
-        Section {
-            if storageManager.isMigrating {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        ProgressView()
-                        Text(L10n.tr("icloud.migrating"))
+        Section(L10n.tr("icloud.title")) {
+            NavigationLink {
+                ICloudSettingsView()
+            } label: {
+                HStack {
+                    Label(L10n.tr("icloud.title"), systemImage: "icloud")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    if storageManager.mode == .iCloud {
+                        Text(L10n.tr("icloud.summary.on"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(L10n.tr("icloud.summary.off"))
                             .foregroundStyle(.secondary)
                     }
-                    ProgressView(value: storageManager.migrationProgress)
-                        .tint(.accentColor)
-                }
-            } else {
-                Toggle(isOn: projectSyncBinding) {
-                    Label(L10n.tr("icloud.sync_toggle"), systemImage: "doc.text")
-                }
-                .disabled(!storageManager.iCloudAvailable && storageManager.mode != .iCloud)
-
-                Toggle(isOn: fontSyncBinding) {
-                    Label(L10n.tr("icloud.sync_fonts_toggle"), systemImage: "character.textbox")
-                }
-
-                Toggle(isOn: packageSyncBinding) {
-                    Label(L10n.tr("icloud.sync_packages_toggle"), systemImage: "shippingbox")
                 }
             }
-
-            if let error = storageManager.migrationError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            if storageManager.mode == .iCloud {
-                iCloudSyncStatusRow
-
-                HStack(spacing: 10) {
-                    Image(systemName: "lightbulb.min")
-                        .foregroundStyle(.orange)
-                    Text(L10n.tr("icloud.keep_downloaded_tip"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 2)
-            }
-        } header: {
-            Text(L10n.tr("icloud.title"))
-        } footer: {
-            Text(storageManager.mode == .iCloud ? L10n.tr("icloud.sync_footer.on") : L10n.tr("icloud.sync_footer.off"))
+            .accessibilityIdentifier("settings.icloud")
         }
-    }
-
-    @ViewBuilder
-    var iCloudSyncStatusRow: some View {
-        let summary = cloudSyncMonitor.summary
-        let lightColor = syncLightColor(for: summary)
-
-        Label {
-            HStack {
-                syncStatusText(for: summary)
-                Spacer()
-                if cloudSyncMonitor.isGathering || summary.hasActivity {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                }
-            }
-        } icon: {
-            Circle()
-                .fill(lightColor)
-                .frame(width: 10, height: 10)
-                .shadow(color: lightColor.opacity(0.5), radius: 3)
-        }
-    }
-
-    private func syncLightColor(for summary: CloudSyncMonitor.SyncSummary) -> Color {
-        if cloudSyncMonitor.isGathering { return .yellow }
-        if summary.errored > 0 { return .red }
-        if summary.hasActivity || summary.notDownloaded > 0 { return .yellow }
-        if summary.total == 0 { return .secondary }
-        return .green
-    }
-
-    private func syncStatusText(for summary: CloudSyncMonitor.SyncSummary) -> some View {
-        Group {
-            if cloudSyncMonitor.isGathering {
-                Text(L10n.tr("icloud.status.checking"))
-            } else if summary.errored > 0 {
-                Text(L10n.format("icloud.status.error", summary.errored))
-            } else if summary.hasActivity {
-                if summary.downloading > 0 && summary.uploading > 0 {
-                    Text(L10n.format("icloud.status.syncing", summary.downloading + summary.uploading))
-                } else if summary.downloading > 0 {
-                    Text(L10n.format("icloud.status.downloading", summary.downloading))
-                } else {
-                    Text(L10n.format("icloud.status.uploading", summary.uploading))
-                }
-            } else if summary.notDownloaded > 0 {
-                Text(L10n.format("icloud.status.not_downloaded", summary.notDownloaded))
-            } else if summary.total == 0 {
-                Text(L10n.tr("icloud.status.no_files"))
-            } else {
-                Text(L10n.format("icloud.status.synced", summary.total))
-            }
-        }
-        .foregroundStyle(.secondary)
-    }
-
-    private var projectSyncBinding: Binding<Bool> {
-        Binding(
-            get: { storageManager.mode == .iCloud },
-            set: { newValue in
-                let targetMode: StorageMode = newValue ? .iCloud : .local
-                let descriptor = FetchDescriptor<InkPondDocument>()
-                let documents = (try? modelContext.fetch(descriptor)) ?? []
-                Task {
-                    await storageManager.setMode(targetMode, documents: documents)
-                }
-            }
-        )
-    }
-
-    private var fontSyncBinding: Binding<Bool> {
-        Binding(
-            get: { storageManager.syncFontsInICloud },
-            set: { newValue in
-                Task {
-                    await storageManager.setSyncFontsInICloud(newValue)
-                }
-            }
-        )
-    }
-
-    private var packageSyncBinding: Binding<Bool> {
-        Binding(
-            get: { storageManager.syncPackagesInICloud },
-            set: { newValue in
-                Task {
-                    await storageManager.setSyncPackagesInICloud(newValue)
-                }
-            }
-        )
     }
 
     var appearanceSection: some View {

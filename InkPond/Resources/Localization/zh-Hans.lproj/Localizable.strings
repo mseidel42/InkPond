@@ -165,7 +165,8 @@
 
 "local_packages.title" = "本地包";
 "local_packages.import" = "导入包";
-"local_packages.import_detail" = "同时选择多个文件夹或压缩包。";
+"local_packages.import_detail" = "选择一个或多个包压缩文件来导入。";
+"local_packages.import_tips.footer" = "可一次选择多个压缩包（.zip、.tar、.tar.gz）批量导入，或选择单个文件夹。每个包必须包含 typst.toml 清单文件。\n\n你也可以通过「文件」App 将未压缩的包文件夹直接放入 LocalPackages 目录，应用会自动识别。";
 "local_packages.import_folder" = "导入整个文件夹";
 "local_packages.import_folder_detail" = "选一个文件夹，把里面所有包都导入。";
 "local_packages.section_title" = "已安装的包";
@@ -329,6 +330,10 @@
 "resume.alert.action.resume" = "继续";
 "resume.alert.action.start_from_top" = "从头开始";
 
+"resume.banner.label" = "返回上次编辑位置";
+"resume.banner.label_with_file" = "返回 %@ 继续编辑";
+"resume.banner.a11y_hint" = "点击跳转到上次编辑位置";
+
 "snippet.title" = "代码片段";
 "snippet.search.prompt" = "搜索代码片段";
 "snippet.action.new" = "新建片段";
@@ -358,12 +363,21 @@
 "onboarding.projects.subtitle" = "在独立的项目目录中管理源文件、图片和字体。\n支持 ZIP 导入导出。";
 "onboarding.action.get_started" = "开始使用";
 
+"network.status.connected" = "已连接";
+"network.status.disconnected" = "无网络连接";
+"network.status.expensive" = "已连接（蜂窝数据）";
+"network.status.constrained" = "已连接（受限）";
+
 "icloud.title" = "iCloud";
+"icloud.summary.on" = "已开启";
+"icloud.summary.off" = "未开启";
+"icloud.status_section" = "同步状态";
 "icloud.sync_toggle" = "同步项目";
 "icloud.sync_fonts_toggle" = "同步字体";
 "icloud.sync_packages_toggle" = "同步包";
-"icloud.sync_footer.on" = "项目会通过 iCloud 同步。字体和包是否同步由上面的开关决定。";
-"icloud.sync_footer.off" = "项目会保留在本机。你可以先设置好字体和包的同步偏好，再开启项目同步。";
+"icloud.sync_snippets_toggle" = "同步代码片段";
+"icloud.sync_footer.on" = "项目会通过 iCloud 同步。字体、包和代码片段是否同步由上面的开关决定。";
+"icloud.sync_footer.off" = "项目会保留在本机。你可以先设置好字体、包和代码片段的同步偏好，再开启项目同步。";
 "icloud.error.unavailable" = "iCloud 不可用。请在系统设置中登录 iCloud。";
 "icloud.migrating" = "正在迁移文件…";
 "icloud.restart_title" = "需要重启";
@@ -381,3 +395,13 @@
 "icloud.status.syncing" = "正在同步 %d 个文件…";
 "icloud.status.not_downloaded" = "%d 个文件未下载";
 "icloud.status.error" = "%d 个文件同步出错";
+"icloud.error.no_network" = "没有网络连接。请检查网络后重试。";
+"icloud.error.partial_migration" = "%d 个项目未能迁移。你可以在设置中重试。";
+"icloud.error.sync_issues_title" = "检测到同步问题";
+"icloud.error.sync_issues_body" = "部分文件同步 iCloud 失败。可能是 iCloud 存储空间不足、网络问题或服务器临时故障。请在系统设置中检查 iCloud 存储空间。";
+"icloud.error.and_more" = "以及其他 %d 个…";
+"icloud.retry_migration" = "重试迁移（%d 个失败）";
+"icloud.conflict.title" = "文件在其他设备上被修改";
+"icloud.conflict.message" = "「%@」在你编辑期间被其他设备修改了。请选择保留哪个版本。";
+"icloud.conflict.keep_local" = "保留我的修改";
+"icloud.conflict.keep_remote" = "使用其他设备的版本";
