@@ -64,7 +64,7 @@ final class KeyboardAccessoryView: UIInputView {
         let glass = UIVisualEffectView(effect: UIGlassEffect())
         glass.translatesAutoresizingMaskIntoConstraints = false
         glass.clipsToBounds = true
-        glass.layer.cornerRadius = 22
+        glass.layer.cornerRadius = 25
         glass.layer.cornerCurve = .continuous
         addSubview(glass)
 
@@ -72,32 +72,45 @@ final class KeyboardAccessoryView: UIInputView {
         let (scrollView, rightStack, separator) = buildContent()
 
         glass.contentView.addSubview(scrollView)
-        glass.contentView.addSubview(separator)
-        glass.contentView.addSubview(rightStack)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            glass.contentView.addSubview(separator)
+            glass.contentView.addSubview(rightStack)
+        }
 
-        NSLayoutConstraint.activate([
-            // Glass container with horizontal margins, centered vertically
+        var constraints = [
+            // Glass container constraints
             glass.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             glass.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             glass.topAnchor.constraint(equalTo: topAnchor, constant: 4),
             glass.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
 
-            // Right stack inside glass
-            rightStack.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor, constant: -6),
-            rightStack.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
-
-            // Separator
-            separator.widthAnchor.constraint(equalToConstant: 1),
-            separator.heightAnchor.constraint(equalToConstant: 24),
-            separator.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
-            separator.trailingAnchor.constraint(equalTo: rightStack.leadingAnchor, constant: -4),
-
-            // Scroll view
+            // Scroll view constraints (always active)
             scrollView.leadingAnchor.constraint(equalTo: glass.contentView.leadingAnchor, constant: 6),
-            scrollView.trailingAnchor.constraint(equalTo: separator.leadingAnchor, constant: -4),
             scrollView.topAnchor.constraint(equalTo: glass.contentView.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: glass.contentView.bottomAnchor),
-        ])
+        ]
+
+        // Add rightStack and separator constraints only for iPhone
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            constraints.append(contentsOf: [
+                rightStack.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor, constant: -6),
+                rightStack.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
+
+                separator.widthAnchor.constraint(equalToConstant: 1),
+                separator.heightAnchor.constraint(equalToConstant: 24),
+                separator.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
+                separator.trailingAnchor.constraint(equalTo: rightStack.leadingAnchor, constant: -4),
+
+                scrollView.trailingAnchor.constraint(equalTo: separator.leadingAnchor, constant: -4),
+            ])
+        } else {
+            // For iPad, make scrollView fill the entire width
+            constraints.append(
+                scrollView.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor, constant: -6)
+            )
+        }
+
+        NSLayoutConstraint.activate(constraints)
     }
 
     // MARK: - Pre-iOS 26 Layout
@@ -108,8 +121,10 @@ final class KeyboardAccessoryView: UIInputView {
         let (scrollView, rightStack, separator) = buildContent()
 
         addSubview(scrollView)
-        addSubview(separator)
-        addSubview(rightStack)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            addSubview(separator)
+            addSubview(rightStack)
+        }
 
         NSLayoutConstraint.activate([
             rightStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -154,7 +169,7 @@ final class KeyboardAccessoryView: UIInputView {
             stackView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
             stackView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
             stackView.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
-            stackView.heightAnchor.constraint(equalToConstant: 36),
+            stackView.heightAnchor.constraint(equalToConstant: 32),
         ])
 
         let separator = UIView()

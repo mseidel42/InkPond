@@ -7,6 +7,7 @@ import SwiftUI
 import PDFKit
 import PhotosUI
 import UniformTypeIdentifiers
+import UIKit
 
 private extension View {
     @ViewBuilder
@@ -18,6 +19,27 @@ private extension View {
         }
     }
 }
+struct UIKitMenu: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type:.roundedRect)
+        button.setImage(UIImage(systemName: "ellipsis"), for: .normal)
+        button.showsMenuAsPrimaryAction = true
+
+        let menu = UIMenu(title: "", preferredElementSize: .medium, children: [
+            UIAction(title: "Share", image: UIImage(systemName: "square.and.arrow.up"), handler: { _ in }),
+            UIAction(title: "Settings", image: UIImage(systemName: "gearshape"), handler: { _ in }),
+            UIAction(title: "Files", image: UIImage(systemName: "folder"), handler: { _ in }),
+            UIAction(title: "Info", image: UIImage(systemName: "info.circle"), handler: { _ in }),
+            UIAction(title: "Find & Replace", image: UIImage(systemName: "magnifyingglass"), handler: { _ in }),
+        ])
+
+        button.menu = menu
+        return button
+    }
+
+    func updateUIView(_ uiView: UIButton, context: Context) {}
+}
+
 
 extension DocumentEditorView {
     /// Sync is only useful on iPad where both panes are visible simultaneously.
@@ -68,7 +90,7 @@ extension DocumentEditorView {
                     .allowsHitTesting(false)
             }
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+//        .background(Color(uiColor: .systemGroupedBackground))
         .ignoresSafeArea(edges: .bottom)
     }
 
@@ -88,7 +110,7 @@ extension DocumentEditorView {
                 navigateToError(file: file, line: line, column: column)
             }
         )
-        .background(Color(uiColor: .systemGroupedBackground))
+//        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     func splitHandle(totalWidth: CGFloat) -> some View {
@@ -142,43 +164,59 @@ extension DocumentEditorView {
 
     @ViewBuilder
     var contentLayout: some View {
-        if sizeClass == .regular {
-            GeometryReader { geo in
-                let total = geo.size.width
-                HStack(spacing: 0) {
-                    editorPane
-                        .frame(width: total * editorFraction)
-                    splitHandle(totalWidth: total)
-                    previewPane
+//        ScrollView(showsIndicators: false){
+            if sizeClass == .regular {
+                GeometryReader { geo in
+                    let total = geo.size.width
+                    HStack(spacing: 0) {
+                        editorPane
+                            .ignoresSafeArea(edges:.top)
+                            .frame(width: total * editorFraction)
+                        splitHandle(totalWidth: total)
+                        previewPane
+                            .ignoresSafeArea(edges:.top)
+                            .scrollEdgeEffectStyle(.soft, for: .all)
+                    }
+                    .coordinateSpace(name: "splitContainer")
                 }
-                .coordinateSpace(name: "splitContainer")
+            } else {
+                TabView(selection: $selectedTab){
+                    Tab("Editor", systemImage: "text.quote", value: 0){
+                        editorPane
+                    }
+                    Tab("Preview", systemImage: "text.document", value:1){
+                        previewPane
+                            .onChange(of:exporter.isExporting) { _, newValue in
+                                if newValue {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                        showingProgressView = newValue
+                                    }
+                                } else {
+                                    showingProgressView = newValue
+                                }
+                            }
+                            .overlay {
+                                if showingProgressView {
+                                    ZStack {
+                                        Rectangle()
+                                            .fill(.ultraThinMaterial)
+                                            .ignoresSafeArea()
+                                        ProgressView("Compiling…")
+                                            .padding()
+                                            .systemFloatingSurface()
+                                    }
+                                }
+                            }
+                    }
+                }
+                .tabViewStyle(.page)
             }
-        } else {
-            VStack(spacing: 0) {
-                Picker("Mode", selection: $selectedTab) {
-                    Text("Editor").tag(0)
-                    Text("Preview").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("editor.mode-picker")
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-
-                ZStack {
-                    editorPane
-                        .opacity(selectedTab == 0 ? 1 : 0)
-                        .accessibilityHidden(selectedTab != 0)
-                    previewPane
-                        .opacity(selectedTab == 1 ? 1 : 0)
-                        .accessibilityHidden(selectedTab != 1)
-                }
-            }
-            .background(Color(uiColor: .systemGroupedBackground))
-        }
+//        }
+//        .scrollEdgeEffectStyle(.soft, for: .all)
     }
 
     var shareButtonAction: () -> Void {
-        if sizeClass == .regular || selectedTab == 1 {
+        if sizeClass == .regular || selectedTab == previewTab {
             return {
                 guard flushPendingSave() else { return }
                 exporter.exportPDF(for: document, cachedPDF: compiler.pdfDocument)
@@ -191,7 +229,7 @@ extension DocumentEditorView {
     }
 
     var shareButtonLabel: String {
-        if sizeClass == .regular || selectedTab == 1 { return "Share PDF" }
+        if sizeClass == .regular || selectedTab == previewTab { return "Share PDF" }
         return "Export .typ"
     }
 
@@ -199,102 +237,145 @@ extension DocumentEditorView {
         !entrySource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    var toolbarMenu: some View {
-        Menu {
-            Section {
-                Button {
-                    InteractionFeedback.impact(.light)
-                    showingFileBrowser = true
-                } label: {
-                    Label("Project Files", systemImage: "folder")
-                }
-                Button {
-                    InteractionFeedback.impact(.light)
-                    showingProjectSettings = true
-                } label: {
-                    Label("Project Settings", systemImage: "gearshape")
-                }
-                Button {
-                    triggerZipExport()
-                } label: {
-                    Label("Export Project as Zip", systemImage: "archivebox")
-                }
-            }
-
-            Section {
-                Button { findRequested = true } label: {
-                    Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass")
-                }
-                Button {
-                    InteractionFeedback.impact(.light)
-                    focusCoordinator.dismissKeyboard()
-                    showingKeyboardShortcuts = true
-                } label: {
-                    Label(L10n.tr("shortcuts.title"), systemImage: "keyboard")
-                }
-            }
-
-            Section {
-                Button {
-                    compilePreviewNow()
-                } label: {
-                    Label("Compile Now", systemImage: "play.circle")
-                }
-                .disabled(!canTriggerPreviewActions)
-
-                Button {
-                    clearCachesAndRecompile()
-                } label: {
-                    Label("Recompile", systemImage: "arrow.clockwise.circle")
-                }
-                .disabled(!canTriggerPreviewActions)
-
-                Button {
-                    InteractionFeedback.impact(.medium)
-                    showingSlideshow = true
-                } label: {
-                    Label("Slideshow", systemImage: "play.rectangle")
-                }
-                .disabled(!compiler.compiledOnce)
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-        }
-        .accessibilityLabel(L10n.a11yEditorMenuLabel)
-        .accessibilityHint(L10n.a11yEditorMenuHint)
-        .accessibilityIdentifier("editor.more-menu")
-    }
-
     var editorChrome: some View {
         contentLayout
             .navigationTitle(document.title)
-            .navigationSubtitleCompat(currentFileName)
+            .navigationSubtitle(currentFileName)
             .navigationBarTitleDisplayMode(.inline)
-            .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+            .toolbarRole(.editor)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        InteractionFeedback.impact(.light)
-                        focusCoordinator.dismissKeyboard()
-                        showingOutline = true
-                    } label: {
-                        Image(systemName: "list.bullet")
+                if(sizeClass == .regular){
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {} label: {
+                            Label("Back", systemImage: "chevron.left")
+                        }
                     }
-                    .accessibilityLabel(L10n.tr("outline.title"))
-                    .accessibilityIdentifier("editor.outline")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: shareButtonAction) {
-                        Image(systemName: "square.and.arrow.up")
+                ToolbarTitleMenu(){
+                    Button { shareButtonAction() } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
                     }
-                    .accessibilityLabel(Text(shareButtonLabel))
-                    .accessibilityHint(L10n.a11yEditorShareHint)
-                    .accessibilityIdentifier("editor.share")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    toolbarMenu
+                    Button {triggerZipExport()} label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    Button {triggerZipExport()} label: {
+                        Label("Export", systemImage: "square.and.arrow.up.on.square")
+                    }
+                    Button {triggerZipExport()} label: {
+                        Label("Export Project as Zip", systemImage: "zipper.page")
+                    }
+                    Divider()
+                    Button {triggerZipExport()} label: {
+                        Label("Print", systemImage: "printer")
+                    }
                 }
             }
+            .toolbar {
+                if(sizeClass == .regular){
+                    ToolbarItemGroup(placement: .secondaryAction) {
+                        Button { } label: {
+                            Label("Add breaks, links, footnotes", systemImage: "text.badge.plus")
+                        }
+                        Button { } label: {
+                            Label("Add Bullet List", systemImage: "list.bullet")
+                        }
+                        Button { } label: {
+                            Label("Add Numbered List", systemImage: "list.number")
+                        }
+                        Button { } label: {
+                            Label("Add Table", systemImage: "tablecells")
+                        }
+                        Button { } label: {
+                            Label("Add Image", systemImage: "paperclip")
+                        }
+                    } label: {
+                        Label("Add elements", systemImage: "text.badge.plus")
+                    }
+                } else{
+                    ToolbarItemGroup() {
+                        Picker("", selection: $selectedTab) {
+                            Label("Editor", systemImage: "text.quote").tag(0)
+                            Label("Preview", systemImage: "document").tag(1)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    ToolbarSpacer(.flexible)
+                    
+                        ToolbarItem(placement:.topBarTrailing) {
+                            if (selectedTab == editorTab){
+                                UIKitMenu()
+                                    .frame(width: 32, height: 32)
+                            } else{
+                                Button { showingSlideshow = true } label: {
+                                    Label("Slideshow", systemImage: "play.rectangle")
+                                }.disabled(!compiler.compiledOnce)
+                            }
+                        }
+                }
+            }
+            .toolbar {
+                if(sizeClass == .regular){
+                    ToolbarItem() {
+                        Button { showingSlideshow = true } label: {
+                            Label("Slideshow", systemImage: "play.rectangle")
+                        }.disabled(!compiler.compiledOnce)
+                    }
+                    
+                    ToolbarItem() {
+                        Button { showingProjectSettings = true } label: {
+                            Label("Project Settings", systemImage: "gearshape")
+                        }
+                    }
+                    ToolbarSpacer(.fixed)
+                    
+                    ToolbarItem(){
+                        Button { shareButtonAction() } label: {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel(Text(shareButtonLabel))
+                        .accessibilityHint(L10n.a11yEditorShareHint)
+                        .accessibilityIdentifier("editor.share")
+                    }
+                    ToolbarSpacer(.fixed)
+                    
+                    ToolbarItem(){
+                        Button { findRequested = !findRequested } label: {
+                            Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass")
+                        }
+                        .accessibilityIdentifier("editor.search")
+                    }
+                }
+            }
+//            .toolbar {
+//                ToolbarItemGroup(placement: .keyboard) {
+//                    Button{} label:{ Text("{") }
+//                    Button{} label:{ Text("}") }
+//                    Button{} label:{ Text("[") }
+//                    Button{} label:{ Text("]") }
+//                    Button{} label:{ Text("(") }
+//                    Button{} label:{ Text(")") }
+//                }
+////                            ToolbarItemGroup(placement: .keyboard) {
+////                                Button("♣️", action: {})
+////                                Button("♥️", action: {})
+////                                Button("♠️", action: {})
+////                                Button("♦️", action: {})
+////                            }
+//            }
+//            .overlay(alignment: .bottom) {
+//                ControlGroup {
+//                    Button("{") { }
+//                    Button("}") { }
+//                    Button("(") { }
+//                    Button(")") { }
+//                    Button("[") { }
+//                    Button("]") { }
+//                }
+//                .glassEffect(.clear)
+//                .frame(height: 48)
+//                .ignoresSafeArea()
+////                .padding() // 👈 This does the trick
+//            }
     }
 
     var editorPresentation: some View {
@@ -450,18 +531,6 @@ extension DocumentEditorView {
 
     var editorOverlaysAndAlerts: some View {
         editorSheetsAndEvents
-            .overlay {
-                if exporter.isExporting {
-                    ZStack {
-                        Rectangle()
-                            .fill(.ultraThinMaterial)
-                            .ignoresSafeArea()
-                        ProgressView("Compiling…")
-                            .padding()
-                            .systemFloatingSurface(cornerRadius: 12)
-                    }
-                }
-            }
             .overlay(alignment: .bottom) {
                 if let toast = imageImportToast {
                     Text(toast)
@@ -554,18 +623,6 @@ extension DocumentEditorView {
                 Button("OK") { previewActionError = nil }
             } message: {
                 Text(previewActionError ?? "")
-            }
-            .alert(L10n.tr("resume.alert.title"), isPresented: $showingPositionRestore) {
-                Button(L10n.tr("resume.alert.action.resume")) {
-                    restoreSavedPosition()
-                }
-                Button(L10n.tr("resume.alert.action.start_from_top"), role: .cancel) {}
-            } message: {
-                if document.lastEditedFileName.isEmpty || document.lastEditedFileName == document.entryFileName {
-                    Text(L10n.tr("resume.alert.message"))
-                } else {
-                    Text(L10n.format("resume.alert.message_with_file", document.lastEditedFileName))
-                }
             }
     }
 

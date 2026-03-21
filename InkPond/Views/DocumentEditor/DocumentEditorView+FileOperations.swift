@@ -260,7 +260,7 @@ extension DocumentEditorView {
         if sizeClass == .regular {
             // iPad: both panes visible, sync preview alongside editor.
             syncPreviewToOffset(offset)
-        } else if selectedTab == 1 {
+        } else if selectedTab == previewTab {
             // iPhone preview tab: scroll the preview.
             syncPreviewToOffset(offset)
         }
@@ -454,7 +454,7 @@ extension DocumentEditorView {
 
         // Switch to editor tab on iPhone
         if sizeClass != .regular {
-            selectedTab = 0
+            selectedTab = editorTab
         }
 
         // Open the file if it's not already open

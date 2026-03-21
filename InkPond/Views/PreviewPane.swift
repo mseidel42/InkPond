@@ -481,86 +481,83 @@ struct PreviewPane: View {
     private var prefersChineseStatistics: Bool {
         cachedIsCJK
     }
+    
+    @ViewBuilder
+    var pdfOrPlaceHolder: some View {
+        if let pdf = compiler.pdfDocument {
+            PDFKitView(
+                document: pdf,
+                focusCoordinator: focusCoordinator,
+                scrollTarget: syncCoordinator?.previewScrollTarget,
+                onTapLocation: { page, yPoints in
+                    guard let syncCoordinator,
+                          let sourceMap,
+                          let location = sourceMap.sourceLocation(forPage: page, yPoints: yPoints),
+                          syncCoordinator.beginSync(.previewToEditor) else {
+                        return
+                    }
+                    
+                    syncCoordinator.editorScrollTarget = EditorScrollTarget(
+                        line: location.line,
+                        column: location.column
+                    )
+                }
+            )
+            .ignoresSafeArea(edges: .all)
+            .scrollEdgeEffectStyle(.soft, for: .all)
+            .accessibilityLabel(L10n.a11yPreviewLabel)
+            .accessibilityHint(L10n.a11yPreviewHint)
+            .accessibilityValue(
+                compiler.errorMessage == nil ? L10n.a11yPreviewValueReady : L10n.a11yPreviewValueError
+            )
+            .accessibilityIdentifier("editor.preview")
+        } else {
+            placeholderView
+        }
+        
+        if let error = compiler.errorMessage {
+            errorToast(error)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+        
+        if compiler.isCompiling {
+            ProgressView()
+                .padding(8)
+                .systemFloatingSurface(cornerRadius: 8)
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        }
+        
+    }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            if let pdf = compiler.pdfDocument {
-                PDFKitView(
-                    document: pdf,
-                    focusCoordinator: focusCoordinator,
-                    scrollTarget: syncCoordinator?.previewScrollTarget,
-                    onTapLocation: { page, yPoints in
-                        guard let syncCoordinator,
-                              let sourceMap,
-                              let location = sourceMap.sourceLocation(forPage: page, yPoints: yPoints),
-                              syncCoordinator.beginSync(.previewToEditor) else {
-                            return
-                        }
-
-                        syncCoordinator.editorScrollTarget = EditorScrollTarget(
-                            line: location.line,
-                            column: location.column
-                        )
-                    }
-                )
-                    .ignoresSafeArea(edges: .bottom)
-                    .accessibilityLabel(L10n.a11yPreviewLabel)
-                    .accessibilityHint(L10n.a11yPreviewHint)
-                    .accessibilityValue(
-                        compiler.errorMessage == nil ? L10n.a11yPreviewValueReady : L10n.a11yPreviewValueError
-                    )
-                    .accessibilityIdentifier("editor.preview")
-            } else {
-                placeholderView
+        pdfOrPlaceHolder
+            .onChange(of: source, initial: true) {
+                compileIfNeeded()
+                recomputeTextStatistics()
             }
-
-            if let error = compiler.errorMessage {
-                errorToast(error)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onChange(of: fontPaths) { compileIfNeeded() }
+            .onChange(of: rootDir) { compileIfNeeded() }
+            .onChange(of: compileToken) { compileIfNeeded() }
+            .onChange(of: compiler.pdfDocument != nil) { _, hasPreview in
+                guard !hasPreview else { return }
+                isShowingStatsDetails = false
             }
-
-            if compiler.isCompiling {
-                ProgressView()
-                    .padding(8)
-                    .systemFloatingSurface(cornerRadius: 8)
-                    .padding()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .onChange(of: compiler.errorMessage, initial: true) { _, newValue in
+                let shouldExpand = (newValue != nil) && (compiler.pdfDocument == nil)
+                guard shouldExpand != isShowingErrorDetails else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isShowingErrorDetails = shouldExpand
+                }
             }
-
-            if let stats = previewStatistics {
-                previewStatisticsButton(stats)
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onDisappear {
+                focusCoordinator?.clearFocusPreservation()
+                compiler.cancel()
             }
-        }
-        .onChange(of: source, initial: true) {
-            compileIfNeeded()
-            recomputeTextStatistics()
-        }
-        .onChange(of: fontPaths) { compileIfNeeded() }
-        .onChange(of: rootDir) { compileIfNeeded() }
-        .onChange(of: compileToken) { compileIfNeeded() }
-        .onChange(of: compiler.pdfDocument != nil) { _, hasPreview in
-            guard !hasPreview else { return }
-            isShowingStatsDetails = false
-        }
-        .onChange(of: compiler.errorMessage, initial: true) { _, newValue in
-            let shouldExpand = (newValue != nil) && (compiler.pdfDocument == nil)
-            guard shouldExpand != isShowingErrorDetails else { return }
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isShowingErrorDetails = shouldExpand
-            }
-        }
-        .onDisappear {
-            focusCoordinator?.clearFocusPreservation()
-            compiler.cancel()
-        }
-        .animation(.easeInOut(duration: 0.2), value: compiler.errorMessage)
-        .animation(.easeInOut(duration: 0.2), value: isShowingErrorDetails)
+            .animation(.easeInOut(duration: 0.2), value: compiler.errorMessage)
+            .animation(.easeInOut(duration: 0.2), value: isShowingErrorDetails)
     }
 
     private func recomputeTextStatistics() {

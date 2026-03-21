@@ -46,12 +46,15 @@ struct DocumentEditorView: View {
     @State var backgroundFileWriter = BackgroundDocumentFileWriter()
     @State var compileFontPaths: [String]
 
-    @State var selectedTab: Int = 0
+    let editorTab:Int = 0
+    let previewTab:Int = 1
+    @State var selectedTab:Int = 0
     @State var showingSlideshow = false
     @State var editorFraction: CGFloat = 0.5
     @State var showingPhotoPicker = false
     @State var showingFileBrowser = false
     @State var showingProjectSettings = false
+    @State var showingProgressView = false
     @State var selectedPhotoItems: [PhotosPickerItem] = []
     @State var insertionRequest: EditorInsertionRequest?
     @State var findRequested = false
@@ -83,7 +86,9 @@ struct DocumentEditorView: View {
     @State var positionSyncTask: Task<Void, Never>?
 
     var rootDir: String { ProjectFileManager.projectDirectory(for: document).path }
+    
     var isEditingEntryFile: Bool { currentFileName == document.entryFileName }
+    
     var compiledPreviewCacheDescriptor: CompiledPreviewCacheDescriptor {
         CompiledPreviewCacheDescriptor(
             projectID: document.projectID,
