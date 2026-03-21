@@ -436,23 +436,52 @@ struct LocalPackageStore: Sendable {
     private nonisolated func integrateLooseRootItems(defaultNamespace: String) throws {
         guard let rootURL else { return }
 
-        let candidates = try looseRootImportItems(in: rootURL)
-        guard !candidates.isEmpty else { return }
+        let fileManager = FileManager.default
 
-        for candidate in candidates {
+        // Phase 1: Ingest loose items at the root level (folders with typst.toml or archives).
+        let rootCandidates = try looseImportableItems(in: rootURL)
+        for candidate in rootCandidates {
             do {
                 _ = try importItem(at: candidate, defaultNamespace: defaultNamespace)
-                if FileManager.default.fileExists(atPath: candidate.path) {
+                if fileManager.fileExists(atPath: candidate.path) {
                     try removeItem(at: candidate)
                 }
             } catch {
-                // Leave unprocessed items in place so the user can inspect or retry them manually.
                 continue
+            }
+        }
+
+        // Phase 2: Scan inside existing namespace directories for misplaced packages.
+        // A properly structured package lives at namespace/name/version/typst.toml.
+        // A misplaced package lives at namespace/<folder>/typst.toml (missing name/version split).
+        let namespaceDirs = (try? fileManager.contentsOfDirectory(
+            at: rootURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        for nsDir in namespaceDirs {
+            guard (try? isDirectory(nsDir)) == true else { continue }
+            let namespace = nsDir.lastPathComponent
+            let misplaced = try looseImportableItems(in: nsDir)
+            for candidate in misplaced {
+                do {
+                    _ = try importItem(at: candidate, defaultNamespace: namespace)
+                    if fileManager.fileExists(atPath: candidate.path) {
+                        try removeItem(at: candidate)
+                    }
+                    try removeIfEmpty(nsDir)
+                } catch {
+                    continue
+                }
             }
         }
     }
 
-    private nonisolated func looseRootImportItems(in directoryURL: URL) throws -> [URL] {
+    /// Returns importable items (folders with `typst.toml` or archives) that sit
+    /// directly inside the given directory — i.e. not yet in the proper
+    /// `namespace/name/version/` hierarchy.
+    private nonisolated func looseImportableItems(in directoryURL: URL) throws -> [URL] {
         let fileManager = FileManager.default
         let contents = try fileManager.contentsOfDirectory(
             at: directoryURL,

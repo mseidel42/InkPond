@@ -237,10 +237,43 @@ extension DocumentEditorView {
         !entrySource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var resumeBannerLabel: String {
+        let fileName = document.lastEditedFileName
+        if fileName.isEmpty || fileName == document.entryFileName {
+            return L10n.tr("resume.banner.label")
+        } else {
+            return L10n.format("resume.banner.label_with_file", fileName)
+        }
+    }
+
+    var resumeBanner: some View {
+        Button {
+            positionRestoreDismissTask?.cancel()
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showingPositionRestore = false
+            }
+            restoreSavedPosition()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.uturn.backward.circle.fill")
+                    .font(.body)
+                    .foregroundStyle(.tint)
+                Text(resumeBannerLabel)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .systemFloatingSurface(cornerRadius: 999)
+            .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+        }
+        .accessibilityLabel(resumeBannerLabel)
+        .accessibilityHint(L10n.tr("resume.banner.a11y_hint"))
+    }
     var editorChrome: some View {
         contentLayout
             .navigationTitle(document.title)
-            .navigationSubtitle(currentFileName)
+            .navigationSubtitleCompat(currentFileName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarRole(.editor)
             .toolbar {
@@ -425,10 +458,21 @@ extension DocumentEditorView {
                 prepareDocumentForEditing()
                 refreshReferenceCompletions()
                 if hasSavedPosition() {
-                    showingPositionRestore = true
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showingPositionRestore = true
+                    }
+                    positionRestoreDismissTask = Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(4))
+                        guard !Task.isCancelled else { return }
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showingPositionRestore = false
+                        }
+                    }
                 }
             }
             .onDisappear {
+                positionRestoreDismissTask?.cancel()
+                positionRestoreDismissTask = nil
                 positionSyncTask?.cancel()
                 positionSyncTask = nil
                 _ = flushPendingSave()
@@ -531,6 +575,18 @@ extension DocumentEditorView {
 
     var editorOverlaysAndAlerts: some View {
         editorSheetsAndEvents
+            .overlay {
+                if exporter.isExporting && sizeClass == .regular {
+                    ZStack {
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
+                            .ignoresSafeArea()
+                        ProgressView("Compiling…")
+                            .padding()
+                            .systemFloatingSurface(cornerRadius: 12)
+                    }
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let toast = imageImportToast {
                     Text(toast)
@@ -623,6 +679,26 @@ extension DocumentEditorView {
                 Button("OK") { previewActionError = nil }
             } message: {
                 Text(previewActionError ?? "")
+            }
+            .overlay(alignment: .bottom) {
+                if showingPositionRestore {
+                    resumeBanner
+                        .padding(.bottom, 48)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .alert(L10n.tr("icloud.conflict.title"), isPresented: $showingConflictWarning) {
+                Button(L10n.tr("icloud.conflict.keep_local")) {
+                    resolveConflictKeepLocal()
+                }
+                Button(L10n.tr("icloud.conflict.keep_remote")) {
+                    resolveConflictKeepRemote()
+                }
+                Button(L10n.tr("Cancel"), role: .cancel) {
+                    showingConflictWarning = false
+                }
+            } message: {
+                Text(L10n.format("icloud.conflict.message", conflictFileName))
             }
     }
 

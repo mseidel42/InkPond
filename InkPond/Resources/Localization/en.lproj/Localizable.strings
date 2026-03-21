@@ -76,11 +76,15 @@
 "error.datastore.message" = "InkPond could not open its data store. Try restarting the app. If the problem persists, reinstalling may help.";
 
 "icloud.title" = "iCloud";
+"icloud.summary.on" = "On";
+"icloud.summary.off" = "Off";
+"icloud.status_section" = "Sync Status";
 "icloud.sync_toggle" = "Sync Projects";
 "icloud.sync_fonts_toggle" = "Sync Fonts";
 "icloud.sync_packages_toggle" = "Sync Packages";
-"icloud.sync_footer.on" = "Projects sync via iCloud. Fonts and packages follow the toggles above.";
-"icloud.sync_footer.off" = "Projects stay local. You can preselect fonts and packages before turning project sync on.";
+"icloud.sync_snippets_toggle" = "Sync Snippets";
+"icloud.sync_footer.on" = "Projects sync via iCloud. Fonts, packages, and snippets follow the toggles above.";
+"icloud.sync_footer.off" = "Projects stay local. You can preselect fonts, packages, and snippets before turning project sync on.";
 "icloud.error.unavailable" = "iCloud is not available. Please sign in to iCloud in Settings.";
 "icloud.migrating" = "Migrating files…";
 "icloud.restart_title" = "Restart Required";
@@ -98,6 +102,16 @@
 "icloud.status.syncing" = "Syncing %d files…";
 "icloud.status.not_downloaded" = "%d files not downloaded";
 "icloud.status.error" = "%d files with sync errors";
+"icloud.error.no_network" = "No network connection. Please check your internet and try again.";
+"icloud.error.partial_migration" = "%d projects could not be migrated. You can retry from Settings.";
+"icloud.error.sync_issues_title" = "Sync Issues Detected";
+"icloud.error.sync_issues_body" = "Some files failed to sync with iCloud. This may be caused by insufficient iCloud storage, network issues, or temporary server problems. Check your iCloud storage in iOS Settings.";
+"icloud.error.and_more" = "and %d more…";
+"icloud.retry_migration" = "Retry Migration (%d failed)";
+"icloud.conflict.title" = "File Modified on Another Device";
+"icloud.conflict.message" = "\"%@\" was modified on another device while you were editing. Choose which version to keep.";
+"icloud.conflict.keep_local" = "Keep My Changes";
+"icloud.conflict.keep_remote" = "Use Other Device's Version";
 "toast.image_inserted.single" = "Inserted %@";
 "toast.image_inserted.multiple" = "Inserted %d images";
 
@@ -188,9 +202,10 @@
 
 "local_packages.title" = "Local Packages";
 "local_packages.import" = "Import Packages";
-"local_packages.import_detail" = "Pick multiple folders or archives together.";
+"local_packages.import_detail" = "Select one or more package archives to import.";
 "local_packages.import_folder" = "Import Folder Contents";
 "local_packages.import_folder_detail" = "Pick one folder and import every package inside.";
+"local_packages.import_tips.footer" = "Select multiple archives (.zip, .tar, .tar.gz) at once to batch import, or pick a single folder. Each package must contain a typst.toml manifest.\n\nYou can also place unarchived package folders directly into the LocalPackages directory via the Files app — they will be picked up automatically.";
 "local_packages.section_title" = "Installed Packages";
 "local_packages.empty" = "No local packages installed";
 "local_packages.info_title" = "About Local Packages";
@@ -352,6 +367,10 @@
 "resume.alert.action.resume" = "Resume";
 "resume.alert.action.start_from_top" = "Start from Top";
 
+"resume.banner.label" = "Resume where you left off";
+"resume.banner.label_with_file" = "Resume in %@";
+"resume.banner.a11y_hint" = "Tap to jump back to your last editing position";
+
 "snippet.title" = "Snippets";
 "snippet.search.prompt" = "Search snippets";
 "snippet.action.new" = "New Snippet";
@@ -380,3 +399,8 @@
 "onboarding.projects.title" = "Multi-File Projects";
 "onboarding.projects.subtitle" = "Organize source files, images, and fonts in per-project directories.\nImport and export as ZIP.";
 "onboarding.action.get_started" = "Get Started";
+
+"network.status.connected" = "Connected";
+"network.status.disconnected" = "No network connection";
+"network.status.expensive" = "Connected (cellular)";
+"network.status.constrained" = "Connected (limited)";

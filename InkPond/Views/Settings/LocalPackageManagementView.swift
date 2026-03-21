@@ -27,6 +27,7 @@ struct LocalPackageManagementView: View {
 
     var body: some View {
         List {
+            importSection
             infoSection
             if isPerformingOperation || statusMessage != nil {
                 statusSection
@@ -37,17 +38,6 @@ struct LocalPackageManagementView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(L10n.tr("local_packages.title"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingImporter = true
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                }
-                .disabled(isPerformingOperation)
-                .accessibilityLabel(L10n.tr("local_packages.import"))
-            }
-        }
         .task {
             try? store.ensureRootDirectory()
             await refresh()
@@ -144,6 +134,19 @@ struct LocalPackageManagementView: View {
             .padding(.vertical, 4)
         } footer: {
             Text(L10n.tr("local_packages.namespace_hint"))
+        }
+    }
+
+    private var importSection: some View {
+        Section {
+            Button {
+                showingImporter = true
+            } label: {
+                Label(L10n.tr("local_packages.import"), systemImage: "square.and.arrow.down")
+            }
+            .disabled(isPerformingOperation)
+        } footer: {
+            Text(L10n.tr("local_packages.import_tips.footer"))
         }
     }
 
