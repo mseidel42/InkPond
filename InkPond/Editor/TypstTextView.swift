@@ -71,6 +71,12 @@ final class TypstTextView: UITextView {
     /// Set by PDFKitView during document reload to prevent PDFKit from
     /// dismissing the software keyboard on iPadOS.
     var suppressResignFirstResponder = false
+    var topViewportInset: CGFloat = 0 {
+        didSet {
+            guard oldValue != topViewportInset else { return }
+            updateViewportInsetsIfNeeded()
+        }
+    }
 
     var onPhotoButtonTapped: (() -> Void)? {
         didSet { (inputAccessoryView as? KeyboardAccessoryView)?.onPhotoButtonTapped = onPhotoButtonTapped }
@@ -149,6 +155,30 @@ final class TypstTextView: UITextView {
         textContainerInset = UIEdgeInsets(top: 12, left: width + 4, bottom: 12, right: 12)
         gutterView.frame = CGRect(x: 0, y: 0, width: width, height: max(contentSize.height, bounds.height))
         gutterView.setNeedsDisplay()
+    }
+
+    private func updateViewportInsetsIfNeeded() {
+        let previousAdjustedTop = adjustedContentInset.top
+        let wasPinnedToTop = abs(contentOffset.y + previousAdjustedTop) < 2
+
+        if contentInset.top != topViewportInset {
+            var insets = contentInset
+            insets.top = topViewportInset
+            contentInset = insets
+        }
+
+        if verticalScrollIndicatorInsets.top != topViewportInset {
+            var indicatorInsets = verticalScrollIndicatorInsets
+            indicatorInsets.top = topViewportInset
+            verticalScrollIndicatorInsets = indicatorInsets
+        }
+
+        if wasPinnedToTop {
+            setContentOffset(
+                CGPoint(x: contentOffset.x, y: -adjustedContentInset.top),
+                animated: false
+            )
+        }
     }
 
     private func setupAccessoryView() {

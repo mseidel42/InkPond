@@ -78,7 +78,14 @@ private final class SlideshowPDFContainerView: UIView {
 
         if scrollView.contentInset != insets {
             scrollView.contentInset = insets
-            scrollView.scrollIndicatorInsets = insets
+        }
+
+        if scrollView.verticalScrollIndicatorInsets != insets {
+            scrollView.verticalScrollIndicatorInsets = insets
+        }
+
+        if scrollView.horizontalScrollIndicatorInsets != insets {
+            scrollView.horizontalScrollIndicatorInsets = insets
         }
 
         let centeredOffset = CGPoint(x: -horizontalInset, y: -verticalInset)

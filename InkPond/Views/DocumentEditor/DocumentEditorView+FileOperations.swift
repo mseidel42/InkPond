@@ -292,9 +292,7 @@ extension DocumentEditorView {
 
         if let target = sourceMap.pdfPosition(forLine: line) {
             syncCoordinator.previewScrollTarget = PreviewScrollTarget(
-                page: target.page,
-                yPoints: target.yPoints,
-                xPoints: target.xPoints
+                page: target.page, yPoints: target.yPoints, xPoints: target.xPoints
             )
         }
         syncCoordinator.endSync()

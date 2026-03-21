@@ -4,6 +4,7 @@
 //
 
 import UIKit
+import GameController
 
 final class KeyboardAccessoryView: UIInputView {
     private struct SymbolItem {
@@ -14,6 +15,31 @@ final class KeyboardAccessoryView: UIInputView {
     private weak var textView: UITextView?
     var onPhotoButtonTapped: (() -> Void)?
     var onSnippetButtonTapped: (() -> Void)?
+    private let separator = UIView()
+    private lazy var snippetButton = makeButton(systemImage: "text.badge.plus") { [weak self] in
+        InteractionFeedback.impact(.light)
+        self?.onSnippetButtonTapped?()
+    }
+    private lazy var photoButton = makeButton(systemImage: "photo") { [weak self] in
+        InteractionFeedback.impact(.light)
+        self?.onPhotoButtonTapped?()
+    }
+    private lazy var undoButton = makeButton(systemImage: "arrow.uturn.backward") { [weak self] in
+        InteractionFeedback.impact(.light)
+        self?.textView?.undoManager?.undo()
+    }
+    private lazy var redoButton = makeButton(systemImage: "arrow.uturn.forward") { [weak self] in
+        InteractionFeedback.impact(.light)
+        self?.textView?.undoManager?.redo()
+    }
+    private lazy var rightStack: UIStackView = {
+        let stack = UIStackView(arrangedSubviews: [snippetButton, photoButton, undoButton, redoButton])
+        stack.axis = .horizontal
+        stack.spacing = 2
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }()
+    private var hardwareKeyboardObservers: [NSObjectProtocol] = []
 
     private let symbols: [SymbolItem] = [
         SymbolItem(label: "⇥", insert: "  "),
@@ -38,11 +64,69 @@ final class KeyboardAccessoryView: UIInputView {
         self.textView = textView
         super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 60), inputViewStyle: .keyboard)
         allowsSelfSizing = true
+        configureActionButtons()
         setupViews()
+        startObservingHardwareKeyboard()
+        updateActionButtonsVisibility()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        for observer in hardwareKeyboardObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private var isPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+
+    private var hasHardwareKeyboard: Bool {
+        GCKeyboard.coalesced != nil
+    }
+
+    private func configureActionButtons() {
+        separator.backgroundColor = .separator.withAlphaComponent(0.3)
+        separator.translatesAutoresizingMaskIntoConstraints = false
+
+        snippetButton.accessibilityLabel = L10n.a11yKeyboardSnippetLabel
+        snippetButton.accessibilityHint = L10n.a11yKeyboardSnippetHint
+        photoButton.accessibilityLabel = L10n.a11yKeyboardPhotoLabel
+        photoButton.accessibilityHint = L10n.a11yKeyboardPhotoHint
+        undoButton.accessibilityLabel = L10n.a11yKeyboardUndoLabel
+        undoButton.accessibilityHint = L10n.a11yKeyboardUndoHint
+        redoButton.accessibilityLabel = L10n.a11yKeyboardRedoLabel
+        redoButton.accessibilityHint = L10n.a11yKeyboardRedoHint
+    }
+
+    private func startObservingHardwareKeyboard() {
+        guard isPad else { return }
+
+        hardwareKeyboardObservers = [
+            NotificationCenter.default.addObserver(
+                forName: Notification.Name.GCKeyboardDidConnect,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.updateActionButtonsVisibility()
+            },
+            NotificationCenter.default.addObserver(
+                forName: Notification.Name.GCKeyboardDidDisconnect,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.updateActionButtonsVisibility()
+            }
+        ]
+    }
+
+    private func updateActionButtonsVisibility() {
+        let showsUndoRedo = !isPad || hasHardwareKeyboard
+        undoButton.isHidden = !showsUndoRedo
+        redoButton.isHidden = !showsUndoRedo
     }
 
     private func setupViews() {
@@ -72,10 +156,8 @@ final class KeyboardAccessoryView: UIInputView {
         let (scrollView, rightStack, separator) = buildContent()
 
         glass.contentView.addSubview(scrollView)
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            glass.contentView.addSubview(separator)
-            glass.contentView.addSubview(rightStack)
-        }
+        glass.contentView.addSubview(separator)
+        glass.contentView.addSubview(rightStack)
 
         var constraints = [
             // Glass container constraints
@@ -88,27 +170,14 @@ final class KeyboardAccessoryView: UIInputView {
             scrollView.leadingAnchor.constraint(equalTo: glass.contentView.leadingAnchor, constant: 6),
             scrollView.topAnchor.constraint(equalTo: glass.contentView.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: glass.contentView.bottomAnchor),
+            rightStack.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor, constant: -6),
+            rightStack.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
+            separator.widthAnchor.constraint(equalToConstant: 1),
+            separator.heightAnchor.constraint(equalToConstant: 24),
+            separator.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
+            separator.trailingAnchor.constraint(equalTo: rightStack.leadingAnchor, constant: -4),
+            scrollView.trailingAnchor.constraint(equalTo: separator.leadingAnchor, constant: -4),
         ]
-
-        // Add rightStack and separator constraints only for iPhone
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            constraints.append(contentsOf: [
-                rightStack.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor, constant: -6),
-                rightStack.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
-
-                separator.widthAnchor.constraint(equalToConstant: 1),
-                separator.heightAnchor.constraint(equalToConstant: 24),
-                separator.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
-                separator.trailingAnchor.constraint(equalTo: rightStack.leadingAnchor, constant: -4),
-
-                scrollView.trailingAnchor.constraint(equalTo: separator.leadingAnchor, constant: -4),
-            ])
-        } else {
-            // For iPad, make scrollView fill the entire width
-            constraints.append(
-                scrollView.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor, constant: -6)
-            )
-        }
 
         NSLayoutConstraint.activate(constraints)
     }
@@ -121,25 +190,23 @@ final class KeyboardAccessoryView: UIInputView {
         let (scrollView, rightStack, separator) = buildContent()
 
         addSubview(scrollView)
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            addSubview(separator)
-            addSubview(rightStack)
-        }
+        addSubview(separator)
+        addSubview(rightStack)
 
-        NSLayoutConstraint.activate([
+        var constraints = [
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
             rightStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             rightStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-
             separator.widthAnchor.constraint(equalToConstant: 1),
             separator.heightAnchor.constraint(equalToConstant: 28),
             separator.centerYAnchor.constraint(equalTo: centerYAnchor),
             separator.trailingAnchor.constraint(equalTo: rightStack.leadingAnchor, constant: -8),
-
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             scrollView.trailingAnchor.constraint(equalTo: separator.leadingAnchor, constant: -8),
-            scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
+        ]
+
+        NSLayoutConstraint.activate(constraints)
     }
 
     // MARK: - Shared Content
@@ -171,40 +238,6 @@ final class KeyboardAccessoryView: UIInputView {
             stackView.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
             stackView.heightAnchor.constraint(equalToConstant: 32),
         ])
-
-        let separator = UIView()
-        separator.backgroundColor = .separator.withAlphaComponent(0.3)
-        separator.translatesAutoresizingMaskIntoConstraints = false
-
-        let snippetButton = makeButton(systemImage: "text.badge.plus") { [weak self] in
-            InteractionFeedback.impact(.light)
-            self?.onSnippetButtonTapped?()
-        }
-        let photoButton = makeButton(systemImage: "photo") { [weak self] in
-            InteractionFeedback.impact(.light)
-            self?.onPhotoButtonTapped?()
-        }
-        let undoButton = makeButton(systemImage: "arrow.uturn.backward") { [weak self] in
-            InteractionFeedback.impact(.light)
-            self?.textView?.undoManager?.undo()
-        }
-        let redoButton = makeButton(systemImage: "arrow.uturn.forward") { [weak self] in
-            InteractionFeedback.impact(.light)
-            self?.textView?.undoManager?.redo()
-        }
-        snippetButton.accessibilityLabel = L10n.a11yKeyboardSnippetLabel
-        snippetButton.accessibilityHint = L10n.a11yKeyboardSnippetHint
-        photoButton.accessibilityLabel = L10n.a11yKeyboardPhotoLabel
-        photoButton.accessibilityHint = L10n.a11yKeyboardPhotoHint
-        undoButton.accessibilityLabel = L10n.a11yKeyboardUndoLabel
-        undoButton.accessibilityHint = L10n.a11yKeyboardUndoHint
-        redoButton.accessibilityLabel = L10n.a11yKeyboardRedoLabel
-        redoButton.accessibilityHint = L10n.a11yKeyboardRedoHint
-
-        let rightStack = UIStackView(arrangedSubviews: [snippetButton, photoButton, undoButton, redoButton])
-        rightStack.axis = .horizontal
-        rightStack.spacing = 2
-        rightStack.translatesAutoresizingMaskIntoConstraints = false
 
         return (scrollView, rightStack, separator)
     }

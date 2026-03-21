@@ -45,8 +45,6 @@ struct DocumentEditorView: View {
     @State var lastPersistedFileDate: Date?
     @State var saveTask: Task<Void, Never>?
     @State var backgroundFileWriter = BackgroundDocumentFileWriter()
-    @State var showingConflictWarning = false
-    @State var conflictFileName: String = ""
     @State var compileFontPaths: [String]
 
     let editorTab:Int = 0
@@ -57,7 +55,8 @@ struct DocumentEditorView: View {
     @State var showingPhotoPicker = false
     @State var showingFileBrowser = false
     @State var showingProjectSettings = false
-    @State var showingProgressView = false
+    @State var showingConflictWarning = false
+    @State var conflictFileName: String = ""
     @State var selectedPhotoItems: [PhotosPickerItem] = []
     @State var insertionRequest: EditorInsertionRequest?
     @State var findRequested = false
@@ -105,7 +104,10 @@ struct DocumentEditorView: View {
         FontManager.completionFamilyNames(from: compileFontPaths)
     }
 
-    init(document: InkPondDocument, isSidebarVisible: Bool = false) {
+    init(
+        document: InkPondDocument,
+        isSidebarVisible: Bool = false
+    ) {
         self.document = document
         self.isSidebarVisible = isSidebarVisible
         _compileFontPaths = State(initialValue: FontManager.allFontPaths(for: document))

@@ -7,7 +7,46 @@ import SwiftUI
 import PDFKit
 import PhotosUI
 import UniformTypeIdentifiers
-import UIKit
+
+private struct SoftScrollEdgeEffectModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .all)
+        } else {
+            content
+        }
+    }
+}
+
+private struct ConditionalNavigationBarBackgroundModifier: ViewModifier {
+    let hidesBackground: Bool
+
+    func body(content: Content) -> some View {
+        if hidesBackground {
+            if #available(iOS 18.0, *) {
+                content
+                    .toolbarBackground(.clear, for: .navigationBar)
+                    .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+            } else {
+                content.toolbarBackground(.hidden, for: .navigationBar)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private struct ConditionalToolbarRoleModifier: ViewModifier {
+    let usesEditorRole: Bool
+
+    func body(content: Content) -> some View {
+        if usesEditorRole {
+            content.toolbarRole(.editor)
+        } else {
+            content
+        }
+    }
+}
 
 private extension View {
     @ViewBuilder
@@ -18,32 +57,23 @@ private extension View {
             self
         }
     }
-}
-struct UIKitMenu: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIButton {
-        let button = UIButton(type:.roundedRect)
-        button.setImage(UIImage(systemName: "ellipsis"), for: .normal)
-        button.showsMenuAsPrimaryAction = true
 
-        let menu = UIMenu(title: "", preferredElementSize: .medium, children: [
-            UIAction(title: "Share", image: UIImage(systemName: "square.and.arrow.up"), handler: { _ in }),
-            UIAction(title: "Settings", image: UIImage(systemName: "gearshape"), handler: { _ in }),
-            UIAction(title: "Files", image: UIImage(systemName: "folder"), handler: { _ in }),
-            UIAction(title: "Info", image: UIImage(systemName: "info.circle"), handler: { _ in }),
-            UIAction(title: "Find & Replace", image: UIImage(systemName: "magnifyingglass"), handler: { _ in }),
-        ])
-
-        button.menu = menu
-        return button
+    @ViewBuilder
+    func compactCircleSurface() -> some View {
+        if #available(iOS 26, *) {
+            self.glassEffect(.regular.interactive(), in: .circle)
+        } else {
+            self.systemFloatingSurface(cornerRadius: 999)
+        }
     }
-
-    func updateUIView(_ uiView: UIButton, context: Context) {}
 }
-
 
 extension DocumentEditorView {
     /// Sync is only useful on iPad where both panes are visible simultaneously.
     private var isSyncEnabled: Bool { sizeClass == .regular }
+    private var usesSystemCompactToolbar: Bool {
+        sizeClass != .regular
+    }
 
     var editorPane: some View {
         EditorView(
@@ -53,6 +83,7 @@ extension DocumentEditorView {
             viewState: $editorViewState,
             cursorJumpOffset: $pendingCursorJump,
             focusCoordinator: focusCoordinator,
+            topViewportInset: 0,
             sourceMap: isSyncEnabled && isEditingEntryFile ? compiler.sourceMap : nil,
             syncCoordinator: isSyncEnabled ? syncCoordinator : nil,
             theme: themeManager.currentTheme,
@@ -90,7 +121,6 @@ extension DocumentEditorView {
                     .allowsHitTesting(false)
             }
         }
-//        .background(Color(uiColor: .systemGroupedBackground))
         .ignoresSafeArea(edges: .bottom)
     }
 
@@ -106,11 +136,11 @@ extension DocumentEditorView {
             sourceMap: isSyncEnabled ? compiler.sourceMap : nil,
             syncCoordinator: syncCoordinator,
             entryFileName: document.entryFileName,
+            topViewportInset: 0,
             onGoToError: { file, line, column in
                 navigateToError(file: file, line: line, column: column)
             }
         )
-//        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     func splitHandle(totalWidth: CGFloat) -> some View {
@@ -164,55 +194,33 @@ extension DocumentEditorView {
 
     @ViewBuilder
     var contentLayout: some View {
-//        ScrollView(showsIndicators: false){
-            if sizeClass == .regular {
-                GeometryReader { geo in
-                    let total = geo.size.width
-                    HStack(spacing: 0) {
-                        editorPane
-                            .ignoresSafeArea(edges:.top)
-                            .frame(width: total * editorFraction)
-                        splitHandle(totalWidth: total)
-                        previewPane
-                            .ignoresSafeArea(edges:.top)
-                            .scrollEdgeEffectStyle(.soft, for: .all)
-                    }
-                    .coordinateSpace(name: "splitContainer")
+        if sizeClass == .regular {
+            GeometryReader { geo in
+                let total = geo.size.width
+                HStack(spacing: 0) {
+                    editorPane
+                        .ignoresSafeArea(edges: .top)
+                        .frame(width: total * editorFraction)
+                    splitHandle(totalWidth: total)
+                    previewPane
+                        .ignoresSafeArea(edges: .top)
+                        .modifier(SoftScrollEdgeEffectModifier())
                 }
-            } else {
-                TabView(selection: $selectedTab){
-                    Tab("Editor", systemImage: "text.quote", value: 0){
-                        editorPane
-                    }
-                    Tab("Preview", systemImage: "text.document", value:1){
-                        previewPane
-                            .onChange(of:exporter.isExporting) { _, newValue in
-                                if newValue {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                        showingProgressView = newValue
-                                    }
-                                } else {
-                                    showingProgressView = newValue
-                                }
-                            }
-                            .overlay {
-                                if showingProgressView {
-                                    ZStack {
-                                        Rectangle()
-                                            .fill(.ultraThinMaterial)
-                                            .ignoresSafeArea()
-                                        ProgressView("Compiling…")
-                                            .padding()
-                                            .systemFloatingSurface()
-                                    }
-                                }
-                            }
-                    }
-                }
-                .tabViewStyle(.page)
+                .coordinateSpace(name: "splitContainer")
             }
-//        }
-//        .scrollEdgeEffectStyle(.soft, for: .all)
+        } else {
+            VStack(spacing: 0) {
+                ZStack {
+                    editorPane
+                        .opacity(selectedTab == editorTab ? 1 : 0)
+                        .accessibilityHidden(selectedTab != editorTab)
+                    previewPane
+                        .modifier(SoftScrollEdgeEffectModifier())
+                        .opacity(selectedTab == previewTab ? 1 : 0)
+                        .accessibilityHidden(selectedTab != previewTab)
+                }
+            }
+        }
     }
 
     var shareButtonAction: () -> Void {
@@ -229,8 +237,8 @@ extension DocumentEditorView {
     }
 
     var shareButtonLabel: String {
-        if sizeClass == .regular || selectedTab == previewTab { return "Share PDF" }
-        return "Export .typ"
+        if sizeClass == .regular || selectedTab == previewTab { return L10n.tr("Share PDF") }
+        return L10n.tr("Export .typ")
     }
 
     var canTriggerPreviewActions: Bool {
@@ -270,149 +278,266 @@ extension DocumentEditorView {
         .accessibilityLabel(resumeBannerLabel)
         .accessibilityHint(L10n.tr("resume.banner.a11y_hint"))
     }
-    var editorChrome: some View {
+    @ViewBuilder
+    private var editorToolbarMenuContent: some View {
+        Section {
+            Button {
+                InteractionFeedback.impact(.light)
+                showingFileBrowser = true
+            } label: {
+                Label("Project Files", systemImage: "folder")
+            }
+            Button {
+                InteractionFeedback.impact(.light)
+                showingProjectSettings = true
+            } label: {
+                Label("Project Settings", systemImage: "gearshape")
+            }
+        }
+
+        Section {
+            Button { findRequested = true } label: {
+                Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass")
+            }
+            Button {
+                InteractionFeedback.impact(.light)
+                focusCoordinator.dismissKeyboard()
+                showingOutline = true
+            } label: {
+                Label(L10n.tr("outline.title"), systemImage: "list.bullet")
+            }
+            Button {
+                InteractionFeedback.impact(.light)
+                focusCoordinator.dismissKeyboard()
+                showingKeyboardShortcuts = true
+            } label: {
+                Label(L10n.tr("shortcuts.title"), systemImage: "keyboard")
+            }
+        }
+
+        Section {
+            Button {
+                clearCachesAndRecompile()
+            } label: {
+                Label("Recompile", systemImage: "arrow.clockwise.circle")
+            }
+            .disabled(!canTriggerPreviewActions)
+        }
+    }
+
+    private func compactToolbarButtonLabel(
+        systemName: String,
+        font: Font = .body.weight(.semibold),
+        size: CGFloat = 44,
+        foregroundStyle: AnyShapeStyle = AnyShapeStyle(.primary)
+    ) -> some View {
+        Image(systemName: systemName)
+            .font(font)
+            .foregroundStyle(foregroundStyle)
+            .frame(width: size, height: size)
+            .compactCircleSurface()
+    }
+
+    private func compactToolbarGlassLabel(
+        systemName: String,
+        size: CGFloat = 44
+    ) -> some View {
+        compactToolbarButtonLabel(
+            systemName: systemName,
+            font: .body.weight(.semibold),
+            size: size
+        )
+    }
+
+    private var systemCompactModePicker: some View {
+        Picker("", selection: $selectedTab) {
+            Image(systemName: "text.quote").tag(editorTab)
+            Image(systemName: "document").tag(previewTab)
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .frame(width: 100)
+        .accessibilityIdentifier("editor.mode-picker")
+    }
+
+    private func compactToolbarTrailingWrapper<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
+
+    private var compactToolbarTrailingControl: some View {
+        Group {
+            if selectedTab == editorTab {
+                compactToolbarTrailingWrapper {
+                    Menu {
+                        editorToolbarMenuContent
+                    } label: {
+                        compactToolbarGlassLabel(systemName: "ellipsis")
+                    }
+                    .buttonStyle(.plain)
+                }
+                .accessibilityLabel(L10n.a11yEditorMenuLabel)
+                .accessibilityHint(L10n.a11yEditorMenuHint)
+                .accessibilityIdentifier("editor.more-menu")
+            } else {
+                compactToolbarTrailingWrapper {
+                    Button {
+                        showingSlideshow = true
+                    } label: {
+                        compactToolbarGlassLabel(systemName: "play.rectangle")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!compiler.compiledOnce)
+                }
+            }
+        }
+    }
+
+    var regularEditorChrome: some View {
         contentLayout
             .navigationTitle(document.title)
             .navigationSubtitleCompat(currentFileName)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarRole(.editor)
+            .modifier(ConditionalToolbarRoleModifier(usesEditorRole: !usesSystemCompactToolbar))
+            .modifier(ConditionalNavigationBarBackgroundModifier(hidesBackground: usesSystemCompactToolbar))
             .toolbar {
-                if(sizeClass == .regular){
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {} label: {
-                            Label("Back", systemImage: "chevron.left")
-                        }
-                    }
-                }
-                ToolbarTitleMenu(){
+                ToolbarTitleMenu {
                     Button { shareButtonAction() } label: {
-                        Label("Share", systemImage: "square.and.arrow.up")
+                        Label(L10n.tr("Share"), systemImage: "square.and.arrow.up")
                     }
-                    Button {triggerZipExport()} label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                    Button {triggerZipExport()} label: {
-                        Label("Export", systemImage: "square.and.arrow.up.on.square")
-                    }
-                    Button {triggerZipExport()} label: {
-                        Label("Export Project as Zip", systemImage: "zipper.page")
-                    }
-                    Divider()
-                    Button {triggerZipExport()} label: {
-                        Label("Print", systemImage: "printer")
-                    }
-                }
-            }
-            .toolbar {
-                if(sizeClass == .regular){
-                    ToolbarItemGroup(placement: .secondaryAction) {
-                        Button { } label: {
-                            Label("Add breaks, links, footnotes", systemImage: "text.badge.plus")
-                        }
-                        Button { } label: {
-                            Label("Add Bullet List", systemImage: "list.bullet")
-                        }
-                        Button { } label: {
-                            Label("Add Numbered List", systemImage: "list.number")
-                        }
-                        Button { } label: {
-                            Label("Add Table", systemImage: "tablecells")
-                        }
-                        Button { } label: {
-                            Label("Add Image", systemImage: "paperclip")
-                        }
+                    Button {
+                        guard flushPendingSave() else { return }
+                        exporter.exportTypSource(for: document, fileName: currentFileName)
                     } label: {
-                        Label("Add elements", systemImage: "text.badge.plus")
+                        Label("Export .typ", systemImage: "square.and.arrow.up.on.square")
                     }
-                } else{
-                    ToolbarItemGroup() {
-                        Picker("", selection: $selectedTab) {
-                            Label("Editor", systemImage: "text.quote").tag(0)
-                            Label("Preview", systemImage: "document").tag(1)
-                        }
-                        .pickerStyle(.segmented)
+                    Button { triggerZipExport() } label: {
+                        Label("Export Project as Zip", systemImage: "archivebox")
                     }
-                    ToolbarSpacer(.flexible)
-                    
-                        ToolbarItem(placement:.topBarTrailing) {
-                            if (selectedTab == editorTab){
-                                UIKitMenu()
-                                    .frame(width: 32, height: 32)
-                            } else{
-                                Button { showingSlideshow = true } label: {
-                                    Label("Slideshow", systemImage: "play.rectangle")
-                                }.disabled(!compiler.compiledOnce)
-                            }
-                        }
                 }
             }
             .toolbar {
-                if(sizeClass == .regular){
-                    ToolbarItem() {
-                        Button { showingSlideshow = true } label: {
-                            Label("Slideshow", systemImage: "play.rectangle")
-                        }.disabled(!compiler.compiledOnce)
-                    }
-                    
-                    ToolbarItem() {
-                        Button { showingProjectSettings = true } label: {
-                            Label("Project Settings", systemImage: "gearshape")
-                        }
-                    }
-                    ToolbarSpacer(.fixed)
-                    
-                    ToolbarItem(){
-                        Button { shareButtonAction() } label: {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                        .accessibilityLabel(Text(shareButtonLabel))
-                        .accessibilityHint(L10n.a11yEditorShareHint)
-                        .accessibilityIdentifier("editor.share")
-                    }
-                    ToolbarSpacer(.fixed)
-                    
-                    ToolbarItem(){
+                if sizeClass == .regular {
+                    // --- Editor actions ---
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button { findRequested = !findRequested } label: {
                             Label(L10n.tr("action.find_replace"), systemImage: "magnifyingglass")
                         }
                         .accessibilityIdentifier("editor.search")
                     }
+
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            InteractionFeedback.impact(.light)
+                            focusCoordinator.dismissKeyboard()
+                            showingOutline = true
+                        } label: {
+                            Image(systemName: "list.bullet")
+                        }
+                        .accessibilityLabel(L10n.tr("outline.title"))
+                        .accessibilityIdentifier("editor.outline")
+                    }
+
+                    // --- Preview actions ---
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showingSlideshow = true } label: {
+                            Label("Slideshow", systemImage: "play.rectangle")
+                        }
+                        .disabled(!compiler.compiledOnce)
+                    }
+
+                    // --- Project actions ---
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: shareButtonAction) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel(Text(shareButtonLabel))
+                        .accessibilityHint(L10n.a11yEditorShareHint)
+                        .accessibilityIdentifier("editor.share")
+                    }
+
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Section {
+                                Button {
+                                    InteractionFeedback.impact(.light)
+                                    showingFileBrowser = true
+                                } label: {
+                                    Label("Project Files", systemImage: "folder")
+                                }
+                                Button {
+                                    InteractionFeedback.impact(.light)
+                                    showingProjectSettings = true
+                                } label: {
+                                    Label("Project Settings", systemImage: "gearshape")
+                                }
+                            }
+                            Section {
+                                Button {
+                                    compilePreviewNow()
+                                } label: {
+                                    Label("Compile Now", systemImage: "play.circle")
+                                }
+                                .disabled(!canTriggerPreviewActions)
+
+                                Button {
+                                    clearCachesAndRecompile()
+                                } label: {
+                                    Label("Recompile", systemImage: "arrow.clockwise.circle")
+                                }
+                                .disabled(!canTriggerPreviewActions)
+                            }
+                            Section {
+                                Button {
+                                    InteractionFeedback.impact(.light)
+                                    focusCoordinator.dismissKeyboard()
+                                    showingKeyboardShortcuts = true
+                                } label: {
+                                    Label(L10n.tr("shortcuts.title"), systemImage: "keyboard")
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                        .accessibilityLabel(L10n.a11yEditorMenuLabel)
+                        .accessibilityHint(L10n.a11yEditorMenuHint)
+                        .accessibilityIdentifier("editor.more-menu")
+                    }
+                } else {
+                    if #available(iOS 26.0, *) {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            systemCompactModePicker
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                    } else {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            systemCompactModePicker
+                        }
+                    }
+
+                    if #available(iOS 26.0, *) {
+                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    }
+
+                    if #available(iOS 26.0, *) {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            compactToolbarTrailingControl
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                    } else {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            compactToolbarTrailingControl
+                        }
+                    }
                 }
             }
-//            .toolbar {
-//                ToolbarItemGroup(placement: .keyboard) {
-//                    Button{} label:{ Text("{") }
-//                    Button{} label:{ Text("}") }
-//                    Button{} label:{ Text("[") }
-//                    Button{} label:{ Text("]") }
-//                    Button{} label:{ Text("(") }
-//                    Button{} label:{ Text(")") }
-//                }
-////                            ToolbarItemGroup(placement: .keyboard) {
-////                                Button("♣️", action: {})
-////                                Button("♥️", action: {})
-////                                Button("♠️", action: {})
-////                                Button("♦️", action: {})
-////                            }
-//            }
-//            .overlay(alignment: .bottom) {
-//                ControlGroup {
-//                    Button("{") { }
-//                    Button("}") { }
-//                    Button("(") { }
-//                    Button(")") { }
-//                    Button("[") { }
-//                    Button("]") { }
-//                }
-//                .glassEffect(.clear)
-//                .frame(height: 48)
-//                .ignoresSafeArea()
-////                .padding() // 👈 This does the trick
-//            }
     }
 
     var editorPresentation: some View {
-        editorChrome
+        regularEditorChrome
             .photosPicker(isPresented: $showingPhotoPicker,
                           selection: $selectedPhotoItems,
                           maxSelectionCount: 1,
@@ -493,7 +618,7 @@ extension DocumentEditorView {
             .onChange(of: syncCoordinator.editorScrollTarget) { _, target in
                 guard let target else { return }
                 if sizeClass != .regular {
-                    selectedTab = 0
+                    selectedTab = editorTab
                 }
                 if currentFileName != document.entryFileName {
                     guard openFileIfPossible(named: document.entryFileName) else { return }
@@ -526,7 +651,7 @@ extension DocumentEditorView {
             }
             .onChange(of: selectedTab) { _, newTab in
                 InteractionFeedback.selection()
-                if newTab != 0 {
+                if newTab != editorTab {
                     focusCoordinator.dismissKeyboard()
                 }
             }
@@ -576,7 +701,7 @@ extension DocumentEditorView {
     var editorOverlaysAndAlerts: some View {
         editorSheetsAndEvents
             .overlay {
-                if exporter.isExporting && sizeClass == .regular {
+                if exporter.isExporting {
                     ZStack {
                         Rectangle()
                             .fill(.ultraThinMaterial)

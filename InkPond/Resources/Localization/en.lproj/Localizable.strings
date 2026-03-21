@@ -128,6 +128,7 @@
 "Delete Document" = "Delete Document";
 "Delete" = "Delete";
 "Import Error" = "Import Error";
+"Share" = "Share";
 "Share PDF" = "Share PDF";
 "Export .typ" = "Export .typ";
 "Mode" = "Mode";
@@ -366,6 +367,9 @@
 "resume.alert.message_with_file" = "Return to %@ where you left off last time?";
 "resume.alert.action.resume" = "Resume";
 "resume.alert.action.start_from_top" = "Start from Top";
+"resume.banner.label" = "Resume where you left off";
+"resume.banner.label_with_file" = "Resume in %@";
+"resume.banner.a11y_hint" = "Tap to jump back to your last editing position";
 
 "resume.banner.label" = "Resume where you left off";
 "resume.banner.label_with_file" = "Resume in %@";

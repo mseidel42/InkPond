@@ -91,6 +91,7 @@
 "Delete Document" = "删除文档";
 "Delete" = "删除";
 "Import Error" = "导入错误";
+"Share" = "分享";
 "Share PDF" = "分享 PDF";
 "Export .typ" = "导出 .typ";
 "Mode" = "模式";
@@ -329,6 +330,9 @@
 "resume.alert.message_with_file" = "返回上次在 %@ 中离开的位置？";
 "resume.alert.action.resume" = "继续";
 "resume.alert.action.start_from_top" = "从头开始";
+"resume.banner.label" = "返回上次编辑位置";
+"resume.banner.label_with_file" = "返回 %@ 继续编辑";
+"resume.banner.a11y_hint" = "点击跳转到上次编辑位置";
 
 "resume.banner.label" = "返回上次编辑位置";
 "resume.banner.label_with_file" = "返回 %@ 继续编辑";
