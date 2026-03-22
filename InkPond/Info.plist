@@ -30,10 +30,6 @@
 			<string>Any</string>
 		</dict>
 	</dict>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>working-copy</string>
-	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UTExportedTypeDeclarations</key>

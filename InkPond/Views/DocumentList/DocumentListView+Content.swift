@@ -96,16 +96,6 @@ extension DocumentListView {
             } label: {
                 Label("Export .typ", systemImage: "doc.text")
             }
-            if let workingCopyURL = URL(string: "working-copy://"), UIApplication.shared.canOpenURL(workingCopyURL) {
-                Button {
-                    let repoName = document.projectID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                    if let openURL = URL(string: "working-copy://open?repo=\(repoName)") {
-                        UIApplication.shared.open(openURL)
-                    }
-                } label: {
-                    Label("Open in Working Copy", systemImage: "arrow.up.right.square")
-                }
-            }
             Divider()
             Button(role: .destructive) {
                 InteractionFeedback.notify(.warning)
@@ -159,7 +149,16 @@ extension DocumentListView {
             sortMenu
         }
         ToolbarItem(placement: .primaryAction) {
-            Button(action: addDocument) {
+            Menu {
+                Button(action: addDocument) {
+                    Label("New Document", systemImage: "doc.badge.plus")
+                }
+                Button {
+                    showingFolderImporter = true
+                } label: {
+                    Label("Link External Folder", systemImage: "link")
+                }
+            } label: {
                 Image(systemName: "folder.badge.plus")
                     .scaleEffect(0.8)
             }
@@ -194,10 +193,21 @@ extension DocumentListView {
             ToolbarSpacer(.flexible, placement: .bottomBar)
         }
         ToolbarItem(placement: .bottomBar) {
-            Button(action: addDocument) { Image(systemName: "folder.badge.plus") }
-                .accessibilityLabel(L10n.a11yDocumentListAddLabel)
-                .accessibilityHint(L10n.a11yDocumentListAddHint)
-                .accessibilityIdentifier("document-list.add")
+            Menu {
+                Button(action: addDocument) {
+                    Label("New Document", systemImage: "doc.badge.plus")
+                }
+                Button {
+                    showingFolderImporter = true
+                } label: {
+                    Label("Link External Folder", systemImage: "link")
+                }
+            } label: {
+                Image(systemName: "folder.badge.plus")
+            }
+            .accessibilityLabel(L10n.a11yDocumentListAddLabel)
+            .accessibilityHint(L10n.a11yDocumentListAddHint)
+            .accessibilityIdentifier("document-list.add")
         }
     }
 

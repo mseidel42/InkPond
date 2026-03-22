@@ -67,6 +67,7 @@ struct DocumentListView: View {
     @State var sortField: SortField = .modifiedAt
     @State var sortDirection: SortDirection = .descending
     @State var showingSortPopover = false
+    @State var showingFolderImporter = false
 
     let rowDateFormat = Date.FormatStyle(date: .abbreviated, time: .shortened)
 
@@ -215,6 +216,14 @@ struct DocumentListView: View {
                 guard newValue != nil else { return }
                 InteractionFeedback.notify(.error)
                 AccessibilitySupport.announce(newValue)
+            }
+            .fileImporter(isPresented: $showingFolderImporter, allowedContentTypes: [.folder]) { result in
+                switch result {
+                case .success(let url):
+                    linkExternalFolder(from: url)
+                case .failure(let error):
+                    zipImportError = error.localizedDescription
+                }
             }
     }
 }
