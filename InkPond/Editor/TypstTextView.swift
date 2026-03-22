@@ -137,6 +137,7 @@ final class TypstTextView: UITextView {
         spellCheckingType = .no
         backgroundColor = .clear
         textColor = .label
+        contentInsetAdjustmentBehavior = .never
         accessibilityTraits.insert(.allowsDirectInteraction)
         accessibilityLabel = L10n.a11yEditorLabel
         accessibilityHint = L10n.a11yEditorHint

@@ -75,7 +75,7 @@ extension DocumentEditorView {
         sizeClass != .regular
     }
 
-    var editorPane: some View {
+    func editorPane(topViewportInset: CGFloat = 0) -> some View {
         EditorView(
             text: $editorText,
             insertionRequest: $insertionRequest,
@@ -83,7 +83,7 @@ extension DocumentEditorView {
             viewState: $editorViewState,
             cursorJumpOffset: $pendingCursorJump,
             focusCoordinator: focusCoordinator,
-            topViewportInset: 0,
+            topViewportInset: topViewportInset,
             sourceMap: isSyncEnabled && isEditingEntryFile ? compiler.sourceMap : nil,
             syncCoordinator: isSyncEnabled ? syncCoordinator : nil,
             theme: themeManager.currentTheme,
@@ -197,8 +197,9 @@ extension DocumentEditorView {
         if sizeClass == .regular {
             GeometryReader { geo in
                 let total = geo.size.width
+                let topInset = geo.safeAreaInsets.top
                 HStack(spacing: 0) {
-                    editorPane
+                    editorPane(topViewportInset: topInset)
                         .ignoresSafeArea(edges: .top)
                         .frame(width: total * editorFraction)
                     splitHandle(totalWidth: total)
@@ -211,7 +212,7 @@ extension DocumentEditorView {
         } else {
             VStack(spacing: 0) {
                 ZStack {
-                    editorPane
+                    editorPane()
                         .opacity(selectedTab == editorTab ? 1 : 0)
                         .accessibilityHidden(selectedTab != editorTab)
                     previewPane

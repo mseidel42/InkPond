@@ -124,6 +124,7 @@ final class PDFContainerView: UIView {
             syncMarkerView.topAnchor.constraint(equalTo: topAnchor),
             syncMarkerView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+
     }
 
     @available(*, unavailable)
@@ -551,7 +552,7 @@ struct PreviewPane: View {
                         )
                     }
                 )
-                .ignoresSafeArea(edges: .bottom)
+                .ignoresSafeArea(.container, edges: .bottom)
                 .modifier(SoftScrollEdgeEffect())
                 .accessibilityLabel(L10n.a11yPreviewLabel)
                 .accessibilityHint(L10n.a11yPreviewHint)

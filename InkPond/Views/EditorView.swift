@@ -273,7 +273,14 @@ struct EditorView: UIViewRepresentable {
                 textView.selectedRange = restoredRange
             }
 
-            let targetOffset = parent.viewState.contentOffset
+            var targetOffset = parent.viewState.contentOffset
+            // The default viewState has contentOffset (0,0), which assumed no
+            // top content inset. When a top inset is present (e.g. to clear the
+            // navigation bar), remap the default "at top" position to the
+            // inset-adjusted top so content isn't hidden behind the bar.
+            if targetOffset == .zero && textView.contentInset.top > 0 {
+                targetOffset = CGPoint(x: 0, y: -textView.contentInset.top)
+            }
             if textView.contentOffset != targetOffset {
                 // Defer content offset restoration until after layout computes content size.
                 // Setting contentOffset before layout has no effect because the text view
