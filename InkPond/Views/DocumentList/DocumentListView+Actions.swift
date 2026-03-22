@@ -61,6 +61,7 @@ extension DocumentListView {
         }
 
         for document in documents where !existingFolders.contains(document.projectID) {
+            if BookmarkManager.hasBookmark(projectID: document.projectID) { continue }
             try? CompiledPreviewCacheStore().remove(projectID: document.projectID)
             if selectedDocument == document {
                 selectedDocument = nil
