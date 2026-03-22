@@ -324,6 +324,19 @@ extension DocumentEditorView {
             }
             .disabled(!canTriggerPreviewActions)
         }
+
+        Section {
+            if let workingCopyURL = URL(string: "working-copy://"), UIApplication.shared.canOpenURL(workingCopyURL) {
+                Button {
+                    let repoName = document.projectID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    if let openURL = URL(string: "working-copy://open?repo=\(repoName)") {
+                        UIApplication.shared.open(openURL)
+                    }
+                } label: {
+                    Label("Open in Working Copy", systemImage: "arrow.up.right.square")
+                }
+            }
+        }
     }
 
     private func compactToolbarButtonLabel(
@@ -498,6 +511,16 @@ extension DocumentEditorView {
                                     showingKeyboardShortcuts = true
                                 } label: {
                                     Label(L10n.tr("shortcuts.title"), systemImage: "keyboard")
+                                }
+                                if let workingCopyURL = URL(string: "working-copy://"), UIApplication.shared.canOpenURL(workingCopyURL) {
+                                    Button {
+                                        let repoName = document.projectID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                                        if let openURL = URL(string: "working-copy://open?repo=\(repoName)") {
+                                            UIApplication.shared.open(openURL)
+                                        }
+                                    } label: {
+                                        Label("Open in Working Copy", systemImage: "arrow.up.right.square")
+                                    }
                                 }
                             }
                         } label: {
