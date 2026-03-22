@@ -97,6 +97,31 @@ struct DocumentListView: View {
     var isIPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     var body: some View {
+        baseContent
+            .modifier(DocumentListAlertsModifier(
+                exporter: $exporter,
+                renamingDocument: $renamingDocument,
+                newTitle: $newTitle,
+                documentToDelete: $documentToDelete,
+                projectActionError: $projectActionError,
+                zipImportError: $zipImportError,
+                showingSettings: $showingSettings,
+                showingFolderImporter: $showingFolderImporter,
+                linkExternalFolder: linkExternalFolder(from:),
+                importZip: importZip(from:),
+                selectedDocument: $selectedDocument,
+                scenePhase: scenePhase,
+                scheduleFilesystemSync: scheduleFilesystemSync
+            ))
+            .modifier(DocumentListStateChangeModifier(
+                exporter: $exporter,
+                projectActionError: $projectActionError,
+                zipImportError: $zipImportError,
+                selectedDocument: $selectedDocument
+            ))
+    }
+
+    private var baseContent: some View {
         documentList
             .searchable(text: $searchText, prompt: "Search")
             .navigationTitle(L10n.appName)
@@ -113,17 +138,29 @@ struct DocumentListView: View {
                     }
                 }
             }
+    }
+}
+
+private struct DocumentListAlertsModifier: ViewModifier {
+    @Binding var exporter: ExportController
+    @Binding var renamingDocument: InkPondDocument?
+    @Binding var newTitle: String
+    @Binding var documentToDelete: InkPondDocument?
+    @Binding var projectActionError: String?
+    @Binding var zipImportError: String?
+    @Binding var showingSettings: Bool
+    @Binding var showingFolderImporter: Bool
+
+    @Environment(\.modelContext) var modelContext
+    let linkExternalFolder: (URL) -> Void
+    let importZip: (URL) -> Void
+    @Binding var selectedDocument: InkPondDocument?
+    let scenePhase: ScenePhase
+    let scheduleFilesystemSync: (Duration) -> Void
+
+    func body(content: Content) -> some View {
+        content
             .sheet(item: $exporter.exportURL) { ActivityView(activityItems: [$0]) }
-            .onChange(of: exporter.exportURL) { _, newValue in
-                guard newValue != nil else { return }
-                InteractionFeedback.notify(.success)
-                AccessibilitySupport.announce(L10n.a11yExportReady)
-            }
-            .onChange(of: exporter.exportError) { _, newValue in
-                guard newValue != nil else { return }
-                InteractionFeedback.notify(.error)
-                AccessibilitySupport.announce(newValue)
-            }
             .alert("Export Error", isPresented: Binding(
                 get: { exporter.exportError != nil },
                 set: { if !$0 { exporter.exportError = nil } }
@@ -190,14 +227,7 @@ struct DocumentListView: View {
                 Text(projectActionError ?? "")
             }
             .sheet(isPresented: $showingSettings) {
-                SettingsView(onImport: { url in importZip(from: url) })
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active { scheduleFilesystemSync(delay: .milliseconds(100)) }
-            }
-            .onChange(of: selectedDocument?.persistentModelID) { _, newValue in
-                guard newValue != nil else { return }
-                InteractionFeedback.selection()
+                SettingsView(onImport: importZip)
             }
             .alert("Import Error", isPresented: Binding(
                 get: { zipImportError != nil },
@@ -206,6 +236,42 @@ struct DocumentListView: View {
                 Button("OK") { zipImportError = nil }
             } message: {
                 Text(zipImportError ?? "")
+            }
+            .fileImporter(isPresented: $showingFolderImporter, allowedContentTypes: [.folder]) { result in
+                switch result {
+                case .success(let url):
+                    linkExternalFolder(url)
+                case .failure(let error):
+                    zipImportError = error.localizedDescription
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { scheduleFilesystemSync(.milliseconds(100)) }
+            }
+    }
+}
+
+private struct DocumentListStateChangeModifier: ViewModifier {
+    @Binding var exporter: ExportController
+    @Binding var projectActionError: String?
+    @Binding var zipImportError: String?
+    @Binding var selectedDocument: InkPondDocument?
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: exporter.exportURL) { _, newValue in
+                guard newValue != nil else { return }
+                InteractionFeedback.notify(.success)
+                AccessibilitySupport.announce(L10n.a11yExportReady)
+            }
+            .onChange(of: exporter.exportError) { _, newValue in
+                guard newValue != nil else { return }
+                InteractionFeedback.notify(.error)
+                AccessibilitySupport.announce(newValue)
+            }
+            .onChange(of: selectedDocument?.persistentModelID) { _, newValue in
+                guard newValue != nil else { return }
+                InteractionFeedback.selection()
             }
             .onChange(of: projectActionError) { _, newValue in
                 guard newValue != nil else { return }
@@ -216,14 +282,6 @@ struct DocumentListView: View {
                 guard newValue != nil else { return }
                 InteractionFeedback.notify(.error)
                 AccessibilitySupport.announce(newValue)
-            }
-            .fileImporter(isPresented: $showingFolderImporter, allowedContentTypes: [.folder]) { result in
-                switch result {
-                case .success(let url):
-                    linkExternalFolder(from: url)
-                case .failure(let error):
-                    zipImportError = error.localizedDescription
-                }
             }
     }
 }
