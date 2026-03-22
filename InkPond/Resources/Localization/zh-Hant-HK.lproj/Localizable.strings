@@ -334,10 +334,6 @@
 "resume.banner.label_with_file" = "返回 %@ 繼續編輯";
 "resume.banner.a11y_hint" = "點擊跳轉到上次編輯位置";
 
-"resume.banner.label" = "返回上次編輯位置";
-"resume.banner.label_with_file" = "返回 %@ 繼續編輯";
-"resume.banner.a11y_hint" = "點擊跳轉到上次編輯位置";
-
 "snippet.title" = "代碼片段";
 "snippet.search.prompt" = "搜尋代碼片段";
 "snippet.action.new" = "新增片段";

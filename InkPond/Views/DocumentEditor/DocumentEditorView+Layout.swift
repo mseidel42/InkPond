@@ -651,7 +651,9 @@ extension DocumentEditorView {
             }
             .onChange(of: selectedTab) { _, newTab in
                 InteractionFeedback.selection()
-                if newTab != editorTab {
+                if newTab == editorTab {
+                    focusCoordinator.activateKeyboard()
+                } else {
                     focusCoordinator.dismissKeyboard()
                 }
             }

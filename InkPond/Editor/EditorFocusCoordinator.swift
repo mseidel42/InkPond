@@ -50,6 +50,16 @@ final class EditorFocusCoordinator {
         textView?.resignFirstResponder()
     }
 
+    func activateKeyboard() {
+        guard let textView, !textView.isFirstResponder else { return }
+        restoreTask?.cancel()
+        restoreTask = Task { @MainActor [weak textView] in
+            await Task.yield()
+            guard let textView, !textView.isFirstResponder else { return }
+            _ = textView.becomeFirstResponder()
+        }
+    }
+
     private func restoreFocusIfNeeded() {
         guard shouldRestoreFocus else { return }
         shouldRestoreFocus = false

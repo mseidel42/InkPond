@@ -334,10 +334,6 @@
 "resume.banner.label_with_file" = "返回 %@ 继续编辑";
 "resume.banner.a11y_hint" = "点击跳转到上次编辑位置";
 
-"resume.banner.label" = "返回上次编辑位置";
-"resume.banner.label_with_file" = "返回 %@ 继续编辑";
-"resume.banner.a11y_hint" = "点击跳转到上次编辑位置";
-
 "snippet.title" = "代码片段";
 "snippet.search.prompt" = "搜索代码片段";
 "snippet.action.new" = "新建片段";

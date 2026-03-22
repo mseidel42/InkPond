@@ -41,6 +41,12 @@ struct AcknowledgementsView: View {
                     license: nil,
                     url: "https://donutblogs.com/"
                 )
+                creditRow(
+                    name: "Contributor",
+                    detail: "Ants-Aare",
+                    license: nil,
+                    url: "https://github.com/Ants-Aare"
+                )
             }
         }
         .listStyle(.insetGrouped)

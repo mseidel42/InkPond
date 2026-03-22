@@ -371,10 +371,6 @@
 "resume.banner.label_with_file" = "Resume in %@";
 "resume.banner.a11y_hint" = "Tap to jump back to your last editing position";
 
-"resume.banner.label" = "Resume where you left off";
-"resume.banner.label_with_file" = "Resume in %@";
-"resume.banner.a11y_hint" = "Tap to jump back to your last editing position";
-
 "snippet.title" = "Snippets";
 "snippet.search.prompt" = "Search snippets";
 "snippet.action.new" = "New Snippet";

@@ -114,9 +114,12 @@ struct EditorView: UIViewRepresentable {
                 if self.syncCoordinator?.activeDirection == .previewToEditor {
                     self.syncCoordinator?.endSync()
                 }
-                // Scroll to reveal cursor after layout
+                // Scroll to reveal cursor after layout and activate keyboard
                 DispatchQueue.main.async {
                     textView.scrollSelectionToUpperThird(animated: true)
+                    if !textView.isFirstResponder {
+                        _ = textView.becomeFirstResponder()
+                    }
                 }
             }
         }
