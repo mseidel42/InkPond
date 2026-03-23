@@ -97,7 +97,6 @@ extension DocumentEditorView {
 
         let fileURL = ProjectFileManager.typFileURL(named: fileName, for: document)
         let shouldRefreshPreviewAfterSave = fileName != document.entryFileName
-        let savedFileDate = lastPersistedFileDate
 
         saveTask?.cancel()
         saveTask = Task {
@@ -109,7 +108,12 @@ extension DocumentEditorView {
 
             guard !Task.isCancelled else { return }
 
-            // Check for external modifications (another device via iCloud)
+            // Check for external modifications (another device via iCloud).
+            // Read lastPersistedFileDate here (after the debounce) so it reflects
+            // any writes that completed during the sleep window, avoiding false
+            // conflict warnings when rapid edits (e.g. auto-pair closing math
+            // mode) trigger overlapping save cycles.
+            let savedFileDate = await self.lastPersistedFileDate
             let currentFileDate = Self.fileModificationDate(for: fileURL)
             if let saved = savedFileDate, let current = currentFileDate,
                current.timeIntervalSince(saved) > 1.0 {
@@ -195,6 +199,7 @@ extension DocumentEditorView {
                 try content.write(to: fileURL, atomically: true, encoding: .utf8)
             }
             lastPersistedText = content
+            lastPersistedFileDate = Self.fileModificationDate(for: fileURL)
             document.modifiedAt = Date()
             if shouldRefreshPreviewAfterSave {
                 compileToken = UUID()
