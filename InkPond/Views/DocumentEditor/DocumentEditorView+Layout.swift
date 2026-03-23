@@ -36,6 +36,7 @@ private struct ConditionalNavigationBarBackgroundModifier: ViewModifier {
     }
 }
 
+
 private struct ConditionalToolbarRoleModifier: ViewModifier {
     let usesEditorRole: Bool
 
@@ -124,7 +125,7 @@ extension DocumentEditorView {
         .ignoresSafeArea(edges: .bottom)
     }
 
-    var previewPane: some View {
+    func previewPane(topViewportInset: CGFloat = 0) -> some View {
         PreviewPane(
             compiler: compiler,
             source: entrySource,
@@ -136,7 +137,7 @@ extension DocumentEditorView {
             sourceMap: isSyncEnabled ? compiler.sourceMap : nil,
             syncCoordinator: syncCoordinator,
             entryFileName: document.entryFileName,
-            topViewportInset: 0,
+            topViewportInset: topViewportInset,
             onGoToError: { file, line, column in
                 navigateToError(file: file, line: line, column: column)
             }
@@ -203,19 +204,23 @@ extension DocumentEditorView {
                         .ignoresSafeArea(edges: .top)
                         .frame(width: total * editorFraction)
                     splitHandle(totalWidth: total)
-                    previewPane
+                    previewPane()
                         .ignoresSafeArea(edges: .top)
                         .modifier(SoftScrollEdgeEffectModifier())
                 }
                 .coordinateSpace(name: "splitContainer")
             }
         } else {
-            VStack(spacing: 0) {
+            GeometryReader { geo in
+                let topInset = geo.safeAreaInsets.top
                 ZStack {
-                    editorPane()
+                    editorPane(topViewportInset: topInset)
+                        .ignoresSafeArea(edges: .top)
+                        .modifier(SoftScrollEdgeEffectModifier())
                         .opacity(selectedTab == editorTab ? 1 : 0)
                         .accessibilityHidden(selectedTab != editorTab)
-                    previewPane
+                    previewPane(topViewportInset: topInset)
+                        .ignoresSafeArea(edges: .top)
                         .modifier(SoftScrollEdgeEffectModifier())
                         .opacity(selectedTab == previewTab ? 1 : 0)
                         .accessibilityHidden(selectedTab != previewTab)
