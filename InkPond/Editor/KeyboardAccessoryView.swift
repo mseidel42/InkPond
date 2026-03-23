@@ -159,7 +159,7 @@ final class KeyboardAccessoryView: UIInputView {
         glass.contentView.addSubview(separator)
         glass.contentView.addSubview(rightStack)
 
-        var constraints = [
+        let constraints = [
             // Glass container constraints
             glass.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             glass.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
@@ -193,7 +193,7 @@ final class KeyboardAccessoryView: UIInputView {
         addSubview(separator)
         addSubview(rightStack)
 
-        var constraints = [
+        let constraints = [
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
