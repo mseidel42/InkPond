@@ -206,6 +206,7 @@ extension DocumentEditorView {
                     splitHandle(totalWidth: total)
                     previewPane()
                         .ignoresSafeArea(edges: .top)
+                        .modifier(SoftScrollEdgeEffectModifier())
                 }
                 .coordinateSpace(name: "splitContainer")
             }
@@ -220,6 +221,7 @@ extension DocumentEditorView {
                         .accessibilityHidden(selectedTab != editorTab)
                     previewPane(topViewportInset: topInset)
                         .ignoresSafeArea(edges: .top)
+                        .modifier(SoftScrollEdgeEffectModifier())
                         .opacity(selectedTab == previewTab ? 1 : 0)
                         .accessibilityHidden(selectedTab != previewTab)
                 }
