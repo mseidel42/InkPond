@@ -206,7 +206,6 @@ extension DocumentEditorView {
                     splitHandle(totalWidth: total)
                     previewPane()
                         .ignoresSafeArea(edges: .top)
-                        .modifier(SoftScrollEdgeEffectModifier())
                 }
                 .coordinateSpace(name: "splitContainer")
             }
@@ -221,7 +220,6 @@ extension DocumentEditorView {
                         .accessibilityHidden(selectedTab != editorTab)
                     previewPane(topViewportInset: topInset)
                         .ignoresSafeArea(edges: .top)
-                        .modifier(SoftScrollEdgeEffectModifier())
                         .opacity(selectedTab == previewTab ? 1 : 0)
                         .accessibilityHidden(selectedTab != previewTab)
                 }
@@ -413,14 +411,16 @@ extension DocumentEditorView {
                 if usesSystemCompactToolbar {
                     ToolbarItem(placement: .principal) {
                         Menu {
-                            Button { shareButtonAction() } label: {
-                                Label(L10n.tr("Share"), systemImage: "square.and.arrow.up")
+                            Button(action: shareButtonAction) {
+                                Label(shareButtonLabel, systemImage: "square.and.arrow.up")
                             }
-                            Button {
-                                guard flushPendingSave() else { return }
-                                exporter.exportTypSource(for: document, fileName: currentFileName)
-                            } label: {
-                                Label("Export .typ", systemImage: "square.and.arrow.up.on.square")
+                            if selectedTab == previewTab {
+                                Button {
+                                    guard flushPendingSave() else { return }
+                                    exporter.exportTypSource(for: document, fileName: currentFileName)
+                                } label: {
+                                    Label("Export .typ", systemImage: "square.and.arrow.up.on.square")
+                                }
                             }
                             Button { triggerZipExport() } label: {
                                 Label("Export Project as Zip", systemImage: "archivebox")
@@ -437,7 +437,6 @@ extension DocumentEditorView {
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 } else {
