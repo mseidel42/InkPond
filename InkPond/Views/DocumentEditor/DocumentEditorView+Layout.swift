@@ -412,18 +412,33 @@ extension DocumentEditorView {
             .toolbar {
                 if usesSystemCompactToolbar {
                     ToolbarItem(placement: .principal) {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(document.title)
-                                .font(.headline)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Text(currentFileName)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                        Menu {
+                            Button { shareButtonAction() } label: {
+                                Label(L10n.tr("Share"), systemImage: "square.and.arrow.up")
+                            }
+                            Button {
+                                guard flushPendingSave() else { return }
+                                exporter.exportTypSource(for: document, fileName: currentFileName)
+                            } label: {
+                                Label("Export .typ", systemImage: "square.and.arrow.up.on.square")
+                            }
+                            Button { triggerZipExport() } label: {
+                                Label("Export Project as Zip", systemImage: "archivebox")
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(document.title)
+                                    .font(.headline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Text(currentFileName)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
                     ToolbarTitleMenu {
