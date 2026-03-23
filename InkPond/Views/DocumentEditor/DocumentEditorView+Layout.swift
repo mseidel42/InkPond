@@ -25,10 +25,10 @@ private struct ConditionalNavigationBarBackgroundModifier: ViewModifier {
         if hidesBackground {
             if #available(iOS 18.0, *) {
                 content
-                    .toolbarBackground(.clear, for: .navigationBar)
-                    .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+                    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+                    .toolbarBackgroundVisibility(.visible, for: .navigationBar)
             } else {
-                content.toolbarBackground(.hidden, for: .navigationBar)
+                content.toolbarBackground(.visible, for: .navigationBar)
             }
         } else {
             content
