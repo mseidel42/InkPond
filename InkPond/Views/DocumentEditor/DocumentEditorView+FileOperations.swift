@@ -113,7 +113,7 @@ extension DocumentEditorView {
             // any writes that completed during the sleep window, avoiding false
             // conflict warnings when rapid edits (e.g. auto-pair closing math
             // mode) trigger overlapping save cycles.
-            let savedFileDate = await self.lastPersistedFileDate
+            let savedFileDate = self.lastPersistedFileDate
             let currentFileDate = Self.fileModificationDate(for: fileURL)
             if let saved = savedFileDate, let current = currentFileDate,
                current.timeIntervalSince(saved) > 1.0 {
@@ -123,6 +123,8 @@ extension DocumentEditorView {
                 }
                 return
             }
+
+            guard !Task.isCancelled else { return }
 
             do {
                 try await backgroundFileWriter.write(content, to: fileURL)
