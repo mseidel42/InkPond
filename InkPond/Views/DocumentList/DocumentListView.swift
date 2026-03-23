@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct DocumentListView: View {
     enum SortField: String, CaseIterable, Identifiable {
