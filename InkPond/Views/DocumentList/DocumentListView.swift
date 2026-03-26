@@ -64,6 +64,7 @@ struct DocumentListView: View {
     @State var zipImportError: String? = nil
     @State var monitor = DirectoryMonitor()
     @State var syncTask: Task<Void, Never>?
+    @State var monitorRestartTask: Task<Void, Never>?
     @State var sortField: SortField = .modifiedAt
     @State var sortDirection: SortDirection = .descending
     @State var showingSortPopover = false

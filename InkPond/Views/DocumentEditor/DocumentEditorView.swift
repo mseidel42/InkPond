@@ -42,10 +42,10 @@ struct DocumentEditorView: View {
     @State var compileToken: UUID = UUID()
     @State var isLoadingFileContent = false
     @State var lastPersistedText: String = ""
-    @State var lastPersistedFileDate: Date?
     @State var saveTask: Task<Void, Never>?
     @State var backgroundFileWriter = BackgroundDocumentFileWriter()
     @State var compileFontPaths: [String]
+    @State var conflictMonitor = FileConflictMonitor()
 
     let editorTab:Int = 0
     let previewTab:Int = 1

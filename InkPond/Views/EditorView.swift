@@ -133,7 +133,12 @@ struct EditorView: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ textView: TypstTextView, coordinator: Coordinator) {
-        coordinator.captureViewState(from: textView)
+        // Do NOT write to the @Binding here. During view graph teardown,
+        // SwiftUI's StoredLocation already has an active access; writing
+        // triggers a Swift exclusivity violation (SIGABRT).
+        // The viewState binding is kept current by captureViewState() calls
+        // in textViewDidChange / textViewDidChangeSelection / scrollViewDidScroll,
+        // and the parent persists cursor position in onDisappear before teardown.
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {

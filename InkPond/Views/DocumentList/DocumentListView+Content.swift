@@ -25,15 +25,22 @@ extension DocumentListView {
             startFilesystemMonitoring()
         }
         .onChange(of: storageManager.mode) { _, _ in
-            startFilesystemMonitoring()
+            guard !storageManager.isMigrating else { return }
+            scheduleFilesystemMonitoringRestart()
+        }
+        .onChange(of: storageManager.isMigrating) { _, isMigrating in
+            guard !isMigrating else { return }
+            scheduleFilesystemMonitoringRestart()
         }
         .onChange(of: storageManager.iCloudAvailable) { _, _ in
-            startFilesystemMonitoring()
+            scheduleFilesystemMonitoringRestart()
         }
         .onDisappear {
             monitor.stop()
             syncTask?.cancel()
             syncTask = nil
+            monitorRestartTask?.cancel()
+            monitorRestartTask = nil
         }
     }
 
@@ -118,6 +125,17 @@ extension DocumentListView {
         ContentUnavailableView.search(text: searchText)
     }
 
+    /// Coalesces multiple rapid onChange triggers (e.g. mode + isMigrating
+    /// changing in the same transaction) into a single monitoring restart.
+    func scheduleFilesystemMonitoringRestart() {
+        monitorRestartTask?.cancel()
+        monitorRestartTask = Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            startFilesystemMonitoring()
+        }
+    }
+
     func startFilesystemMonitoring() {
         monitor.stop()
         syncTask?.cancel()
@@ -184,7 +202,7 @@ extension DocumentListView {
             ToolbarSpacer(.flexible, placement: .bottomBar)
         }
         ToolbarItem(placement: .bottomBar) {
-            Button(action: addDocument) { Image(systemName: "folder.badge.plus") }
+            Button(action: addDocument) { Image(systemName: "plus") }
                 .accessibilityLabel(L10n.a11yDocumentListAddLabel)
                 .accessibilityHint(L10n.a11yDocumentListAddHint)
                 .accessibilityIdentifier("document-list.add")
