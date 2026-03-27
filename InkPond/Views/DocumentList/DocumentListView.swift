@@ -65,6 +65,7 @@ struct DocumentListView: View {
     @State var monitor = DirectoryMonitor()
     @State var syncTask: Task<Void, Never>?
     @State var monitorRestartTask: Task<Void, Never>?
+    @State var needsFilesystemSync = false
     @State var sortField: SortField = .modifiedAt
     @State var sortDirection: SortDirection = .descending
     @State var showingSortPopover = false
@@ -189,7 +190,12 @@ struct DocumentListView: View {
             } message: {
                 Text(projectActionError ?? "")
             }
-            .sheet(isPresented: $showingSettings) {
+            .sheet(isPresented: $showingSettings, onDismiss: {
+                if needsFilesystemSync {
+                    needsFilesystemSync = false
+                    startFilesystemMonitoring()
+                }
+            }) {
                 SettingsView(onImport: { url in importZip(from: url) })
             }
             .onChange(of: scenePhase) { _, phase in

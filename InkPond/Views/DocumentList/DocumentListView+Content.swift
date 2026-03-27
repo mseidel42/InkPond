@@ -127,13 +127,34 @@ extension DocumentListView {
 
     /// Coalesces multiple rapid onChange triggers (e.g. mode + isMigrating
     /// changing in the same transaction) into a single monitoring restart.
+    /// When the settings sheet is open, only restarts the directory monitor
+    /// (re-points it at the new URL) and defers the filesystem sync until the
+    /// sheet is dismissed — prevents SwiftData mutations from closing the sheet.
     func scheduleFilesystemMonitoringRestart() {
         monitorRestartTask?.cancel()
         monitorRestartTask = Task {
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
-            startFilesystemMonitoring()
+            if showingSettings {
+                restartDirectoryMonitorOnly()
+                needsFilesystemSync = true
+            } else {
+                startFilesystemMonitoring()
+            }
         }
+    }
+
+    /// Restarts the directory monitor without running an immediate filesystem
+    /// sync. Used when the settings sheet is presented to avoid SwiftData
+    /// mutations that would dismiss it.
+    func restartDirectoryMonitorOnly() {
+        monitor.stop()
+        syncTask?.cancel()
+        syncTask = nil
+
+        guard let docs = ProjectFileManager.syncDocumentsURL else { return }
+        monitor.onChange = { scheduleFilesystemSync() }
+        monitor.start(url: docs)
     }
 
     func startFilesystemMonitoring() {
