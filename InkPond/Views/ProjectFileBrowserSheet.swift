@@ -190,6 +190,30 @@ struct ProjectFileBrowserSheet: View {
             .accessibilityAction(named: Text(L10n.tr("Delete"))) {
                 deleteTypFile(node.relativePath)
             })
+        } else if node.kind == .reference {
+            return AnyView(Button {
+                openFile(node.relativePath)
+                dismiss()
+            } label: {
+                rowLabel(for: row)
+            }
+            .buttonStyle(ProjectFileRowButtonStyle())
+            .contentShape(Rectangle())
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                    deleteFile(at: node.relativePath, kind: node.kind)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(rowAccessibilityLabel(for: row))
+            .accessibilityHint(L10n.a11yProjectFilesOpenHint)
+            .accessibilityValue(rowAccessibilityValue(for: row))
+            .accessibilityIdentifier("project-files.row.\(node.relativePath)")
+            .accessibilityAction(named: Text(L10n.tr("Delete"))) {
+                deleteFile(at: node.relativePath, kind: node.kind)
+            })
         } else if node.kind == .image {
             return AnyView(Button {
                 previewFile(node.relativePath)
@@ -262,7 +286,7 @@ struct ProjectFileBrowserSheet: View {
                 cloudStatusIndicator(for: node.relativePath)
             }
             Spacer()
-            if node.kind == .typ {
+            if node.kind == .typ || node.kind == .reference {
                 badges(for: node.relativePath)
             }
         }
@@ -332,6 +356,8 @@ struct ProjectFileBrowserSheet: View {
             return "folder"
         case .typ:
             return "doc.plaintext"
+        case .reference:
+            return "doc.text"
         case .image:
             return "photo"
         case .font:
@@ -528,6 +554,8 @@ struct ProjectFileBrowserSheet: View {
             return L10n.tr("a11y.project_files.kind.folder")
         case .typ:
             return L10n.tr("a11y.project_files.kind.typ")
+        case .reference:
+            return L10n.tr("a11y.project_files.kind.reference")
         case .image:
             return L10n.tr("a11y.project_files.kind.image")
         case .font:

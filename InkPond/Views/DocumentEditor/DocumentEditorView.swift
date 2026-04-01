@@ -73,6 +73,7 @@ struct DocumentEditorView: View {
     @State var focusCoordinator = EditorFocusCoordinator()
     @State var syncCoordinator = SyncCoordinator()
     @State var editorViewState = EditorViewState()
+    @State var fileLoadToken = UUID()
     @State var pendingCursorJump: Int?
     @State var pendingManualCompileFeedback = false
     @State var cachedBibEntries: [(key: String, type: String)] = []

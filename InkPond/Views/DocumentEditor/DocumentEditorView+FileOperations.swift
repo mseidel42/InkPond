@@ -68,6 +68,7 @@ extension DocumentEditorView {
         currentFileName = name
         isLoadingFileContent = true
         editorText = text
+        fileLoadToken = UUID()
         isLoadingFileContent = false
         lastPersistedText = text
         if name == document.entryFileName {

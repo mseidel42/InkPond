@@ -25,6 +25,7 @@ struct EditorView: UIViewRepresentable {
     @Binding var findRequested: Bool
     @Binding var viewState: EditorViewState
     @Binding var cursorJumpOffset: Int?
+    var fileLoadToken: UUID = UUID()
     var focusCoordinator: EditorFocusCoordinator? = nil
     var topViewportInset: CGFloat = 0
     var sourceMap: SourceMap?
@@ -123,9 +124,18 @@ struct EditorView: UIViewRepresentable {
                 }
             }
         }
+        // A file-load token change means the user switched files — always push
+        // the new content regardless of first-responder state.
+        let forceUpdate = context.coordinator.lastAppliedFileLoadToken != fileLoadToken
+        if forceUpdate {
+            context.coordinator.lastAppliedFileLoadToken = fileLoadToken
+        }
+
         // Never push text back into the view while the user is actively editing.
         // Doing so can dismiss the software keyboard on iPadOS.
-        guard !textView.isFirstResponder else { return }
+        if !forceUpdate {
+            guard !textView.isFirstResponder else { return }
+        }
         guard textView.text != text else { return }
         textView.text = text
         textView.scheduleHighlighting(.immediate, textChanged: true)
@@ -144,6 +154,7 @@ struct EditorView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: EditorView
         weak var textView: TypstTextView?
+        var lastAppliedFileLoadToken: UUID?
         private var lastAppliedViewState: EditorViewState?
         /// Set during `textViewDidChange` so the subsequent `textViewDidChangeSelection` knows
         /// the cursor moved because of typing, not a deliberate navigation.

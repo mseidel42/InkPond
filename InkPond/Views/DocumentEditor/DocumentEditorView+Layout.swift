@@ -83,6 +83,7 @@ extension DocumentEditorView {
             findRequested: $findRequested,
             viewState: $editorViewState,
             cursorJumpOffset: $pendingCursorJump,
+            fileLoadToken: fileLoadToken,
             focusCoordinator: focusCoordinator,
             topViewportInset: topViewportInset,
             sourceMap: isSyncEnabled && isEditingEntryFile ? compiler.sourceMap : nil,

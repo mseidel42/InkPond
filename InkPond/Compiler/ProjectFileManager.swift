@@ -43,6 +43,7 @@ struct ProjectTreeNode: Identifiable, Hashable {
     enum Kind: Hashable {
         case directory
         case typ
+        case reference
         case image
         case font
         case other
@@ -70,6 +71,9 @@ enum ProjectFileManager {
         "pdf", "png", "svg", "tif", "tiff", "webp"
     ]
     static let fontFileExtensions: Set<String> = ["otf", "ttf", "woff", "woff2"]
+    static let referenceFileExtensions: Set<String> = [
+        "bib", "yml", "yaml", "csv", "json", "xml", "toml", "txt"
+    ]
 
     /// Shared StorageManager reference — set at app launch from InkPondApp.
     /// Protected by a lock for thread-safe access from any actor context.
@@ -422,6 +426,7 @@ enum ProjectFileManager {
     static func fileKind(for relativePath: String, imageDirectoryName: String) -> ProjectTreeNode.Kind {
         let ext = (relativePath as NSString).pathExtension.lowercased()
         if ext == "typ" { return .typ }
+        if referenceFileExtensions.contains(ext) { return .reference }
         if relativePath.hasPrefix("fonts/") { return .font }
         if !imageDirectoryName.isEmpty, relativePath.hasPrefix(imageDirectoryName + "/") { return .image }
         if supportedImageFileExtensions.contains(ext) {

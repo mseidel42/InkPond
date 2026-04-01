@@ -55,3 +55,7 @@ dist/
 .env.local
 .claude/
 IDEAS.md
+
+# App Store metadata & screenshots
+release/metadata/
+release/demo.typ

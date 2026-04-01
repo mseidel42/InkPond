@@ -244,6 +244,7 @@
 "a11y.project_files.kind.typ" = "Typst 檔案";
 "a11y.project_files.kind.image" = "圖片";
 "a11y.project_files.kind.font" = "字體";
+"a11y.project_files.kind.reference" = "參考檔案";
 "a11y.project_files.kind.file" = "檔案";
 "a11y.state.expanded" = "已展開";
 "a11y.state.collapsed" = "已收合";
