@@ -22,6 +22,8 @@
 "doc.list.empty.title" = "还没有文档";
 "doc.list.empty.message" = "新建一个文档，开始写作。";
 "doc.list.empty.action" = "新建文档";
+"doc.list.action.new" = "新建文档";
+"doc.list.action.link_external" = "链接外部文件夹";
 
 "action.find_replace" = "查找与替换";
 "action.insert_image" = "插入图片";

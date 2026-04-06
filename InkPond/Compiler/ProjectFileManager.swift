@@ -235,7 +235,7 @@ enum ProjectFileManager {
     }
 
     static func deleteProjectDirectory(for document: InkPondDocument) throws {
-        if let _ = BookmarkManager.loadBookmark(projectID: document.projectID) {
+        if BookmarkManager.hasBookmark(projectID: document.projectID) {
             BookmarkManager.removeBookmark(projectID: document.projectID)
             os_log(.info, "ProjectFileManager: removed bookmark for %{public}@", document.projectID)
             return

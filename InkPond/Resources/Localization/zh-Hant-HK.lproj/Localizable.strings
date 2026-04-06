@@ -22,6 +22,8 @@
 "doc.list.empty.title" = "尚無文件";
 "doc.list.empty.message" = "建立新文件，開始寫作。";
 "doc.list.empty.action" = "新增文件";
+"doc.list.action.new" = "新增文件";
+"doc.list.action.link_external" = "連結外部資料夾";
 
 "action.find_replace" = "尋找及取代";
 "action.insert_image" = "插入圖片";

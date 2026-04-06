@@ -52,6 +52,9 @@ enum L10n {
     nonisolated static var appFontsExportWarningMessage: String { tr("app_fonts.export_warning.message") }
     nonisolated static var uiTestSampleDocumentTitle: String { tr("ui_test.sample_document_title") }
 
+    nonisolated static var docListNewDocument: String { tr("doc.list.action.new") }
+    nonisolated static var docListLinkExternalFolder: String { tr("doc.list.action.link_external") }
+
     nonisolated static var a11yDocumentListSettingsLabel: String { tr("a11y.document_list.settings.label") }
     nonisolated static var a11yDocumentListSettingsHint: String { tr("a11y.document_list.settings.hint") }
     nonisolated static var a11yDocumentListAddLabel: String { tr("a11y.document_list.add.label") }

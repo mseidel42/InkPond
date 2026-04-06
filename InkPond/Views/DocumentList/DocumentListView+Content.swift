@@ -151,12 +151,12 @@ extension DocumentListView {
         ToolbarItem(placement: .primaryAction) {
             Menu {
                 Button(action: addDocument) {
-                    Label("New Document", systemImage: "doc.badge.plus")
+                    Label(L10n.docListNewDocument, systemImage: "doc.badge.plus")
                 }
                 Button {
                     showingFolderImporter = true
                 } label: {
-                    Label("Link External Folder", systemImage: "link")
+                    Label(L10n.docListLinkExternalFolder, systemImage: "link")
                 }
             } label: {
                 Image(systemName: "folder.badge.plus")
@@ -195,12 +195,12 @@ extension DocumentListView {
         ToolbarItem(placement: .bottomBar) {
             Menu {
                 Button(action: addDocument) {
-                    Label("New Document", systemImage: "doc.badge.plus")
+                    Label(L10n.docListNewDocument, systemImage: "doc.badge.plus")
                 }
                 Button {
                     showingFolderImporter = true
                 } label: {
-                    Label("Link External Folder", systemImage: "link")
+                    Label(L10n.docListLinkExternalFolder, systemImage: "link")
                 }
             } label: {
                 Image(systemName: "folder.badge.plus")

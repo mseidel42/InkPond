@@ -22,6 +22,8 @@
 "doc.list.empty.title" = "No Documents Yet";
 "doc.list.empty.message" = "Create a new document to start writing.";
 "doc.list.empty.action" = "New Document";
+"doc.list.action.new" = "New Document";
+"doc.list.action.link_external" = "Link External Folder";
 
 "action.find_replace" = "Find & Replace";
 "action.insert_image" = "Insert Image";
