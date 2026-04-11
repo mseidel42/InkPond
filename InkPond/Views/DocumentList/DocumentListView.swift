@@ -177,19 +177,24 @@ private struct DocumentListAlertsModifier: ViewModifier {
                 TextField("Title", text: $newTitle)
                 Button("Rename") {
                     if let doc = renamingDocument {
-                        do {
-                            let oldProjectID = doc.projectID
-                            let newFolderName = try ProjectFileManager.renameProjectDirectory(for: doc, to: newTitle)
-                            try? CompiledPreviewCacheStore().moveCache(
-                                from: oldProjectID,
-                                to: newFolderName,
-                                documentTitle: newTitle
-                            )
-                            doc.projectID = newFolderName
+                        if doc.isExternalFolder {
                             doc.title = newTitle
                             doc.modifiedAt = Date()
-                        } catch {
-                            projectActionError = error.localizedDescription
+                        } else {
+                            do {
+                                let oldProjectID = doc.projectID
+                                let newFolderName = try ProjectFileManager.renameProjectDirectory(for: doc, to: newTitle)
+                                try? CompiledPreviewCacheStore().moveCache(
+                                    from: oldProjectID,
+                                    to: newFolderName,
+                                    documentTitle: newTitle
+                                )
+                                doc.projectID = newFolderName
+                                doc.title = newTitle
+                                doc.modifiedAt = Date()
+                            } catch {
+                                projectActionError = error.localizedDescription
+                            }
                         }
                     }
                     renamingDocument = nil

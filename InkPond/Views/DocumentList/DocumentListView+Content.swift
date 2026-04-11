@@ -40,9 +40,15 @@ extension DocumentListView {
     func documentRow(_ document: InkPondDocument) -> some View {
         NavigationLink(value: document) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(document.title)
-                    .font(.headline)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if document.isExternalFolder {
+                        Image(systemName: "link")
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(document.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(L10n.tr("doc.time.created")): \(document.createdAt.formatted(rowDateFormat))")
                     Text("\(L10n.tr("doc.time.modified")): \(document.modifiedAt.formatted(rowDateFormat))")
