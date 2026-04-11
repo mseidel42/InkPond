@@ -406,3 +406,9 @@
 "network.status.disconnected" = "No network connection";
 "network.status.expensive" = "Connected (cellular)";
 "network.status.constrained" = "Connected (limited)";
+
+"action.unlink" = "Unlink";
+"alert.unlink_document.message" = "\"%@\" will be unlinked. Its original files will not be deleted.";
+"a11y.document_row.action.unlink" = "Unlink";
+"Unlink Folder" = "Unlink Folder";
+"Unlink" = "Unlink";

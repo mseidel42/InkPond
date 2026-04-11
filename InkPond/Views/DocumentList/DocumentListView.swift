@@ -196,14 +196,18 @@ private struct DocumentListAlertsModifier: ViewModifier {
                 }
                 Button("Cancel", role: .cancel) { renamingDocument = nil }
             }
-            .alert("Delete Document", isPresented: Binding(
+            .alert(documentToDelete?.isExternalFolder == true ? "Unlink Folder" : "Delete Document", isPresented: Binding(
                 get: { documentToDelete != nil },
                 set: { if !$0 { documentToDelete = nil } }
             )) {
-                Button("Delete", role: .destructive) {
+                Button(documentToDelete?.isExternalFolder == true ? "Unlink" : "Delete", role: .destructive) {
                     if let doc = documentToDelete {
                         do {
-                            try ProjectFileManager.deleteProjectDirectory(for: doc)
+                            if doc.isExternalFolder {
+                                BookmarkManager.removeBookmark(projectID: doc.projectID)
+                            } else {
+                                try ProjectFileManager.deleteProjectDirectory(for: doc)
+                            }
                             try? CompiledPreviewCacheStore().remove(projectID: doc.projectID)
                             if selectedDocument == doc { selectedDocument = nil }
                             modelContext.delete(doc)
@@ -216,7 +220,11 @@ private struct DocumentListAlertsModifier: ViewModifier {
                 Button("Cancel", role: .cancel) { documentToDelete = nil }
             } message: {
                 if let doc = documentToDelete {
-                    Text(L10n.deleteDocumentMessage(title: doc.title))
+                    if doc.isExternalFolder {
+                        Text(L10n.unlinkDocumentMessage(title: doc.title))
+                    } else {
+                        Text(L10n.deleteDocumentMessage(title: doc.title))
+                    }
                 }
             }
             .alert("Project Error", isPresented: Binding(

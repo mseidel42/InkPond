@@ -74,7 +74,7 @@ extension DocumentListView {
         .accessibilityAction(named: Text(L10n.tr("a11y.document_row.action.export_source"))) {
             exporter.exportTypSource(for: document, fileName: document.entryFileName)
         }
-        .accessibilityAction(named: Text(L10n.tr("a11y.document_row.action.delete"))) {
+        .accessibilityAction(named: Text(document.isExternalFolder ? L10n.tr("a11y.document_row.action.unlink") : L10n.tr("a11y.document_row.action.delete"))) {
             InteractionFeedback.notify(.warning)
             documentToDelete = document
         }
@@ -101,7 +101,11 @@ extension DocumentListView {
                 InteractionFeedback.notify(.warning)
                 documentToDelete = document
             } label: {
-                Label("Delete", systemImage: "trash")
+                if document.isExternalFolder {
+                    Label("Unlink", systemImage: "link.badge.minus")
+                } else {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
     }

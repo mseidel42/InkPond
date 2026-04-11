@@ -407,3 +407,9 @@
 "icloud.conflict.message" = "「%@」在你编辑期间被其他设备修改了。请选择保留哪个版本。";
 "icloud.conflict.keep_local" = "保留我的修改";
 "icloud.conflict.keep_remote" = "使用其他设备的版本";
+
+"action.unlink" = "解除链接";
+"alert.unlink_document.message" = "\"%@\" 将被解除链接。其原始文件不会被删除。";
+"a11y.document_row.action.unlink" = "解除链接";
+"Unlink Folder" = "解除链接文件夹";
+"Unlink" = "解除链接";
