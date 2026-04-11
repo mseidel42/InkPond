@@ -115,7 +115,7 @@ extension DocumentListView {
                 documentToDelete = document
             } label: {
                 if document.isExternalFolder {
-                    Label("Unlink", systemImage: "folder.badge.minus")
+                    Label("Unlink", systemImage: "personalhotspot.slash")
                 } else {
                     Label("Delete", systemImage: "trash")
                 }
