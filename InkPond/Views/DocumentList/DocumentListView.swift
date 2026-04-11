@@ -161,21 +161,74 @@ private struct DocumentListAlertsModifier: ViewModifier {
     let scenePhase: ScenePhase
     let scheduleFilesystemSync: (Duration) -> Void
 
+    // Break up complex bindings to avoid type-checker timeouts
+    private var isExportErrorPresented: Binding<Bool> {
+        Binding(
+            get: { exporter.exportError != nil },
+            set: { if !$0 { exporter.exportError = nil } }
+        )
+    }
+
+    private var isRenamingPresented: Binding<Bool> {
+        Binding(
+            get: { renamingDocument != nil },
+            set: { if !$0 { renamingDocument = nil } }
+        )
+    }
+
+    private var isDeletePresented: Binding<Bool> {
+        Binding(
+            get: { documentToDelete != nil },
+            set: { if !$0 { documentToDelete = nil } }
+        )
+    }
+
+    private var isProjectErrorPresented: Binding<Bool> {
+        Binding(
+            get: { projectActionError != nil },
+            set: { if !$0 { projectActionError = nil } }
+        )
+    }
+
+    private var isImportErrorPresented: Binding<Bool> {
+        Binding(
+            get: { zipImportError != nil },
+            set: { if !$0 { zipImportError = nil } }
+        )
+    }
+
+    // Helper subviews to simplify the main body
+    @ViewBuilder
+    private var exportSheet: some View {
+        if let url = exporter.exportURL {
+            ActivityView(activityItems: [url])
+        }
+    }
+
+    @ViewBuilder
+    private var exportErrorAlertMessage: some View {
+        Text(exporter.exportError ?? "")
+    }
+
+    @ViewBuilder
+    private var projectErrorAlertMessage: some View {
+        Text(projectActionError ?? "")
+    }
+
+    @ViewBuilder
+    private var importErrorAlertMessage: some View {
+        Text(zipImportError ?? "")
+    }
+
     func body(content: Content) -> some View {
         content
-            .sheet(item: $exporter.exportURL) { ActivityView(activityItems: [$0]) }
-            .alert("Export Error", isPresented: Binding(
-                get: { exporter.exportError != nil },
-                set: { if !$0 { exporter.exportError = nil } }
-            )) {
+            .sheet(item: $exporter.exportURL) { _ in exportSheet }
+            .alert("Export Error", isPresented: isExportErrorPresented) {
                 Button("OK") { exporter.exportError = nil }
             } message: {
-                Text(exporter.exportError ?? "")
+                exportErrorAlertMessage
             }
-            .alert("Rename Document", isPresented: Binding(
-                get: { renamingDocument != nil },
-                set: { if !$0 { renamingDocument = nil } }
-            )) {
+            .alert("Rename Document", isPresented: isRenamingPresented) {
                 TextField("Title", text: $newTitle)
                 Button("Rename") {
                     if let doc = renamingDocument {
@@ -203,10 +256,7 @@ private struct DocumentListAlertsModifier: ViewModifier {
                 }
                 Button("Cancel", role: .cancel) { renamingDocument = nil }
             }
-            .alert(documentToDelete?.isExternalFolder == true ? "Unlink Folder" : "Delete Document", isPresented: Binding(
-                get: { documentToDelete != nil },
-                set: { if !$0 { documentToDelete = nil } }
-            )) {
+            .alert(documentToDelete?.isExternalFolder == true ? "Unlink Folder" : "Delete Document", isPresented: isDeletePresented) {
                 Button(documentToDelete?.isExternalFolder == true ? "Unlink" : "Delete", role: .destructive) {
                     if let doc = documentToDelete {
                         do {
@@ -234,36 +284,25 @@ private struct DocumentListAlertsModifier: ViewModifier {
                     }
                 }
             }
-            .alert("Project Error", isPresented: Binding(
-                get: { projectActionError != nil },
-                set: { if !$0 { projectActionError = nil } }
-            )) {
+            .alert("Project Error", isPresented: isProjectErrorPresented) {
                 Button("OK") { projectActionError = nil }
             } message: {
-                Text(projectActionError ?? "")
+                projectErrorAlertMessage
             }
-            .sheet(isPresented: $showingSettings, onDismiss: {
-                if needsFilesystemSync {
-                    needsFilesystemSync = false
-                    startFilesystemMonitoring()
-                }
-            }) {
-                SettingsView(onImport: { url in importZip(from: url) })
+            .sheet(isPresented: $showingSettings) {
+                SettingsView(onImport: { url in importZip(url) })
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { scheduleFilesystemSync(delay: .milliseconds(100)) }
+                if phase == .active { scheduleFilesystemSync(.milliseconds(100)) }
             }
             .onChange(of: selectedDocument?.persistentModelID) { _, newValue in
                 guard newValue != nil else { return }
                 InteractionFeedback.selection()
             }
-            .alert("Import Error", isPresented: Binding(
-                get: { zipImportError != nil },
-                set: { if !$0 { zipImportError = nil } }
-            )) {
+            .alert("Import Error", isPresented: isImportErrorPresented) {
                 Button("OK") { zipImportError = nil }
             } message: {
-                Text(zipImportError ?? "")
+                importErrorAlertMessage
             }
             .fileImporter(isPresented: $showingFolderImporter, allowedContentTypes: [.folder]) { result in
                 switch result {
@@ -272,9 +311,6 @@ private struct DocumentListAlertsModifier: ViewModifier {
                 case .failure(let error):
                     zipImportError = error.localizedDescription
                 }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active { scheduleFilesystemSync(.milliseconds(100)) }
             }
     }
 }
