@@ -246,6 +246,7 @@
 "a11y.project_files.kind.typ" = "Typst 文件";
 "a11y.project_files.kind.image" = "图片";
 "a11y.project_files.kind.font" = "字体";
+"a11y.project_files.kind.reference" = "参考文件";
 "a11y.project_files.kind.file" = "文件";
 "a11y.state.expanded" = "已展开";
 "a11y.state.collapsed" = "已收起";

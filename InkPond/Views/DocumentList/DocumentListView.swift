@@ -65,6 +65,8 @@ struct DocumentListView: View {
     @State var zipImportError: String? = nil
     @State var monitor = DirectoryMonitor()
     @State var syncTask: Task<Void, Never>?
+    @State var monitorRestartTask: Task<Void, Never>?
+    @State var needsFilesystemSync = false
     @State var sortField: SortField = .modifiedAt
     @State var sortDirection: SortDirection = .descending
     @State var showingSortPopover = false
@@ -240,8 +242,20 @@ private struct DocumentListAlertsModifier: ViewModifier {
             } message: {
                 Text(projectActionError ?? "")
             }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView(onImport: importZip)
+            .sheet(isPresented: $showingSettings, onDismiss: {
+                if needsFilesystemSync {
+                    needsFilesystemSync = false
+                    startFilesystemMonitoring()
+                }
+            }) {
+                SettingsView(onImport: { url in importZip(from: url) })
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { scheduleFilesystemSync(delay: .milliseconds(100)) }
+            }
+            .onChange(of: selectedDocument?.persistentModelID) { _, newValue in
+                guard newValue != nil else { return }
+                InteractionFeedback.selection()
             }
             .alert("Import Error", isPresented: Binding(
                 get: { zipImportError != nil },

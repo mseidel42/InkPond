@@ -283,6 +283,7 @@
 "a11y.project_files.kind.typ" = "Typst file";
 "a11y.project_files.kind.image" = "Image";
 "a11y.project_files.kind.font" = "Font";
+"a11y.project_files.kind.reference" = "Reference file";
 "a11y.project_files.kind.file" = "File";
 "a11y.state.expanded" = "Expanded";
 "a11y.state.collapsed" = "Collapsed";

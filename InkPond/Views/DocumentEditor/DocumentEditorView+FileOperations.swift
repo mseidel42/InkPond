@@ -68,15 +68,36 @@ extension DocumentEditorView {
         currentFileName = name
         isLoadingFileContent = true
         editorText = text
+        fileLoadToken = UUID()
         isLoadingFileContent = false
         lastPersistedText = text
-        lastPersistedFileDate = Self.fileModificationDate(for: fileURL)
         if name == document.entryFileName {
             entrySource = text
         }
         compilationErrorLines = recomputeCompilationErrorLines()
+
+        // Start monitoring the newly opened file for iCloud conflicts.
+        startConflictMonitoring(for: fileURL)
+
         pumpPendingInsertionsIfNeeded()
         return true
+    }
+
+    // MARK: - Conflict monitoring
+
+    /// Begin monitoring a file URL for iCloud version conflicts via NSFileVersion.
+    func startConflictMonitoring(for fileURL: URL) {
+        let fileName = currentFileName
+        conflictMonitor.onConflictDetected = {
+            self.conflictFileName = fileName
+            self.showingConflictWarning = true
+        }
+        conflictMonitor.startMonitoring(url: fileURL)
+    }
+
+    /// Stop monitoring the current file. Called on file switch or view disappear.
+    func stopConflictMonitoring() {
+        conflictMonitor.stopMonitoring()
     }
 
     func handleEditorTextChange(_ content: String) {
@@ -97,10 +118,9 @@ extension DocumentEditorView {
 
         let fileURL = ProjectFileManager.typFileURL(named: fileName, for: document)
         let shouldRefreshPreviewAfterSave = fileName != document.entryFileName
-        let savedFileDate = lastPersistedFileDate
 
         saveTask?.cancel()
-        saveTask = Task {
+        saveTask = Task { @MainActor in
             do {
                 try await Task.sleep(for: .milliseconds(350))
             } catch {
@@ -109,43 +129,33 @@ extension DocumentEditorView {
 
             guard !Task.isCancelled else { return }
 
-            // Check for external modifications (another device via iCloud)
-            let currentFileDate = Self.fileModificationDate(for: fileURL)
-            if let saved = savedFileDate, let current = currentFileDate,
-               current.timeIntervalSince(saved) > 1.0 {
-                await MainActor.run {
-                    self.conflictFileName = fileName
-                    self.showingConflictWarning = true
-                }
+            // Check for real iCloud conflicts via NSFileVersion instead
+            // of the unreliable modificationDate comparison.
+            conflictMonitor.refreshConflictState()
+            if conflictMonitor.hasConflict {
+                self.conflictFileName = fileName
+                self.showingConflictWarning = true
                 return
             }
+
+            guard !Task.isCancelled else { return }
 
             do {
                 try await backgroundFileWriter.write(content, to: fileURL)
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    if self.currentFileName == fileName, self.editorText == content {
-                        self.lastPersistedText = content
-                        self.lastPersistedFileDate = Self.fileModificationDate(for: fileURL)
-                        self.document.modifiedAt = Date()
-                        if shouldRefreshPreviewAfterSave {
-                            self.compileToken = UUID()
-                        }
+                if self.currentFileName == fileName, self.editorText == content {
+                    self.lastPersistedText = content
+                    self.document.modifiedAt = Date()
+                    if shouldRefreshPreviewAfterSave {
+                        self.compileToken = UUID()
                     }
-                    self.saveTask = nil
                 }
+                self.saveTask = nil
             } catch {
-                await MainActor.run {
-                    self.fileSaveError = error.localizedDescription
-                    self.saveTask = nil
-                }
+                self.fileSaveError = error.localizedDescription
+                self.saveTask = nil
             }
         }
-    }
-
-    /// Returns the file modification date, or nil if the file doesn't exist.
-    static func fileModificationDate(for url: URL) -> Date? {
-        try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
     }
 
     /// Resolve a conflict by keeping the local version (overwrite disk).
@@ -153,6 +163,10 @@ extension DocumentEditorView {
         showingConflictWarning = false
         let content = editorText
         let fileURL = ProjectFileManager.typFileURL(named: currentFileName, for: document)
+
+        // Resolve all conflict versions in favor of current, then overwrite.
+        conflictMonitor.resolveKeepingCurrent()
+
         do {
             if ProjectFileManager.useCoordination {
                 try CloudFileCoordinator.writeString(content, to: fileURL)
@@ -160,7 +174,6 @@ extension DocumentEditorView {
                 try content.write(to: fileURL, atomically: true, encoding: .utf8)
             }
             lastPersistedText = content
-            lastPersistedFileDate = Self.fileModificationDate(for: fileURL)
             document.modifiedAt = Date()
         } catch {
             fileSaveError = error.localizedDescription
@@ -170,6 +183,17 @@ extension DocumentEditorView {
     /// Resolve a conflict by reloading the remote version from disk.
     func resolveConflictKeepRemote() {
         showingConflictWarning = false
+
+        // Pick the most recent conflict version and replace the current file.
+        // If no conflict versions remain, just resolve and reload from disk.
+        if let latest = conflictMonitor.conflictVersions
+            .sorted(by: { ($0.modificationDate ?? .distantPast) > ($1.modificationDate ?? .distantPast) })
+            .first {
+            conflictMonitor.resolveKeepingVersion(latest)
+        } else {
+            conflictMonitor.resolveKeepingCurrent()
+        }
+
         _ = loadFile(named: currentFileName)
     }
 
