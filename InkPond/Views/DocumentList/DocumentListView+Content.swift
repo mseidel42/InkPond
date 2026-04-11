@@ -108,7 +108,7 @@ extension DocumentListView {
                 documentToDelete = document
             } label: {
                 if document.isExternalFolder {
-                    Label("Unlink", systemImage: "link.badge.minus")
+                    Label("Unlink", systemImage: "folder.badge.minus")
                 } else {
                     Label("Delete", systemImage: "trash")
                 }
@@ -166,7 +166,7 @@ extension DocumentListView {
                 Button {
                     showingFolderImporter = true
                 } label: {
-                    Label(L10n.docListLinkExternalFolder, systemImage: "link")
+                    Label(L10n.docListLinkExternalFolder, systemImage: "link.badge.plus")
                 }
             } label: {
                 Image(systemName: "folder.badge.plus")
